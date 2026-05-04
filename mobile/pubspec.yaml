@@ -1,0 +1,60 @@
+name: culture_quest
+description: Urban cultural exploration with proximity detection and Federated Learning.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Networking
+  dio: ^5.4.3
+  retrofit: ^4.1.0
+
+  # State management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Navigation
+  go_router: ^13.2.0
+
+  # Maps & location
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.1
+  geolocator: ^11.1.0
+
+  # ML on device (Federated Learning client)
+  tflite_flutter: ^0.10.4
+
+  # Local storage
+  flutter_secure_storage: ^9.0.0
+  shared_preferences: ^2.2.3
+
+  # UI
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+  lottie: ^3.1.0
+
+  # WebSocket (user-to-user proximity)
+  web_socket_channel: ^2.4.5
+
+  # Utils
+  intl: ^0.19.0
+  uuid: ^4.4.0
+  logger: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.9
+  riverpod_generator: ^2.4.0
+  retrofit_generator: ^8.1.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/
