@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 from enum import Enum
 
@@ -18,11 +19,9 @@ class QuestResponse(BaseModel):
     points: int
     options: list[str] = []
     correct_option_index: Optional[int] = None
+    completed: bool = False
 
 
 class QuestCompletionPayload(BaseModel):
     answer_index: Optional[int] = None
     note_text: Optional[str] = None
-
-
-from typing import Optional

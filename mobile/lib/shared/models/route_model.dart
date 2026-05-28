@@ -38,3 +38,49 @@ class RouteModel {
         totalDurationMinutes: json['total_duration_minutes'],
       );
 }
+
+class RouteStopWithProgress {
+  final LandmarkModel landmark;
+  final bool visited;
+
+  const RouteStopWithProgress({required this.landmark, required this.visited});
+
+  factory RouteStopWithProgress.fromJson(Map<String, dynamic> json) =>
+      RouteStopWithProgress(
+        landmark: LandmarkModel.fromJson(json['landmark']),
+        visited: json['visited'] as bool? ?? false,
+      );
+}
+
+class RouteWithProgress {
+  final String id;
+  final String? name;
+  final List<RouteStopWithProgress> stops;
+  final double totalDistanceM;
+  final int totalDurationMinutes;
+  final String generatedAt;
+  final int visitedCount;
+
+  const RouteWithProgress({
+    required this.id,
+    this.name,
+    required this.stops,
+    required this.totalDistanceM,
+    required this.totalDurationMinutes,
+    required this.generatedAt,
+    required this.visitedCount,
+  });
+
+  factory RouteWithProgress.fromJson(Map<String, dynamic> json) =>
+      RouteWithProgress(
+        id: json['id'],
+        name: json['name'] as String?,
+        stops: (json['stops'] as List)
+            .map((s) => RouteStopWithProgress.fromJson(s))
+            .toList(),
+        totalDistanceM: (json['total_distance_m']).toDouble(),
+        totalDurationMinutes: json['total_duration_minutes'],
+        generatedAt: json['generated_at'] ?? '',
+        visitedCount: json['visited_count'] as int? ?? 0,
+      );
+}

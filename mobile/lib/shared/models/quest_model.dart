@@ -7,6 +7,7 @@ class QuestModel {
   final int points;
   final List<String> options;
   final int? correctOptionIndex;
+  final bool completed;
 
   const QuestModel({
     required this.id,
@@ -17,6 +18,7 @@ class QuestModel {
     required this.points,
     this.options = const [],
     this.correctOptionIndex,
+    this.completed = false,
   });
 
   factory QuestModel.fromJson(Map<String, dynamic> json) => QuestModel(
@@ -28,5 +30,18 @@ class QuestModel {
         points: json['points'],
         options: List<String>.from(json['options'] ?? []),
         correctOptionIndex: json['correct_option_index'],
+        completed: json['completed'] ?? false,
+      );
+
+  QuestModel copyWith({bool? completed}) => QuestModel(
+        id: id,
+        landmarkId: landmarkId,
+        type: type,
+        title: title,
+        description: description,
+        points: points,
+        options: options,
+        correctOptionIndex: correctOptionIndex,
+        completed: completed ?? this.completed,
       );
 }

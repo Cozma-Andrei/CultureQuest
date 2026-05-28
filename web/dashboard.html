@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CultureQuest · FL Dashboard</title>
+  <style>
+    :root {
+      --bg:      #0d1117;
+      --surf:    #161b22;
+      --surf2:   #21262d;
+      --border:  #30363d;
+      --primary: #7c6af7;
+      --prim-d:  #5a50e0;
+      --text:    #e6edf3;
+      --dim:     #8b949e;
+      --green:   #3fb950;
+      --red:     #f85149;
+      --amber:   #d29922;
+      --blue:    #58a6ff;
+      --r: 10px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }
+
+    /* ─── Header ──────────────────────────────────────────── */
+    header {
+      background: var(--surf); border-bottom: 1px solid var(--border);
+      height: 52px; padding: 0 20px;
+      display: flex; align-items: center; gap: 12px;
+      position: sticky; top: 0; z-index: 50;
+    }
+    .logo { font-weight: 700; font-size: 15px; white-space: nowrap; }
+    .logo em { color: var(--primary); font-style: normal; }
+    .pill {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--surf2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 3px 10px;
+      font-size: 11px; color: var(--dim); white-space: nowrap;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+    .dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.err { background: var(--red); }
+    .spacer { flex: 1; }
+    .url-in {
+      background: var(--surf2); border: 1px solid var(--border);
+      border-radius: 7px; padding: 5px 10px; color: var(--text);
+      font-size: 12px; width: 200px;
+    }
+    .url-in:focus { outline: none; border-color: var(--primary); }
+    .btn {
+      background: var(--primary); color: #fff; border: none;
+      border-radius: 7px; padding: 5px 13px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .btn:hover { background: var(--prim-d); }
+    .refresh-lbl { font-size: 11px; color: var(--dim); }
+
+    /* ─── Layout ──────────────────────────────────────────── */
+    main { max-width: 1380px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+
+    /* ─── Cards ───────────────────────────────────────────── */
+    .card { background: var(--surf); border: 1px solid var(--border); border-radius: var(--r); padding: 18px; }
+    .card-title { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--dim); margin-bottom: 5px; }
+    .card-desc  { font-size: 11px; color: var(--dim); margin-bottom: 14px; line-height: 1.55; }
+
+    /* ─── Global status banner ────────────────────────────── */
+    .global-banner {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 16px 20px;
+      display: flex; gap: 0; align-items: stretch;
+    }
+    .stat-block {
+      flex: 1; padding: 0 20px; border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .stat-block:first-child { padding-left: 0; }
+    .stat-block:last-child  { border-right: none; }
+    .stat-label { font-size: 11px; color: var(--dim); }
+    .stat-val   { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -1px; line-height: 1; }
+    .stat-sub   { font-size: 10px; color: var(--dim); margin-top: 2px; }
+    .tag {
+      display: inline-block; font-size: 10px; font-weight: 600;
+      padding: 2px 7px; border-radius: 4px; text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .tag.global { background: rgba(124,106,247,.2); color: var(--primary); border: 1px solid rgba(124,106,247,.3); }
+    .tag.fedavg { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+
+    /* ─── Callout / info box ─────────────────────────────── */
+    .callout {
+      background: rgba(88,166,255,.07);
+      border: 1px solid rgba(88,166,255,.2);
+      border-radius: 8px; padding: 10px 14px;
+      font-size: 11px; color: #9ecfff; line-height: 1.6;
+      margin-bottom: 14px;
+    }
+    .callout strong { color: var(--blue); }
+
+    /* ─── Top row ─────────────────────────────────────────── */
+    .top-row { display: grid; grid-template-columns: 300px 1fr; gap: 18px; align-items: start; }
+
+    /* ─── Predictor ──────────────────────────────────────── */
+    .sec-lbl { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-bottom: 7px; }
+    .interest-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 14px; }
+    .chip-tog {
+      display: flex; align-items: center; gap: 7px;
+      padding: 7px 9px; background: var(--surf2);
+      border: 1px solid var(--border); border-radius: 7px;
+      cursor: pointer; user-select: none; font-size: 12px;
+      transition: border-color .15s, background .15s;
+    }
+    .chip-tog.on { border-color: var(--primary); background: rgba(124,106,247,.12); }
+    .chip-tog:hover { border-color: var(--primary); }
+    .tog-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--dim); flex-shrink: 0; transition: all .15s; }
+    .chip-tog.on .tog-dot { background: var(--primary); border-color: var(--primary); }
+
+    .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 14px; }
+    .type-btn {
+      padding: 6px 4px; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--surf2);
+      color: var(--dim); cursor: pointer; font-size: 11px;
+      text-align: center; transition: all .15s;
+    }
+    .type-btn.on { border-color: var(--primary); color: var(--primary); background: rgba(124,106,247,.1); }
+    .type-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+    .slider-row { margin-bottom: 12px; }
+    .slider-hd { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); margin-bottom: 5px; }
+    .slider-hd strong { color: var(--text); }
+    input[type=range] { width: 100%; accent-color: var(--primary); }
+
+    /* Feature vector display */
+    .fvec-row { display: flex; gap: 2px; margin-bottom: 3px; }
+    .fvec-cell {
+      flex: 1; height: 16px; border-radius: 3px;
+      background: var(--surf2); border: 1px solid var(--border);
+      transition: background .2s;
+    }
+    .fvec-cell.active { background: var(--primary); border-color: var(--primary); }
+    .fvec-cell.partial { border-color: var(--dim); }
+    .fvec-labels { display: flex; gap: 2px; }
+    .fvec-lbl { flex: 1; font-size: 7px; color: var(--dim); text-align: center; overflow: hidden; white-space: nowrap; }
+    .fvec-group-lbl { font-size: 9px; color: var(--dim); margin-top: 6px; margin-bottom: 2px; }
+
+    /* Score box */
+    .score-box { margin-top: 14px; padding: 14px; background: var(--surf2); border: 1px solid var(--border); border-radius: 9px; }
+    .score-num { font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -2px; line-height: 1; }
+    .score-track { height: 7px; background: var(--bg); border-radius: 4px; margin: 10px 0 6px; overflow: hidden; }
+    .score-fill { height: 100%; border-radius: 4px; transition: width .3s, background .3s; }
+    .score-lbl { font-size: 11px; color: var(--dim); }
+
+    /* Rankings */
+    .ranking-list { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; }
+    .rank-row { display: flex; align-items: center; gap: 8px; }
+    .rank-num { font-size: 10px; color: var(--dim); width: 14px; text-align: right; flex-shrink: 0; }
+    .rank-label { font-size: 11px; flex: 1; }
+    .rank-bar-wrap { width: 70px; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+    .rank-bar { height: 100%; border-radius: 3px; }
+    .rank-score { font-size: 10px; color: var(--dim); width: 30px; text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+    /* ─── Heatmap ─────────────────────────────────────────── */
+    .hm-wrap { overflow-x: auto; }
+    .hm-grid { display: grid; gap: 3px; }
+    .hm-cell {
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 5px; font-size: 10px; font-weight: 700;
+      font-variant-numeric: tabular-nums; height: 40px;
+      cursor: default; transition: transform .1s; position: relative;
+    }
+    .hm-cell:hover { transform: scale(1.12); z-index: 2; }
+    .hm-head { display: flex; align-items: center; height: 40px; font-size: 10px; font-weight: 600; color: var(--dim); }
+    .hm-head.row-lbl { justify-content: flex-end; padding-right: 8px; font-size: 10px; text-align: right; line-height: 1.3; }
+    .hm-head.col-lbl { justify-content: center; text-align: center; white-space: nowrap; font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
+    .hm-head.custom-lbl { color: var(--primary); font-weight: 700; }
+    .row-divider { grid-column: 1 / -1; height: 6px; }
+    .legend { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 10px; color: var(--dim); }
+    .legend-bar { flex: 1; height: 8px; border-radius: 4px; }
+
+    /* ─── W3 bars ─────────────────────────────────────────── */
+    .w3-outer { display: flex; gap: 0; }
+    .w3-group { display: flex; gap: 3px; padding: 0 8px; }
+    .w3-group:first-child { padding-left: 0; }
+    .w3-group:last-child  { padding-right: 0; }
+    .w3-divider { width: 1px; background: var(--border); align-self: stretch; flex-shrink: 0; }
+    .w3-col { display: flex; flex-direction: column; align-items: center; }
+    .w3-bar-area { height: 80px; display: flex; flex-direction: column; justify-content: center; width: 100%; position: relative; }
+    .w3-bar-pos { border-radius: 2px 2px 0 0; background: #dc4632; }
+    .w3-bar-neg { border-radius: 0 0 2px 2px; background: #5080dc; }
+    .w3-zero-line { height: 1px; background: var(--border); width: 100%; flex-shrink: 0; }
+    .w3-val { font-size: 8px; color: var(--dim); margin-top: 3px; font-variant-numeric: tabular-nums; }
+    .w3-lbl { font-size: 8px; color: var(--dim); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .w3-group-lbl { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); text-align: center; margin-top: 6px; }
+
+    /* ─── Canvas weight grids ─────────────────────────────── */
+    .canvas-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    canvas { display: block; image-rendering: pixelated; width: 100%; height: auto; border-radius: 6px; }
+
+    /* ─── Tooltip ─────────────────────────────────────────── */
+    #tip {
+      position: fixed; background: var(--surf); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 10px; font-size: 11px;
+      pointer-events: none; opacity: 0; transition: opacity .15s;
+      z-index: 999; white-space: nowrap; line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+<div id="tip"></div>
+
+<header>
+  <div class="logo"><em>CultureQuest</em> · FL Dashboard</div>
+  <div class="pill">
+    <div class="dot" id="dot"></div>
+    <span id="conn-lbl">connecting…</span>
+  </div>
+  <div class="spacer"></div>
+  <span class="refresh-lbl" id="refresh-lbl"></span>
+  <input class="url-in" id="url" value="http://localhost:8000" />
+  <button class="btn" onclick="load()">↻ Refresh</button>
+</header>
+
+<main>
+
+  <!-- ── Global FL Status ─────────────────────────────────── -->
+  <div class="global-banner">
+    <div class="stat-block">
+      <div class="stat-label">
+        Global FL Round &nbsp;<span class="tag global">GLOBAL</span>
+      </div>
+      <div class="stat-val" id="s-round" style="color:var(--primary)">—</div>
+      <div class="stat-sub">Increments every time any device submits a local update. Shared across all users.</div>
+    </div>
+    <div class="stat-block">
+      <div class="stat-label">Unique contributors</div>
+      <div class="stat-val" id="s-clients" style="color:var(--green)">—</div>
+      <div class="stat-sub">Distinct users whose device has uploaded local gradients.</div>
+    </div>
+    <div class="stat-block">
+      <div class="stat-label">Total training samples aggregated</div>
+      <div class="stat-val" id="s-samples" style="color:var(--amber)">—</div>
+      <div class="stat-sub">Interaction examples (visit, rate, dismiss…) trained on across all rounds.</div>
+    </div>
+    <div class="stat-block">
+      <div class="stat-label">Aggregation strategy</div>
+      <div class="stat-val" style="font-size:18px;letter-spacing:-.5px"><span class="tag fedavg">FedAvg</span></div>
+      <div class="stat-sub">Each client update is blended into the global model with weighted averaging. No raw data ever leaves the device.</div>
+    </div>
+    <div class="stat-block">
+      <div class="stat-label">Architecture</div>
+      <div class="stat-val" style="font-size:17px;letter-spacing:-.5px;color:var(--blue)">16→32→16→1</div>
+      <div class="stat-sub">ReLU hidden layers · Sigmoid output → score ∈ [0, 1]<br>1,617 total parameters</div>
+    </div>
+  </div>
+
+  <!-- ── Predictor + Heatmap ───────────────────────────────── -->
+  <div class="top-row">
+
+    <!-- Predictor -->
+    <div class="card">
+      <div class="card-title">Live Predictor</div>
+      <div class="card-desc">
+        Configure a hypothetical user profile and location below. The global model runs a forward pass in your browser and predicts the engagement score in real time.
+      </div>
+
+      <div class="sec-lbl">User interests (select any)</div>
+      <div class="interest-grid" id="interest-grid"></div>
+
+      <div class="sec-lbl">Landmark type to predict</div>
+      <div class="type-grid" id="type-grid"></div>
+
+      <div class="slider-row">
+        <div class="slider-hd">Time of day <strong id="time-lbl">12:00</strong></div>
+        <input type="range" min="0" max="23" value="12" id="sl-time" oninput="onControl()" />
+      </div>
+      <div class="slider-row">
+        <div class="slider-hd">Distance to landmark <strong id="dist-lbl">0 m</strong></div>
+        <input type="range" min="0" max="500" value="0" id="sl-dist" oninput="onControl()" />
+      </div>
+
+      <!-- Feature vector -->
+      <div class="sec-lbl" style="margin-top:4px">16-dimensional input vector fed to the model</div>
+      <div style="font-size:9px;color:var(--dim);margin-bottom:6px">Each square is one input feature. Purple = active (1.0), grey = inactive (0.0), shaded = continuous value.</div>
+      <div class="fvec-group-lbl">Interests (dims 0–5)</div>
+      <div class="fvec-row" id="fv-interests"></div>
+      <div class="fvec-labels" id="fv-int-labels"></div>
+      <div class="fvec-group-lbl">Landmark type (dims 6–13)</div>
+      <div class="fvec-row" id="fv-types"></div>
+      <div class="fvec-labels" id="fv-type-labels"></div>
+      <div class="fvec-group-lbl">Context (dims 14–15)</div>
+      <div class="fvec-row" id="fv-ctx"></div>
+      <div class="fvec-labels" id="fv-ctx-labels"></div>
+
+      <!-- Score -->
+      <div class="score-box">
+        <div style="font-size:10px;color:var(--dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">
+          Predicted engagement score
+        </div>
+        <div class="score-num" id="score-num">—</div>
+        <div class="score-track"><div class="score-fill" id="score-fill" style="width:0%"></div></div>
+        <div class="score-lbl" id="score-lbl">Waiting for model…</div>
+      </div>
+
+      <!-- Rankings for current interests -->
+      <div style="margin-top:14px">
+        <div class="sec-lbl">All types ranked for current interests</div>
+        <div style="font-size:9px;color:var(--dim);margin-bottom:8px">How the model orders all 8 landmark types given the interests you selected above.</div>
+        <div class="ranking-list" id="ranking-list"></div>
+      </div>
+    </div>
+
+    <!-- Heatmap -->
+    <div class="card">
+      <div class="card-title">Engagement Heatmap</div>
+      <div class="card-desc">
+        Each row tests one interest in complete isolation (all other interests off, distance 0, time 12:00).
+        The <span style="color:var(--primary);font-weight:600">custom row</span> at the top uses your current predictor selection.
+        The model has learned which interest–type pairings tend to produce engaged users.
+      </div>
+      <div class="callout">
+        <strong>How to read this:</strong> A dark green cell means the model predicts a user with that interest is likely to engage with that landmark type. Blue cells predict disengagement. Cells close to white (≈0.5) mean the model is uncertain or neutral for that pairing.
+      </div>
+      <div class="hm-wrap">
+        <div class="hm-grid" id="hm-grid"></div>
+      </div>
+      <div class="legend">
+        <span>0.0 &nbsp;Disengaged</span>
+        <div class="legend-bar" id="hm-legend"></div>
+        <span>Highly engaged&nbsp; 1.0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── W3 output weights ─────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Output Layer Weights — W3 (1 × 16)</div>
+    <div class="card-desc">
+      These 16 weights connect the second hidden layer directly to the final sigmoid. They are the most interpretable layer:
+      a <span style="color:#dc4632;font-weight:600">positive (red)</span> weight means that input feature increases the predicted engagement score,
+      a <span style="color:#5080dc;font-weight:600">negative (blue)</span> weight suppresses it.
+      Bars are grouped by feature category.
+    </div>
+    <div class="callout">
+      <strong>Note:</strong> These are the output-layer weights only. The actual influence of each input on the prediction also passes through W1 and W2 (the hidden layers), so direct weight magnitude is an approximation of importance — not a perfect measure.
+    </div>
+    <div style="display:flex;gap:4px;align-items:flex-end;margin-bottom:4px" id="w3-outer"></div>
+    <div style="display:flex;gap:4px" id="w3-group-labels"></div>
+  </div>
+
+  <!-- ── W1 + W2 canvas heatmaps ──────────────────────────── -->
+  <div class="canvas-row">
+    <div class="card">
+      <div class="card-title">W1 — Input layer → Hidden layer 1</div>
+      <div class="card-desc">
+        Shape: 32 × 16. Each row is a hidden neuron; each column is an input feature.
+        A red cell means the neuron is activated by that feature; blue means it is suppressed.
+        The 16 columns match the same order as the input vector above (6 interests → 8 types → time → distance).
+      </div>
+      <canvas id="c-w1" width="16" height="32"></canvas>
+      <div class="legend" style="margin-top:8px">
+        <span style="color:#5080dc">Negative</span>
+        <div class="legend-bar" style="background:linear-gradient(to right,#5080dc,#e4e4ee,#dc4632)"></div>
+        <span style="color:#dc4632">Positive</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">W2 — Hidden layer 1 → Hidden layer 2</div>
+      <div class="card-desc">
+        Shape: 16 × 32. Each row is a hidden layer-2 neuron; each column is a neuron from layer 1.
+        This layer further combines the patterns learned by W1 before the final prediction.
+      </div>
+      <canvas id="c-w2" width="32" height="16"></canvas>
+      <div class="legend" style="margin-top:8px">
+        <span style="color:#5080dc">Negative</span>
+        <div class="legend-bar" style="background:linear-gradient(to right,#5080dc,#e4e4ee,#dc4632)"></div>
+        <span style="color:#dc4632">Positive</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── Model constants (must match fl_client_service.dart + backend model.py) ──
+const INTERESTS = ['art','architecture','history','gastronomy','nature','music'];
+const TYPES     = ['museum','monument','park','gallery','restaurant','square','building','other'];
+const FEAT_LABELS = [...INTERESTS, ...TYPES, 'time', 'distance'];
+const W3_GROUPS = [
+  { label: 'Interests', indices: [0,1,2,3,4,5] },
+  { label: 'Landmark types', indices: [6,7,8,9,10,11,12,13] },
+  { label: 'Context', indices: [14,15] },
+];
+
+// ── App state ────────────────────────────────────────────────────────────────
+let weights     = null;
+let selInterests = new Set(['art','history']);
+let selTypeIdx  = 0;
+let timeHour    = 12;
+let distM       = 0;
+let refreshSec  = 30;
+let countdown   = refreshSec;
+
+// ── MLP (identical to Dart fl_client_service.dart) ──────────────────────────
+const relu    = x => Math.max(0, x);
+const sigmoid = x => 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, x))));
+
+function reshape(flat, rows, cols) {
+  const m = [];
+  for (let r = 0; r < rows; r++) m.push(flat.slice(r * cols, r * cols + cols));
+  return m;
+}
+function matVec(W, x, b) {
+  return W.map((row, i) => row.reduce((s, v, j) => s + v * x[j], b[i]));
+}
+function buildInput(interests, typeIdx, hour, dist) {
+  const v = new Array(16).fill(0);
+  INTERESTS.forEach((n, i) => { if (interests.has(n)) v[i] = 1; });
+  if (typeIdx >= 0 && typeIdx < 8) v[6 + typeIdx] = 1;
+  v[14] = hour / 24;
+  v[15] = Math.min(dist / 1500, 1);
+  return v;
+}
+function forward(interests, typeIdx, hour = 12, dist = 0) {
+  if (!weights) return 0.5;
+  const W1 = reshape(weights[0], 32, 16), b1 = weights[1];
+  const W2 = reshape(weights[2], 16, 32), b2 = weights[3];
+  const W3 = reshape(weights[4],  1, 16), b3 = weights[5];
+  const x  = buildInput(interests, typeIdx, hour, dist);
+  const a1 = matVec(W1, x,  b1).map(relu);
+  const a2 = matVec(W2, a1, b2).map(relu);
+  return sigmoid(matVec(W3, a2, b3)[0]);
+}
+
+// ── Color utilities ──────────────────────────────────────────────────────────
+const lerp = (a, b, t) => a + (b - a) * t;
+
+function scoreColor(v) {
+  const stops = [[0,[70,130,220]], [0.5,[215,217,228]], [1,[40,180,90]]];
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [s0,c0] = stops[i], [s1,c1] = stops[i+1];
+    if (v <= s1) {
+      const t = (v - s0) / (s1 - s0);
+      return `rgb(${Math.round(lerp(c0[0],c1[0],t))},${Math.round(lerp(c0[1],c1[1],t))},${Math.round(lerp(c0[2],c1[2],t))})`;
+    }
+  }
+  return 'rgb(40,180,90)';
+}
+function textOnScore(v) { return (v < 0.28 || v > 0.72) ? 'rgba(0,0,0,.75)' : '#0d1117'; }
+
+function weightRGB(v, absMax) {
+  if (absMax < 1e-9) return [210,212,220];
+  const n = Math.max(-1, Math.min(1, v / absMax));
+  if (n < 0) {
+    const t = -n;
+    return [Math.round(lerp(210,80,t)), Math.round(lerp(212,120,t)), Math.round(lerp(220,220,t))];
+  } else {
+    const t = n;
+    return [Math.round(lerp(210,220,t)), Math.round(lerp(212,70,t)), Math.round(lerp(220,50,t))];
+  }
+}
+
+// ── Build static UI ──────────────────────────────────────────────────────────
+function buildInterestGrid() {
+  const el = document.getElementById('interest-grid');
+  INTERESTS.forEach(name => {
+    const d = document.createElement('div');
+    d.className = 'chip-tog' + (selInterests.has(name) ? ' on' : '');
+    d.innerHTML = `<div class="tog-dot"></div>${name}`;
+    d.onclick = () => {
+      selInterests.has(name) ? selInterests.delete(name) : selInterests.add(name);
+      d.classList.toggle('on');
+      renderAll();
+    };
+    el.appendChild(d);
+  });
+}
+
+function buildTypeGrid() {
+  const el = document.getElementById('type-grid');
+  TYPES.forEach((name, i) => {
+    const d = document.createElement('div');
+    d.className = 'type-btn' + (i === selTypeIdx ? ' on' : '');
+    d.textContent = name;
+    d.onclick = () => {
+      selTypeIdx = i;
+      el.querySelectorAll('.type-btn').forEach((b,j) => b.classList.toggle('on', j === i));
+      renderPredictor();
+    };
+    el.appendChild(d);
+  });
+}
+
+function buildFvecLabels(containerId, labels) {
+  const el = document.getElementById(containerId);
+  labels.forEach(l => {
+    const d = document.createElement('div');
+    d.className = 'fvec-lbl';
+    d.textContent = l;
+    el.appendChild(d);
+  });
+}
+
+// ── Render predictor ─────────────────────────────────────────────────────────
+function renderPredictor() {
+  if (!weights) return;
+  const score = forward(selInterests, selTypeIdx, timeHour, distM);
+  document.getElementById('score-num').textContent = score.toFixed(3);
+  document.getElementById('score-fill').style.width = `${score * 100}%`;
+  document.getElementById('score-fill').style.background = scoreColor(score);
+  const lbl = score > 0.72 ? 'High engagement predicted — model would strongly recommend this'
+            : score > 0.50 ? 'Moderate engagement — some fit with user profile'
+            : score > 0.35 ? 'Weak fit — model predicts low interest'
+            :                'Disengagement predicted — poor match for this profile';
+  document.getElementById('score-lbl').textContent = lbl;
+  renderFvec();
+  renderRanking();
+}
+
+function renderFvec() {
+  const v = buildInput(selInterests, selTypeIdx, timeHour, distM);
+  ['fv-interests','fv-types','fv-ctx'].forEach(id => document.getElementById(id).innerHTML = '');
+
+  const groups = [
+    { id: 'fv-interests', range: [0,6] },
+    { id: 'fv-types',     range: [6,14] },
+    { id: 'fv-ctx',       range: [14,16] },
+  ];
+  groups.forEach(({ id, range: [a, b] }) => {
+    const el = document.getElementById(id);
+    for (let i = a; i < b; i++) {
+      const c = document.createElement('div');
+      c.className = 'fvec-cell';
+      if (v[i] === 1) c.classList.add('active');
+      else if (v[i] > 0) {
+        c.classList.add('partial');
+        c.style.background = `rgba(124,106,247,${v[i].toFixed(2)})`;
+      }
+      c.title = `${FEAT_LABELS[i]}: ${v[i].toFixed(3)}`;
+      el.appendChild(c);
+    }
+  });
+}
+
+function renderRanking() {
+  if (!weights) return;
+  const scores = TYPES.map((t, i) => ({ t, i, score: forward(selInterests, i, timeHour, distM) }));
+  scores.sort((a, b) => b.score - a.score);
+  const el = document.getElementById('ranking-list');
+  el.innerHTML = '';
+  scores.forEach(({ t, score }, rank) => {
+    const row = document.createElement('div');
+    row.className = 'rank-row';
+    row.innerHTML = `
+      <div class="rank-num">${rank + 1}</div>
+      <div class="rank-label">${t}</div>
+      <div class="rank-bar-wrap"><div class="rank-bar" style="width:${score*100}%;background:${scoreColor(score)}"></div></div>
+      <div class="rank-score">${score.toFixed(2)}</div>`;
+    el.appendChild(row);
+  });
+}
+
+// ── Render heatmap ───────────────────────────────────────────────────────────
+function renderHeatmap() {
+  if (!weights) return;
+  const COLS = TYPES.length;
+  const grid = document.getElementById('hm-grid');
+  grid.style.gridTemplateColumns = `110px repeat(${COLS}, 1fr)`;
+  grid.innerHTML = '';
+
+  // Column headers
+  addEl(grid, 'div', 'hm-head');
+  TYPES.forEach(t => addEl(grid, 'div', 'hm-head col-lbl', t));
+
+  // Custom row (current selection)
+  const custLabel = [...selInterests].slice(0,2).join('+') + (selInterests.size > 2 ? '…' : '') || '(none)';
+  addEl(grid, 'div', 'hm-head row-lbl custom-lbl', `★ custom\n(${custLabel})`).style.whiteSpace = 'pre';
+  TYPES.forEach((_, ti) => addHmCell(grid, forward(selInterests, ti), `Custom selection × ${TYPES[ti]}`));
+
+  // Separator
+  const sep = document.createElement('div');
+  sep.className = 'row-divider';
+  grid.appendChild(sep);
+
+  // One interest per row
+  INTERESTS.forEach(interest => {
+    const lbl = addEl(grid, 'div', 'hm-head row-lbl', interest);
+    lbl.title = `Only "${interest}" interest active, all others off`;
+    TYPES.forEach((_, ti) => addHmCell(grid, forward(new Set([interest]), ti), `Only "${interest}" × ${TYPES[ti]}`));
+  });
+
+  // Legend
+  const lc = document.getElementById('hm-legend');
+  const n = 80;
+  lc.style.background = `linear-gradient(to right,${Array.from({length:n},(_,i)=>scoreColor(i/(n-1))).join(',')})`;
+}
+
+function addHmCell(parent, score, tooltip) {
+  const d = document.createElement('div');
+  d.className = 'hm-cell';
+  d.style.background = scoreColor(score);
+  d.style.color = textOnScore(score);
+  d.textContent = score.toFixed(2);
+  d.addEventListener('mouseenter', e => showTip(e, tooltip + `\n→ ${score.toFixed(4)}`));
+  d.addEventListener('mouseleave',   ()  => hideTip());
+  d.addEventListener('mousemove',    e   => moveTip(e));
+  parent.appendChild(d);
+}
+
+function addEl(parent, tag, cls, text) {
+  const d = document.createElement(tag);
+  d.className = cls;
+  if (text != null) d.textContent = text;
+  parent.appendChild(d);
+  return d;
+}
+
+// ── Render W3 bar chart (grouped) ────────────────────────────────────────────
+function renderW3() {
+  if (!weights) return;
+  const w3 = weights[4];
+  const absMax = Math.max(...w3.map(Math.abs), 1e-9);
+  const POS_H = 65, NEG_H = 25;
+
+  const outer = document.getElementById('w3-outer');
+  const groupLabels = document.getElementById('w3-group-labels');
+  outer.innerHTML = '';
+  groupLabels.innerHTML = '';
+
+  W3_GROUPS.forEach((group, gi) => {
+    if (gi > 0) {
+      const div = document.createElement('div');
+      div.className = 'w3-divider';
+      outer.appendChild(div);
+      addEl(groupLabels, 'div', '', ''); // spacer for divider
+    }
+
+    const groupEl = document.createElement('div');
+    groupEl.className = 'w3-group';
+    groupEl.style.flex = group.indices.length;
+
+    const groupLbl = document.createElement('div');
+    groupLbl.className = 'w3-group-lbl';
+    groupLbl.style.flex = group.indices.length;
+    groupLbl.textContent = group.label;
+
+    group.indices.forEach(fi => {
+      const v = w3[fi];
+      const col = document.createElement('div');
+      col.className = 'w3-col';
+      col.style.flex = 1;
+      col.style.minWidth = '24px';
+
+      // positive area
+      const posArea = document.createElement('div');
+      posArea.style.height = `${POS_H}px`;
+      posArea.style.display = 'flex';
+      posArea.style.flexDirection = 'column';
+      posArea.style.justifyContent = 'flex-end';
+      if (v > 0) {
+        const bar = document.createElement('div');
+        bar.className = 'w3-bar-pos';
+        bar.style.height = `${(v / absMax) * POS_H}px`;
+        posArea.appendChild(bar);
+      }
+
+      const zero = document.createElement('div');
+      zero.className = 'w3-zero-line';
+
+      const negArea = document.createElement('div');
+      negArea.style.height = `${NEG_H}px`;
+      if (v < 0) {
+        const bar = document.createElement('div');
+        bar.className = 'w3-bar-neg';
+        bar.style.height = `${(-v / absMax) * NEG_H}px`;
+        negArea.appendChild(bar);
+      }
+
+      const valEl = document.createElement('div');
+      valEl.className = 'w3-val';
+      valEl.textContent = v.toFixed(2);
+      valEl.style.color = v > 0.01 ? '#dc4632' : v < -0.01 ? '#5080dc' : 'var(--dim)';
+
+      const lblEl = document.createElement('div');
+      lblEl.className = 'w3-lbl';
+      lblEl.textContent = FEAT_LABELS[fi];
+      lblEl.title = `${FEAT_LABELS[fi]}: ${v.toFixed(4)}`;
+
+      col.appendChild(posArea);
+      col.appendChild(zero);
+      col.appendChild(negArea);
+      col.appendChild(valEl);
+      col.appendChild(lblEl);
+      groupEl.appendChild(col);
+    });
+
+    outer.appendChild(groupEl);
+    groupLabels.appendChild(groupLbl);
+  });
+}
+
+// ── Render canvas weight heatmaps ────────────────────────────────────────────
+function renderCanvas(id, flat, rows, cols) {
+  const canvas = document.getElementById(id);
+  canvas.width = cols; canvas.height = rows;
+  const ctx = canvas.getContext('2d');
+  const absMax = Math.max(...flat.map(Math.abs), 1e-9);
+  const img = ctx.createImageData(cols, rows);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const [R, G, B] = weightRGB(flat[r * cols + c], absMax);
+      const idx = (r * cols + c) * 4;
+      img.data[idx]=R; img.data[idx+1]=G; img.data[idx+2]=B; img.data[idx+3]=255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+// ── renderAll ────────────────────────────────────────────────────────────────
+function renderAll() {
+  renderPredictor();
+  renderHeatmap();
+  renderW3();
+  renderCanvas('c-w1', weights[0], 32, 16);
+  renderCanvas('c-w2', weights[2], 16, 32);
+}
+
+// ── Load from API ────────────────────────────────────────────────────────────
+async function load() {
+  const base = document.getElementById('url').value.trim().replace(/\/$/, '');
+  try {
+    const [sr, mr] = await Promise.all([
+      fetch(`${base}/api/federated/model/status`),
+      fetch(`${base}/api/federated/model/global`),
+    ]);
+    if (!sr.ok || !mr.ok) throw new Error();
+    const status = await sr.json();
+    const model  = await mr.json();
+    weights = model.weights;
+
+    document.getElementById('dot').className = 'dot ok';
+    document.getElementById('conn-lbl').textContent = `Connected · round ${model.round}`;
+    document.getElementById('s-round').textContent = model.round;
+    document.getElementById('s-clients').textContent = status.num_clients;
+    document.getElementById('s-samples').textContent = status.total_samples;
+
+    renderAll();
+  } catch {
+    document.getElementById('dot').className = 'dot err';
+    document.getElementById('conn-lbl').textContent = 'Cannot reach backend';
+  }
+}
+
+// ── Slider events ────────────────────────────────────────────────────────────
+function onControl() {
+  timeHour = +document.getElementById('sl-time').value;
+  distM    = +document.getElementById('sl-dist').value;
+  document.getElementById('time-lbl').textContent = `${String(timeHour).padStart(2,'0')}:00`;
+  document.getElementById('dist-lbl').textContent = `${distM} m`;
+  renderPredictor();
+  renderHeatmap();
+}
+
+// ── Tooltip ──────────────────────────────────────────────────────────────────
+const tip = document.getElementById('tip');
+function showTip(e, text) { tip.style.opacity=1; tip.innerHTML=text.replace('\n','<br>'); moveTip(e); }
+function hideTip() { tip.style.opacity=0; }
+function moveTip(e) { tip.style.left=(e.clientX+14)+'px'; tip.style.top=(e.clientY-34)+'px'; }
+
+// ── Auto-refresh ─────────────────────────────────────────────────────────────
+setInterval(() => {
+  countdown--;
+  document.getElementById('refresh-lbl').textContent = `auto-refresh in ${countdown}s`;
+  if (countdown <= 0) { countdown = refreshSec; load(); }
+}, 1000);
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+buildInterestGrid();
+buildTypeGrid();
+buildFvecLabels('fv-int-labels',  INTERESTS);
+buildFvecLabels('fv-type-labels', TYPES);
+buildFvecLabels('fv-ctx-labels',  ['time','dist']);
+load();
+</script>
+</body>
+</html>

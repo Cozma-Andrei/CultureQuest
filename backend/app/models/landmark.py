@@ -32,3 +32,8 @@ class LandmarkResponse(LandmarkCreate):
     rating: float = 0.0
     visit_count: int = 0
     has_active_quest: bool = False
+    visited_by_me: bool = False
+
+
+class RatingPayload(BaseModel):
+    rating: int  # 1–5

@@ -10,10 +10,16 @@ def get_database():
     return mongo_client[settings.mongo_db]
 
 
+def get_redis():
+    return redis_client
+
+
 async def connect_db():
     global mongo_client, redis_client
     mongo_client = AsyncIOMotorClient(settings.mongo_uri)
     redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
+    db = mongo_client[settings.mongo_db]
+    await db.landmarks.create_index([("location", "2dsphere")])
 
 
 async def close_db():

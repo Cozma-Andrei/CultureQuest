@@ -21,3 +21,18 @@ class RouteResponse(BaseModel):
     total_distance_m: float
     total_duration_minutes: int
     generated_at: str
+
+
+class RouteStopWithProgress(BaseModel):
+    landmark: LandmarkResponse
+    visited: bool = False
+
+
+class RouteWithProgress(BaseModel):
+    id: str
+    name: str | None = None
+    stops: list[RouteStopWithProgress]
+    total_distance_m: float
+    total_duration_minutes: int
+    generated_at: str
+    visited_count: int = 0

@@ -1,24 +1,89 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/quest_model.dart';
+import '../../../core/services/api_service.dart';
+import '../../auth/providers/auth_provider.dart';
 
 class QuestState {
   final List<QuestModel> quests;
-  final int totalPoints;
+  final String landmarkName;
   final bool isLoading;
+  final String? error;
 
-  const QuestState({this.quests = const [], this.totalPoints = 0, this.isLoading = false});
+  const QuestState({
+    this.quests = const [],
+    this.landmarkName = '',
+    this.isLoading = false,
+    this.error,
+  });
+
+  QuestState copyWith({
+    List<QuestModel>? quests,
+    String? landmarkName,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+  }) =>
+      QuestState(
+        quests: quests ?? this.quests,
+        landmarkName: landmarkName ?? this.landmarkName,
+        isLoading: isLoading ?? this.isLoading,
+        error: clearError ? null : error ?? this.error,
+      );
 }
 
 class QuestNotifier extends StateNotifier<QuestState> {
-  QuestNotifier() : super(const QuestState());
+  final ApiService _api;
+  final Ref _ref;
 
-  Future<void> loadQuests(String landmarkId) async {}
+  QuestNotifier(this._api, this._ref) : super(const QuestState());
 
-  Future<bool> completeQuest(String questId, {int? answerIndex, String? noteText}) async {
-    return false;
+  Future<void> loadQuests(String landmarkId, {String landmarkName = '', bool isNearby = false}) async {
+    state = QuestState(isLoading: true, landmarkName: landmarkName);
+    try {
+      if (isNearby) {
+        _api.post('/landmarks/$landmarkId/visit').ignore();
+      }
+      final res = await _api.get('/quests/', params: {'landmark_id': landmarkId});
+      final quests = (res.data as List)
+          .map((j) => QuestModel.fromJson(j as Map<String, dynamic>))
+          .toList();
+      state = QuestState(quests: quests, landmarkName: landmarkName);
+    } catch (_) {
+      state = QuestState(landmarkName: landmarkName, error: 'Failed to load quests');
+    }
+  }
+
+  Future<Map<String, dynamic>?> completeQuest(
+    String questId, {
+    int? answerIndex,
+    String? noteText,
+  }) async {
+    try {
+      final body = <String, dynamic>{};
+      if (answerIndex != null) body['answer_index'] = answerIndex;
+      if (noteText != null) body['note_text'] = noteText;
+
+      final res = await _api.post('/quests/$questId/complete', data: body);
+      final result = Map<String, dynamic>.from(res.data as Map);
+
+      if (result['correct'] == true || result['already_completed'] == true) {
+        state = state.copyWith(
+          quests: state.quests
+              .map((q) => q.id == questId ? q.copyWith(completed: true) : q)
+              .toList(),
+        );
+      }
+
+      // Update cached user points/completedQuests
+      await _ref.read(authProvider.notifier).refreshUser();
+
+      return result;
+    } catch (_) {
+      return null;
+    }
   }
 }
 
 final questProvider = StateNotifierProvider<QuestNotifier, QuestState>(
-  (_) => QuestNotifier(),
+  (ref) => QuestNotifier(ref.watch(apiServiceProvider), ref),
 );
