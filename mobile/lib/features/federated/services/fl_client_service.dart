@@ -33,6 +33,8 @@ class FLClientService {
   int get round => _currentRound;
   int get pendingInteractions => _interactions.length;
 
+  void clearInteractions() => _interactions.clear();
+
   // ── Feature engineering ────────────────────────────────────────────────────
 
   List<double> buildFeatureVector({

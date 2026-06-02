@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../federated/providers/fl_provider.dart';
+import '../../../core/services/api_service.dart';
+import '../../../core/services/local_data_service.dart';
+import '../../map/providers/map_provider.dart';
+import '../../federated/providers/fl_provider.dart';
 
 const _categories = [
   (id: 'art', label: 'Art', icon: Icons.palette_outlined),
@@ -144,6 +148,56 @@ class ProfileScreen extends ConsumerWidget {
           ),
 
           const SizedBox(height: 36),
+
+          // Clear local data
+          OutlinedButton.icon(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Clear local data?'),
+                  content: const Text(
+                    'This will erase your visited landmarks, personal ratings, completed quests, and saved routes stored on this device. Server data is not affected.',
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                    FilledButton(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        // 1. Clear all local storage
+                        await ref.read(localDataProvider).clearAll();
+                        // 2. Clear pending FL interactions
+                        ref.read(flProvider.notifier).clearBuffer();
+                        // 3. Reset server-side points and quest count (interests kept)
+                        try {
+                          await ref.read(apiServiceProvider).post('/users/me/reset-progress');
+                        } catch (_) {}
+                        // 4. Refresh auth so UI reflects updated points
+                        await ref.read(authProvider.notifier).refreshUser();
+                        // 5. Refresh map landmark annotations
+                        ref.read(mapProvider.notifier).fetchAllLandmarks();
+                        ref.read(mapProvider.notifier).fetchMyRoutes();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Local data and progress cleared.')),
+                          );
+                        }
+                      },
+                      style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+                      child: const Text('Clear'),
+                    ),
+                  ],
+                ),
+              );
+            },
+            icon: const Icon(Icons.delete_sweep_outlined),
+            label: const Text('Clear local data'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+          const SizedBox(height: 12),
 
           // Logout
           OutlinedButton.icon(

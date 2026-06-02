@@ -24,10 +24,13 @@ def _doc_to_quest(doc: dict, completed_ids: set[str] | None = None) -> QuestResp
 async def get_quests_for_landmark(
     db: AsyncIOMotorDatabase, landmark_id: str, user_id: str
 ) -> list[QuestResponse]:
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
-    completed_ids = set(user.get("completed_quest_ids", [])) if user else set()
-    docs = await db.quests.find({"landmark_id": landmark_id}).to_list(50)
-    return [_doc_to_quest(doc, completed_ids) for doc in docs]
+    # completed status is tracked locally on device — server returns quests without completion state
+    # Only return approved (seeded) or explicitly approved quests — exclude pending submissions
+    docs = await db.quests.find({
+        "landmark_id": landmark_id,
+        "$or": [{"status": {"$exists": False}}, {"status": "approved"}],
+    }).to_list(50)
+    return [_doc_to_quest(doc) for doc in docs]
 
 
 async def complete_quest(
@@ -51,15 +54,7 @@ async def complete_quest(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if quest_id in user.get("completed_quest_ids", []):
-        return {
-            "correct": True,
-            "points_earned": 0,
-            "already_completed": True,
-            "total_points": user.get("points", 0),
-            "total_completed": user.get("completed_quests", 0),
-        }
-
+    # completed_quest_ids is no longer stored server-side — client tracks locally
     correct = True
     if quest["type"] == "educational" and quest.get("correct_option_index") is not None:
         correct = answer_index == quest["correct_option_index"]
@@ -69,10 +64,7 @@ async def complete_quest(
     if correct:
         await db.users.update_one(
             {"_id": user_oid},
-            {
-                "$inc": {"points": points_earned, "completed_quests": 1},
-                "$push": {"completed_quest_ids": quest_id},
-            },
+            {"$inc": {"points": points_earned, "completed_quests": 1}},
         )
 
     updated = await db.users.find_one({"_id": user_oid})
@@ -95,7 +87,7 @@ async def get_user_progress(db: AsyncIOMotorDatabase, user_id: str) -> dict:
     return {
         "points": user.get("points", 0),
         "completed_quests": user.get("completed_quests", 0),
-        "completed_quest_ids": user.get("completed_quest_ids", []),
+        # completed_quest_ids intentionally omitted — tracked locally on device
     }
 
 
@@ -208,3 +200,103 @@ async def seed_quests_for_landmark(
     if docs:
         await db.quests.insert_many(docs)
     return len(docs)
+
+
+async def submit_quest(
+    db: AsyncIOMotorDatabase, landmark_id: str, user_id: str, payload
+) -> dict | None:
+    from bson import ObjectId
+    from bson.errors import InvalidId
+    from fastapi import HTTPException
+    _MAX_QUESTS = 5
+    try:
+        ObjectId(landmark_id)
+    except InvalidId:
+        return None
+    lm = await db.landmarks.find_one({"_id": ObjectId(landmark_id)})
+    if not lm:
+        return None
+    # Count active (seeded or approved) quests for this landmark
+    active_count = await db.quests.count_documents({
+        "landmark_id": landmark_id,
+        "$or": [{"status": {"$exists": False}}, {"status": "approved"}],
+    })
+    if active_count >= _MAX_QUESTS:
+        raise HTTPException(status_code=422, detail=f"Landmark already has {_MAX_QUESTS} quests (maximum)")
+    # Admins bypass review — quest goes live immediately
+    user_doc = await db.users.find_one({"_id": ObjectId(user_id)})
+    is_admin = user_doc.get("is_admin", False) if user_doc else False
+    final_status = "approved" if is_admin else "pending"
+    result = await db.quests.insert_one({
+        "landmark_id": landmark_id,
+        "submitted_by": user_id,
+        "type": payload.type.value,
+        "title": payload.title,
+        "description": payload.description,
+        "points": max(10, min(payload.points, 200)),
+        "options": payload.options,
+        "correct_option_index": payload.correct_option_index,
+        "status": final_status,
+    })
+    if is_admin:
+        await db.landmarks.update_one(
+            {"_id": ObjectId(landmark_id)}, {"$set": {"has_active_quest": True}}
+        )
+    return {
+        "id": str(result.inserted_id),
+        "landmark_id": landmark_id,
+        "type": payload.type.value,
+        "title": payload.title,
+        "description": payload.description,
+        "points": payload.points,
+        "status": final_status,
+    }
+
+
+async def get_pending_quests(db: AsyncIOMotorDatabase) -> list[dict]:
+    docs = await db.quests.find({"status": "pending"}).to_list(None)
+    results = []
+    for doc in docs:
+        lm = await db.landmarks.find_one({"_id": ObjectId(doc["landmark_id"])}, {"name": 1})
+        results.append({
+            "id": str(doc["_id"]),
+            "landmark_id": doc["landmark_id"],
+            "landmark_name": lm.get("name") if lm else None,
+            "type": doc["type"],
+            "title": doc["title"],
+            "description": doc["description"],
+            "points": doc["points"],
+            "options": doc.get("options", []),
+            "correct_option_index": doc.get("correct_option_index"),
+            "status": doc["status"],
+        })
+    return results
+
+
+async def approve_quest(db: AsyncIOMotorDatabase, quest_id: str) -> bool:
+    try:
+        oid = ObjectId(quest_id)
+    except InvalidId:
+        return False
+    result = await db.quests.update_one(
+        {"_id": oid},
+        {"$set": {"status": "approved"}, "$unset": {"submitted_by": ""}},
+    )
+    if result.modified_count:
+        # Mark landmark as having an active quest
+        doc = await db.quests.find_one({"_id": oid})
+        if doc:
+            await db.landmarks.update_one(
+                {"_id": ObjectId(doc["landmark_id"])},
+                {"$set": {"has_active_quest": True}},
+            )
+    return result.modified_count > 0
+
+
+async def reject_quest(db: AsyncIOMotorDatabase, quest_id: str) -> bool:
+    try:
+        oid = ObjectId(quest_id)
+    except InvalidId:
+        return False
+    result = await db.quests.delete_one({"_id": oid, "status": "pending"})
+    return result.deleted_count > 0

@@ -17,7 +17,7 @@ class AuthState {
   });
 
   bool get isLoggedIn => user != null;
-  bool get needsInterests => isLoggedIn && user!.interests.isEmpty;
+  bool get needsInterests => isLoggedIn && user!.interests.isEmpty && !user!.isAdmin;
 
   AuthState copyWith({
     UserModel? user,

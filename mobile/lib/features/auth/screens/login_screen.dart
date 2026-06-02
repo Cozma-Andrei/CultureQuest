@@ -25,17 +25,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
     await ref.read(authProvider.notifier).login(
           _emailController.text.trim(),
           _passwordController.text,
         );
-    if (mounted) {
-      final error = ref.read(authProvider).error;
-      if (error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error), backgroundColor: Theme.of(context).colorScheme.error),
-        );
-      }
+    if (!mounted) return;
+    final authState = ref.read(authProvider);
+    if (authState.error != null) {
+      messenger.showSnackBar(SnackBar(
+        content: Text(authState.error!),
+        backgroundColor: Theme.of(context).colorScheme.error,
+        duration: const Duration(seconds: 3),
+      ));
+    } else {
+      // Logged in successfully — dismiss any lingering error message
+      messenger.clearSnackBars();
     }
   }
 

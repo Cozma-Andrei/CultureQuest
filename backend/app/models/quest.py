@@ -25,3 +25,22 @@ class QuestResponse(BaseModel):
 class QuestCompletionPayload(BaseModel):
     answer_index: Optional[int] = None
     note_text: Optional[str] = None
+
+
+class QuestSubmit(BaseModel):
+    type: QuestType
+    title: str
+    description: str
+    points: int = 50
+    options: list[str] = []
+    correct_option_index: Optional[int] = None
+
+
+class QuestSubmitResponse(BaseModel):
+    id: str
+    landmark_id: str
+    type: QuestType
+    title: str
+    description: str
+    points: int
+    status: str = "pending"

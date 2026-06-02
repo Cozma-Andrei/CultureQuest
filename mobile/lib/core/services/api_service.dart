@@ -24,6 +24,10 @@ class ApiService {
     return _dio.patch(path, data: data);
   }
 
+  Future<Response> delete(String path) async {
+    return _dio.delete(path);
+  }
+
   void setAuthToken(String token) {
     _dio.options.headers['Authorization'] = 'Bearer $token';
   }

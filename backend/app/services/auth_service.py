@@ -16,6 +16,7 @@ def _doc_to_profile(doc: dict) -> UserProfile:
         interests=doc.get("interests", []),
         points=doc.get("points", 0),
         completed_quests=doc.get("completed_quests", 0),
+        is_admin=doc.get("is_admin", False),
     )
 
 

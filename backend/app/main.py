@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.database import connect_db, close_db
-from app.api.routes import auth, landmarks, routes, quests, federated, users
+from app.api.routes import auth, landmarks, routes, quests, federated, users, events, community
 
 
 @asynccontextmanager
@@ -32,6 +32,8 @@ app.include_router(routes.router, prefix="/api/routes", tags=["routes"])
 app.include_router(quests.router, prefix="/api/quests", tags=["quests"])
 app.include_router(federated.router, prefix="/api/federated", tags=["federated"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
+app.include_router(events.router, prefix="/api/events", tags=["events"])
+app.include_router(community.router, prefix="/api/community", tags=["community"])
 
 
 @app.get("/health")

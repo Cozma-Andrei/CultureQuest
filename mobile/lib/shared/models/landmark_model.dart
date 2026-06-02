@@ -18,7 +18,11 @@ class LandmarkModel {
   final double rating;
   final int visitCount;
   final bool hasActiveQuest;
+  final String? submittedBy;
+  final String? website;
+  // These are computed locally — not from the server
   final bool visitedByMe;
+  final double? myRating;
 
   const LandmarkModel({
     required this.id,
@@ -31,8 +35,19 @@ class LandmarkModel {
     this.rating = 0.0,
     this.visitCount = 0,
     this.hasActiveQuest = false,
+    this.submittedBy,
+    this.website,
     this.visitedByMe = false,
+    this.myRating,
   });
+
+  LandmarkModel withLocal({bool? visitedByMe, double? myRating}) => LandmarkModel(
+    id: id, name: name, type: type, location: location, description: description,
+    categories: categories, stories: stories, rating: rating, visitCount: visitCount,
+    hasActiveQuest: hasActiveQuest, submittedBy: submittedBy, website: website,
+    visitedByMe: visitedByMe ?? this.visitedByMe,
+    myRating: myRating ?? this.myRating,
+  );
 
   factory LandmarkModel.fromJson(Map<String, dynamic> json) => LandmarkModel(
         id: json['id'],
@@ -45,6 +60,7 @@ class LandmarkModel {
         rating: (json['rating'] ?? 0).toDouble(),
         visitCount: (json['visit_count'] ?? 0) as int,
         hasActiveQuest: json['has_active_quest'] ?? false,
-        visitedByMe: json['visited_by_me'] ?? false,
+        submittedBy: json['submitted_by'] as String?,
+        website: json['website'] as String?,
       );
 }

@@ -44,6 +44,8 @@ USERS_DATA = [
     dict(name="Florin Marin",      email="florin@example.com",  interests=["gastronomy","nature"],             pw="pass1234"),
 ]
 
+ADMIN_DATA = dict(name="Admin", email="admin@culturequest.ro", pw="admin1234")
+
 # ── 100 Bucharest Landmarks ────────────────────────────────────────────────────
 # (name, type, lat, lng, description, [categories], [stories])
 RAW_LANDMARKS = [
@@ -514,7 +516,7 @@ NAMED_ROUTES = [
 #  SEED
 # ══════════════════════════════════════════════════════════════════════════════
 print("🗑  Clearing existing data …")
-for col in ["users","landmarks","quests","visits","ratings","routes"]:
+for col in ["users","landmarks","quests","visits","ratings","routes","stories","events"]:
     db[col].drop()
 
 # ── Create 2dsphere index ──────────────────────────────────────────────────────
@@ -529,24 +531,49 @@ for u in USERS_DATA:
         password_hash=hpw(u["pw"]),
         interests=u["interests"],
         points=0, completed_quests=0,
-        completed_quest_ids=[],
         created_at=datetime.utcnow() - timedelta(days=random.randint(10, 90)),
     )
     user_docs.append(doc)
 res = db.users.insert_many(user_docs)
 user_ids = [str(oid) for oid in res.inserted_ids]
-print(f"   ✓ {len(user_ids)} users created")
+
+# Admin account (separate insert so it's clearly identifiable)
+db.users.insert_one(dict(
+    email=ADMIN_DATA["email"], name=ADMIN_DATA["name"],
+    password_hash=hpw(ADMIN_DATA["pw"]),
+    interests=[], points=0, completed_quests=0,
+    is_admin=True,
+    created_at=datetime.utcnow(),
+))
+admin_id = str(db.users.find_one({"is_admin": True})["_id"])
+print(f"   ✓ {len(user_ids)} users + 1 admin created")
 
 # ── Insert landmarks ───────────────────────────────────────────────────────────
+LANDMARK_WEBSITES = {
+    "Romanian Athenaeum":        "https://www.fge.org.ro",
+    "National History Museum":   "https://www.mnir.ro",
+    "Cotroceni Palace":          "https://www.muzeulcotroceni.ro",
+    "National Museum of Art":    "https://www.mnar.arts.ro",
+    "Village Museum":            "https://muzeul-satului.ro",
+    "Natural History Museum":    "https://www.grigore-antipa.ro",
+    "National Opera":            "https://www.operanb.ro",
+    "Biblioteca Națională":      "https://www.bibnat.ro",
+    "Herăstrău Park":            "https://www.herastraupark.ro",
+    "Cișmigiu Garden":           "https://www.cismigiu.ro",
+}
+
 print("📍 Inserting 100 Bucharest landmarks …")
 landmark_docs = []
 for name, ltype, lat, lng, desc, cats, stories in RAW_LANDMARKS:
     landmark_docs.append(dict(
         name=name, type=ltype,
         location={"type":"Point","coordinates":[lng, lat]},
-        description=desc, categories=cats, stories=stories,
+        description=desc, categories=cats, stories=stories[:5],  # max 5 stories
+        website=LANDMARK_WEBSITES.get(name),
         rating=0.0, visit_count=0,
         has_active_quest=True,
+        submitted_by=admin_id,   # all Bucharest landmarks attributed to admin
+        status="approved",
     ))
 res = db.landmarks.insert_many(landmark_docs)
 landmark_ids = [str(oid) for oid in res.inserted_ids]
@@ -560,7 +587,7 @@ print("🗺  Inserting quests …")
 quest_docs = []
 for raw, lid in zip(RAW_LANDMARKS, landmark_ids):
     name, ltype, _, _, _, cats, _ = raw
-    for q in quests_for(name, ltype, cats):
+    for q in quests_for(name, ltype, cats)[:5]:  # max 5 quests per landmark
         quest_docs.append(dict(
             landmark_id=lid,
             type=q["type"], title=q["title"], description=q["description"],
@@ -583,54 +610,72 @@ print("🚶 Simulating user activity …")
 # How many landmarks each user visits (realistic spread)
 visits_per_user = [28, 22, 18, 20, 14, 32, 12, 10]
 
-visit_docs = []
-rating_docs = []
+# Per-landmark counters (anonymous — no user_id stored)
+visit_counts  = {lid: 0 for lid in landmark_ids}   # total visit count
+rating_sums   = {lid: 0 for lid in landmark_ids}   # sum of ratings
+rating_counts = {lid: 0 for lid in landmark_ids}   # number of raters
 
 # Track per-user points and completed quest info
 user_points   = [0] * len(user_ids)
 user_completed_quests = [0] * len(user_ids)
 user_completed_quest_ids = [[] for _ in user_ids]
 
+total_visits = 0
+total_ratings = 0
+
+# Landmarks referenced in community review pending items — every user must visit at least one
+COMMUNITY_REVIEW_NAMES = [
+    "Romanian Athenaeum", "Stavropoleos Monastery", "Curtea Veche",
+    "Herăstrău Park", "Village Museum", "National History Museum",
+    "Cotroceni Palace", "Old Town Square",
+]
+community_review_ids = [name_to_id[n] for n in COMMUNITY_REVIEW_NAMES if n in name_to_id]
+
 for ui, (uid, n_visits) in enumerate(zip(user_ids, visits_per_user)):
-    visited_lids = random.sample(landmark_ids, min(n_visits, len(landmark_ids)))
+    # Ensure at least one community-review landmark is included
+    guaranteed = [random.choice(community_review_ids)] if community_review_ids else []
+    remaining_pool = [lid for lid in landmark_ids if lid not in guaranteed]
+    extra = random.sample(remaining_pool, min(n_visits - len(guaranteed), len(remaining_pool)))
+    visited_lids = guaranteed + extra
 
     for lid in visited_lids:
-        # Visit record
-        visit_docs.append({"user_id": uid, "landmark_id": lid})
+        # Anonymous visit counter
+        visit_counts[lid] += 1
+        total_visits += 1
 
-        # Rating: 70% chance
+        # Anonymous rating contribution (70% chance)
         if random.random() < 0.70:
-            r = random.choices([3, 4, 4, 5, 5, 5], k=1)[0]  # skewed positive
-            rating_docs.append({"user_id": uid, "landmark_id": lid, "rating": r})
+            r = random.choices([3, 4, 4, 5, 5, 5], k=1)[0]
+            rating_sums[lid] += r
+            rating_counts[lid] += 1
+            total_ratings += 1
 
         # Complete 0, 1, or 2 quests for this landmark
         quests_here = lm_quests.get(lid, [])
         n_to_do = random.choices([0, 1, 2], weights=[15, 45, 40])[0]
         chosen = random.sample(quests_here, min(n_to_do, len(quests_here)))
         for qid, qdoc in chosen:
-            # Only attempt educational if user has some chance to answer correctly
             if qdoc["type"] == "educational" and random.random() < 0.30:
-                continue  # skip (wrong answer)
+                continue
             pts = qdoc["points"]
             user_points[ui] += pts
             user_completed_quests[ui] += 1
             user_completed_quest_ids[ui].append(qid)
 
-print(f"   visits: {len(visit_docs)}  ratings: {len(rating_docs)}")
+print(f"   visits: {total_visits}  ratings: {total_ratings}")
 
-if visit_docs:
-    db.visits.insert_many(visit_docs)
-if rating_docs:
-    db.ratings.insert_many(rating_docs)
-
-# ── Aggregate visit_count and rating on each landmark ─────────────────────────
+# ── Aggregate visit_count and rating on each landmark (anonymous) ──────────────
 print("📊 Aggregating visit counts and ratings …")
 for lid in landmark_ids:
-    vc = db.visits.count_documents({"landmark_id": lid})
-    rat_docs = list(db.ratings.find({"landmark_id": lid}))
-    avg_r = round(sum(d["rating"] for d in rat_docs) / len(rat_docs), 2) if rat_docs else 0.0
+    vc = visit_counts[lid]
+    r_sum = rating_sums[lid]
+    r_count = rating_counts[lid]
+    avg_r = round(r_sum / r_count, 2) if r_count > 0 else 0.0
     from bson import ObjectId as OID
-    db.landmarks.update_one({"_id": OID(lid)}, {"$set": {"visit_count": vc, "rating": avg_r}})
+    db.landmarks.update_one(
+        {"_id": OID(lid)},
+        {"$set": {"visit_count": vc, "rating": avg_r, "rating_sum": r_sum, "rating_count": r_count}},
+    )
 
 # ── Update user stats ──────────────────────────────────────────────────────────
 print("💰 Updating user points and completed quests …")
@@ -639,7 +684,7 @@ for ui, uid in enumerate(user_ids):
     db.users.update_one({"_id": OID(uid)}, {"$set": {
         "points": user_points[ui],
         "completed_quests": user_completed_quests[ui],
-        "completed_quest_ids": user_completed_quest_ids[ui],
+        # completed_quest_ids not stored server-side — tracked locally on device
     }})
 
 # ── Insert routes ──────────────────────────────────────────────────────────────
@@ -665,7 +710,8 @@ for route_def in NAMED_ROUTES:
 
     generated_at = (datetime.utcnow() - timedelta(days=random.randint(1, 30))).isoformat()
     db.routes.insert_one(dict(
-        user_id=uid,
+        user_id=admin_id,          # curated routes attributed to admin
+        is_global=True,            # visible to all users
         name=route_def["name"],
         stop_ids=stop_ids,
         interests=route_def["interests"],
@@ -677,15 +723,187 @@ for route_def in NAMED_ROUTES:
 
 print(f"   ✓ {route_count} routes created")
 
+# ── Insert events ──────────────────────────────────────────────────────────────
+print("🎉 Inserting events …")
+now = datetime.utcnow()
+
+def future(days, hour=18, minute=0):
+    d = now + timedelta(days=days)
+    return datetime(d.year, d.month, d.day, hour, minute).isoformat()
+
+def past(days, hour=10, minute=0):
+    d = now - timedelta(days=days)
+    return datetime(d.year, d.month, d.day, hour, minute).isoformat()
+
+EVENTS_DATA = [
+    # ── Ongoing ──────────────────────────────────────────────────────────────
+    ("Romanian Athenaeum",        "George Enescu Festival",
+     "Annual classical music festival celebrating Romania's greatest composer.",
+     past(0, 10), future(3, 22)),
+    ("National History Museum",   "Special Exhibition: Dacian Gold",
+     "Temporary exhibition showcasing rare Dacian gold artefacts.",
+     past(1, 9), future(10, 19)),
+    ("Stavropoleos Monastery",    "Orthodox Choir Concert",
+     "Weekly sacred music performance by the Stavropoleos choir.",
+     past(0, 18), past(0, 20)),
+    ("Old Town Square",           "Bucharest Street Performers Festival",
+     "Live music, juggling, mime and dance acts throughout the day.",
+     past(0, 12), future(1, 22)),
+    ("Unirii Boulevard",          "Street Art Week",
+     "Local and international street artists transform the boulevard walls.",
+     past(2, 9), future(5, 20)),
+    ("Cișmigiu Garden",           "Sunday Farmers Market",
+     "Weekly organic produce and artisan food market in the park.",
+     past(0, 9), past(0, 14)),
+
+    # ── Upcoming ─────────────────────────────────────────────────────────────
+    ("Herăstrău Park",            "Bucharest Jazz in the Park",
+     "Free outdoor jazz festival with local and international artists.",
+     future(4, 16), future(4, 22)),
+    ("Cotroceni Palace",          "Guided Night Tour",
+     "Special evening guided tour of the royal palace and gardens.",
+     future(7, 20), future(7, 23)),
+    ("National Museum of Art",    "Contemporary Art Opening Night",
+     "Vernissage for the new contemporary Romanian art collection.",
+     future(5, 19), future(5, 22)),
+    ("Cișmigiu Garden",           "Outdoor Theatre: A Midsummer Night's Dream",
+     "Shakespeare in the park performed by the National Theatre company.",
+     future(10, 19, 30), future(10, 22)),
+    ("Village Museum",            "Traditional Crafts Workshop",
+     "Hands-on workshop: pottery, weaving and embroidery with master craftsmen.",
+     future(2, 10), future(2, 17)),
+    ("Arcul de Triumf",           "National Day Parade Rehearsal",
+     "Watch the parade rehearsal from the public viewing area — free entry.",
+     future(14, 9), future(14, 13)),
+    ("Floreasca Park",            "Outdoor Yoga & Wellness Morning",
+     "Free community yoga session followed by a guided meditation walk.",
+     future(3, 8), future(3, 10)),
+    ("Old Town Square",           "Bucharest History Walk",
+     "Free guided walking tour of medieval Bucharest led by local historians.",
+     future(1, 11), future(1, 13)),
+    ("National History Museum",   "Night at the Museum",
+     "After-hours access with torchlight tours and live historical re-enactments.",
+     future(8, 20), future(8, 23)),
+    ("Romanian Athenaeum",        "Piano Recital: Chopin Evening",
+     "An intimate recital of Chopin's nocturnes and ballades.",
+     future(6, 19), future(6, 21, 30)),
+    ("Herăstrău Park",            "Rowing Regatta",
+     "Annual amateur rowing competition on Herăstrău lake — spectators welcome.",
+     future(12, 9), future(12, 17)),
+    ("Curtea Veche",              "Medieval Bucharest Re-enactment",
+     "Costumed actors recreate life in 15th-century Bucharest.",
+     future(9, 11), future(9, 18)),
+    ("Village Museum",            "Photography Exhibition: Rural Romania",
+     "Outdoor photo exhibition documenting disappearing village traditions.",
+     future(15, 10), future(30, 19)),
+    ("National Opera",            "La Traviata — Opening Night",
+     "Verdi's masterpiece performed by the Romanian National Opera.",
+     future(11, 19), future(11, 22, 30)),
+    ("Floreasca Park",            "Food Truck Rally",
+     "Twenty food trucks serving street food from around the world.",
+     future(5, 12), future(5, 21)),
+    ("Parcul Carol",              "Rock the Park Festival",
+     "Two-day indie and rock music festival with camping.",
+     future(20, 12), future(21, 23)),
+    ("Biblioteca Națională",      "Book Fair & Author Signings",
+     "Publishers and authors gather for the annual Bucharest book fair.",
+     future(7, 10), future(9, 19)),
+    ("Piața Romană",              "Open-Air Cinema Night",
+     "Classic Romanian films screened outdoors — bring a blanket.",
+     future(4, 21), future(4, 23, 30)),
+]
+
+event_docs = []
+for lname, title, desc, start, end in EVENTS_DATA:
+    lid = name_to_id.get(lname)
+    if lid:
+        event_docs.append(dict(
+            landmark_id=lid,
+            title=title,
+            description=desc,
+            start_time=start,
+            end_time=end,
+            created_by=admin_id,
+        ))
+
+if event_docs:
+    db.events.insert_many(event_docs)
+print(f"   ✓ {len(event_docs)} events created")
+
+# ── Pending community items (stories + quests awaiting peer review) ────────────
+print("⏳ Inserting pending community items …")
+pending_stories = [
+    ("Romanian Athenaeum",   "I once heard a pianist rehearsing alone at midnight — the sound echoed through the empty hall like a ghost performance."),
+    ("Stavropoleos Monastery","The monks still hand-copy manuscripts in the library. I watched one work for an hour without looking up once."),
+    ("Curtea Veche",          "Legend says the ghost of Vlad the Impaler walks the ruins on foggy nights. A guard told me he heard footsteps with no source."),
+    ("Herăstrău Park",        "Every Sunday a group of elderly men play chess under the same oak tree — they've been meeting there for forty years."),
+    ("Village Museum",        "A craftsman showed me a loom that belonged to his great-grandmother. He still uses it to weave the same pattern she did."),
+]
+pending_quests_data = [
+    ("Romanian Athenaeum",   "educational", "Who composed the 'Romanian Rhapsodies'?",
+     "Name the composer who performed his debut here and went on to become Romania's most celebrated musician.",
+     60, ["George Enescu", "Ciprian Porumbescu", "Dinu Lipatti", "Paul Constantinescu"], 0),
+    ("National History Museum","challenge", "Find the Trajan Column Replica",
+     "Locate the full-scale replica of Trajan's Column inside the museum and note the scene depicted at eye level.",
+     50, [], None),
+    ("Cotroceni Palace",     "mission", "Sketch the Throne Room",
+     "Draw or photograph the decorative motif above the main entrance to the throne room.",
+     40, [], None),
+    ("Herăstrău Park",       "virtual_note", "Your Park Memory",
+     "Leave a note about your favourite spot in the park and why it feels special.",
+     20, [], None),
+    ("Old Town Square",      "educational", "What century was the Old Town founded?",
+     "Based on the archaeological evidence visible in the square, identify the founding century.",
+     50, ["14th century", "15th century", "16th century", "17th century"], 1),
+]
+
+pending_story_count = 0
+for lname, text in pending_stories:
+    lid = name_to_id.get(lname)
+    if lid:
+        # Random user as submitter for realism
+        submitter = random.choice(user_ids)
+        db.stories.insert_one({"landmark_id": lid, "submitted_by": submitter, "text": text, "status": "pending", "community_vote_count": 0})
+        pending_story_count += 1
+
+pending_quest_count = 0
+for lname, qtype, title, desc, pts, opts, correct in pending_quests_data:
+    lid = name_to_id.get(lname)
+    if lid:
+        submitter = random.choice(user_ids)
+        db.quests.insert_one({
+            "landmark_id": lid, "submitted_by": submitter,
+            "type": qtype, "title": title, "description": desc,
+            "points": pts, "options": opts, "correct_option_index": correct,
+            "status": "pending", "community_vote_count": 0,
+        })
+        pending_quest_count += 1
+
+# Also add one pending landmark suggestion
+pending_landmark = {
+    "name": "Hidden Garden of Văcărești",
+    "type": "park",
+    "location": {"type": "Point", "coordinates": [26.1050, 44.3850]},
+    "description": "An unofficial urban delta park that formed naturally in an abandoned reservoir — one of Europe's unexpected urban nature reserves.",
+    "categories": ["nature"], "stories": [], "rating": 0.0, "visit_count": 0,
+    "has_active_quest": False, "submitted_by": random.choice(user_ids),
+    "status": "pending", "community_vote_count": 0,
+}
+db.landmarks.insert_one(pending_landmark)
+db.landmarks.create_index([("location", GEOSPHERE)])  # ensure index after insert
+
+print(f"   ✓ {pending_story_count} pending stories, {pending_quest_count} pending quests, 1 pending landmark")
+
 # ── Summary ────────────────────────────────────────────────────────────────────
 print("\n" + "="*55)
 print("✅  Seed complete!")
 print(f"   Users:     {db.users.count_documents({})}")
 print(f"   Landmarks: {db.landmarks.count_documents({})}")
 print(f"   Quests:    {db.quests.count_documents({})}")
-print(f"   Visits:    {db.visits.count_documents({})}")
-print(f"   Ratings:   {db.ratings.count_documents({})}")
+print(f"   Visits:    {total_visits}  (anonymous counters on landmarks)")
+print(f"   Ratings:   {total_ratings}  (anonymous sum/count on landmarks)")
 print(f"   Routes:    {db.routes.count_documents({})}")
+print(f"   Events:    {db.events.count_documents({})}")
 print()
 for ui, uid in enumerate(user_ids):
     u = USERS_DATA[ui]

@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -12,6 +15,8 @@ import '../../../shared/models/landmark_model.dart';
 import '../../../shared/models/route_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../proximity/providers/proximity_provider.dart';
+import '../../../shared/models/event_model.dart';
+import '../../../core/services/local_data_service.dart';
 import '../../federated/providers/fl_provider.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -27,7 +32,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   final _sheetController = DraggableScrollableController();
   late final TabController _tabController;
   bool _centeredOnUser = false;
-  List<LatLng> _streetPolyline = const [];
+  List<LatLng> _streetPolyline = const [];   // teal: user → next route stop
+  List<LatLng> _overviewPolyline = const []; // purple dashed: all route stops via streets
+  List<LatLng> _navPolyline = const [];      // teal: standalone landmark navigation
+  LandmarkModel? _navTarget;
+  String _navMode = 'walking'; // 'walking' | 'driving'
+  bool _headingUp = false;     // rotate map to travel direction when navigating
+  // Location picker state
+  bool _pickingLocation = false;
+  LatLng? _pickedLocation;
 
   @override
   void initState() {
@@ -50,13 +63,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
 
     ref.listen<MapState>(mapProvider, (prev, next) {
       if (next.activeRoute != null && prev?.activeRoute != next.activeRoute) {
+        setState(() { _navTarget = null; _navPolyline = const []; });
         _fetchStreetRoute(next.activeRoute!.stops, next.position);
       }
       if (next.activeRoute == null && prev?.activeRoute != null) {
         setState(() => _streetPolyline = const []);
       }
       if (next.activeProgressRoute != null && prev?.activeProgressRoute != next.activeProgressRoute) {
-        setState(() => _streetPolyline = const []);
+        setState(() { _streetPolyline = const []; _navTarget = null; _navPolyline = const []; });
+        _fetchRouteOverview(next.activeProgressRoute!);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_sheetController.isAttached) {
             _sheetController.animateTo(0.45, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
@@ -64,20 +79,25 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         });
         if (next.resumeTarget != null) {
           _animateToLandmark(next.resumeTarget!);
-          _fetchStreetRouteToLandmark(next.resumeTarget!, next.position);
+          // Route overview already covers the full path; no separate nav line needed
           ref.read(mapProvider.notifier).consumeResumeTarget();
         } else {
           _animateToRoute(next.activeProgressRoute!);
         }
       }
-      // Resume target set while route already active (same route re-resumed)
+      // Resume target set while route already active (proximity auto-advance or re-resume)
       if (next.resumeTarget != null && prev?.resumeTarget != next.resumeTarget) {
         _animateToLandmark(next.resumeTarget!);
-        _fetchStreetRouteToLandmark(next.resumeTarget!, next.position);
         ref.read(mapProvider.notifier).consumeResumeTarget();
       }
       if (next.activeProgressRoute == null && prev?.activeProgressRoute != null) {
-        setState(() => _streetPolyline = const []);
+        setState(() { _streetPolyline = const []; _overviewPolyline = const []; });
+      }
+      // Heading-up: rotate map to follow travel direction
+      if (_headingUp && _navTarget != null &&
+          next.position != null &&
+          (next.position?.heading ?? 0) != (prev?.position?.heading ?? 0)) {
+        _mapController.rotate(-(next.position!.heading));
       }
     });
 
@@ -160,6 +180,23 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   context.push('/profile');
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.how_to_vote_outlined),
+                title: const Text('Community Review'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCommunityReview();
+                },
+              ),
+              if (authState.user?.isAdmin == true)
+                ListTile(
+                  leading: const Icon(Icons.admin_panel_settings_outlined),
+                  title: const Text('Pending Submissions'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showPendingSubmissions();
+                  },
+                ),
               const Spacer(),
               const Divider(),
               ListTile(
@@ -182,9 +219,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
             options: MapOptions(
               initialCenter: initialCenter,
               initialZoom: 15,
-              interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+              interactionOptions: InteractionOptions(
+                flags: _headingUp
+                    ? InteractiveFlag.all  // allow rotation when heading-up so map follows bearing
+                    : InteractiveFlag.all & ~InteractiveFlag.rotate,
               ),
+              onTap: _pickingLocation ? (_, point) {
+                setState(() => _pickedLocation = point);
+              } : null,
             ),
             children: [
               TileLayer(
@@ -203,22 +245,19 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                       ? Polyline(points: _streetPolyline, strokeWidth: 4, color: Colors.deepPurple)
                       : _buildRoutePolyline(mapState.activeRoute!.stops.map((s) => s.landmark).toList(), mapState.position),
                 ]),
-              // Progress route: dashed overview between all stops
-              if (progressRoute != null)
+              // Progress route: solid deep purple (same style as generated route)
+              if (progressRoute != null && _overviewPolyline.isNotEmpty)
                 PolylineLayer(polylines: [
                   Polyline(
-                    points: progressRoute.stops.map((s) => LatLng(s.landmark.location.lat, s.landmark.location.lng)).toList(),
-                    strokeWidth: 3,
-                    color: Colors.deepPurple.withOpacity(0.4),
-                    isDotted: true,
+                    points: _overviewPolyline,
+                    strokeWidth: 4,
+                    color: Colors.deepPurple,
                   ),
                 ]),
-              // Navigation line: street route from user → next stop
-              if (progressRoute != null && _streetPolyline.isNotEmpty)
-                PolylineLayer(polylines: [
-                  Polyline(points: _streetPolyline, strokeWidth: 4, color: Colors.teal),
-                ]),
-              // All landmarks layer (dimmed when a progress route is active)
+              // Standalone navigation polyline
+              if (_navTarget != null && progressRoute == null && mapState.activeRoute == null && _navPolyline.isNotEmpty)
+                PolylineLayer(polylines: [Polyline(points: _navPolyline, strokeWidth: 4, color: Colors.teal)]),
+              // All landmarks layer (nav target rendered green via _buildLandmarkMarker)
               if (progressRoute == null && mapLandmarks.isNotEmpty)
                 MarkerLayer(markers: mapLandmarks.map((l) => _buildLandmarkMarker(l)).toList()),
               // Progress route stop markers
@@ -229,8 +268,75 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 ),
               if (mapState.position != null)
                 MarkerLayer(markers: [_buildUserMarker(mapState.position!)]),
+              // Picked location marker
+              if (_pickedLocation != null)
+                MarkerLayer(markers: [
+                  Marker(
+                    point: _pickedLocation!,
+                    width: 44, height: 52,
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.location_pin, color: Colors.deepOrange, size: 44),
+                      ],
+                    ),
+                  ),
+                ]),
             ],
           ),
+
+          // Location picker instruction banner
+          // Picker instruction banner — at the very bottom when picking
+          if (_pickingLocation)
+            Positioned(
+              left: 16, right: 80,
+              bottom: MediaQuery.of(context).padding.bottom + 16,
+              child: Material(
+                borderRadius: BorderRadius.circular(14),
+                color: theme.colorScheme.inverseSurface,
+                elevation: 4,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(children: [
+                    Icon(Icons.touch_app, color: theme.colorScheme.onInverseSurface, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _pickedLocation == null
+                            ? 'Tap on the map to place the pin'
+                            : 'Pin placed — tap again to move it',
+                        style: TextStyle(
+                            color: theme.colorScheme.onInverseSurface,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => setState(() { _pickingLocation = false; _pickedLocation = null; }),
+                      style: TextButton.styleFrom(
+                          foregroundColor: theme.colorScheme.onInverseSurface,
+                          padding: EdgeInsets.zero),
+                      child: const Text('Cancel'),
+                    ),
+                    if (_pickedLocation != null)
+                      FilledButton(
+                        onPressed: () {
+                          setState(() => _pickingLocation = false);
+                          _restoreSheet();
+                          _showSuggestSheet(_pickedLocation);
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: theme.colorScheme.onInverseSurface,
+                          foregroundColor: theme.colorScheme.inverseSurface,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        child: const Text('Confirm'),
+                      ),
+                  ]),
+                ),
+              ),
+            ),
 
           // Menu button
           Positioned(
@@ -266,44 +372,174 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               ),
             ),
 
-          // Centre-on-me FAB
+          // Navigation banner — full width, FABs sit above it via their own bottom offset
+          if (_navTarget != null && progressRoute == null && mapState.activeRoute == null)
+            Positioned(
+              left: 16, right: 16,
+              bottom: MediaQuery.of(context).size.height *
+                      (_sheetController.isAttached ? _sheetController.size : 0.28) +
+                  12,
+              child: Material(
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.teal.shade700,
+                elevation: 4,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Row(children: [
+                    const Icon(Icons.navigation, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'To: ${_navTarget!.name}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    // Heading-up toggle
+                    GestureDetector(
+                      onTap: () {
+                        setState(() => _headingUp = !_headingUp);
+                        if (!_headingUp) _mapController.rotate(0);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _headingUp ? Colors.white.withOpacity(0.25) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white.withOpacity(0.5)),
+                        ),
+                        child: const Icon(Icons.explore, color: Colors.white, size: 16),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() { _navTarget = null; _navPolyline = const []; _navMode = 'walking'; _headingUp = false; });
+                        _mapController.rotate(0);
+                        _restoreSheet();
+                      },
+                      child: const Icon(Icons.close, color: Colors.white, size: 18),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+
+          // FABs — above the nav banner when navigating, aligned with sheet otherwise
           Positioned(
             right: 16,
-            bottom: MediaQuery.of(context).size.height *
-                    (_sheetController.isAttached ? _sheetController.size : 0.28) +
-                8,
-            child: FloatingActionButton.small(
-              heroTag: 'locate',
-              onPressed: () {
-                if (mapState.position != null) {
-                  _mapController.move(LatLng(mapState.position!.latitude, mapState.position!.longitude), 15);
-                }
-              },
-              child: mapState.isLocating
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.my_location),
+            bottom: _pickingLocation
+                ? MediaQuery.of(context).padding.bottom + 16
+                : (_navTarget != null && progressRoute == null && mapState.activeRoute == null)
+                    // Nav banner is ~90px tall; raise FABs above it
+                    ? MediaQuery.of(context).size.height *
+                          (_sheetController.isAttached ? _sheetController.size : 0.28) +
+                      104
+                    : MediaQuery.of(context).size.height *
+                          (_sheetController.isAttached ? _sheetController.size : 0.28) +
+                      8,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Nearby events
+                FloatingActionButton.small(
+                  heroTag: 'nearbyEvents',
+                  tooltip: 'Nearby events',
+                  onPressed: () => _showNearbyEventsSheet(),
+                  child: const Icon(Icons.event_outlined),
+                ),
+                const SizedBox(height: 8),
+                // Suggest a location
+                FloatingActionButton.small(
+                  heroTag: 'suggest',
+                  tooltip: 'Suggest a location',
+                  backgroundColor: _pickingLocation ? theme.colorScheme.primary : null,
+                  onPressed: () {
+                    final nowPicking = !_pickingLocation;
+                    setState(() {
+                      _pickingLocation = nowPicking;
+                      if (!nowPicking) _pickedLocation = null;
+                    });
+                    if (!nowPicking) _restoreSheet();
+                  },
+                  child: Icon(_pickingLocation ? Icons.close : Icons.add_location_alt_outlined),
+                ),
+                const SizedBox(height: 8),
+                // Centre on me
+                FloatingActionButton.small(
+                  heroTag: 'locate',
+                  onPressed: () {
+                    if (mapState.position != null) {
+                      _mapController.move(LatLng(mapState.position!.latitude, mapState.position!.longitude), 15);
+                    }
+                  },
+                  child: mapState.isLocating
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.my_location),
+                ),
+              ],
             ),
           ),
 
           // Bottom sheet
-          DraggableScrollableSheet(
-            controller: _sheetController,
-            initialChildSize: 0.28,
-            minChildSize: 0.15,
-            maxChildSize: 0.75,
-            builder: (context, scrollController) => _BottomPanel(
-              scrollController: scrollController,
-              mapState: mapState,
-              tabController: _tabController,
+          if (!_pickingLocation)
+            DraggableScrollableSheet(
+              controller: _sheetController,
+              initialChildSize: 0.28,
+              minChildSize: 0.15,
+              maxChildSize: 0.75,
+              builder: (context, scrollController) => _BottomPanel(
+                scrollController: scrollController,
+                mapState: mapState,
+                tabController: _tabController,
+                onLandmarkTap: _showLandmarkSheet,
+                navTarget: _navTarget,
+                navMode: _navMode,
+                onNavModeChanged: (mode) {
+                  setState(() => _navMode = mode);
+                  if (_navTarget != null) _fetchNavPolylineOnly(_navTarget!, mode);
+                  // Re-fetch route overview with new mode when following a progress route
+                  final pr = ref.read(mapProvider).activeProgressRoute;
+                  if (pr != null) _fetchRouteOverview(pr);
+                },
+                onStopNav: () => setState(() { _navTarget = null; _navPolyline = const []; }),
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 
+  /// Returns the correct OSRM endpoint for the given profile.
+  /// router.project-osrm.org only serves driving; foot/bike need routing.openstreetmap.de.
+  String _osrmUrl(String mode, String waypoints) {
+    if (mode == 'driving') {
+      return 'https://router.project-osrm.org/route/v1/driving/$waypoints';
+    }
+    // foot / walking
+    return 'https://routing.openstreetmap.de/routed-foot/route/v1/foot/$waypoints';
+  }
+
+  void _collapseSheet() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_sheetController.isAttached) {
+        _sheetController.animateTo(0.15,
+            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+      }
+    });
+  }
+
+  void _restoreSheet() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_sheetController.isAttached) {
+        _sheetController.animateTo(0.28,
+            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+      }
+    });
+  }
+
   void _animateToLandmark(LandmarkModel landmark) {
-    _mapController.move(LatLng(landmark.location.lat, landmark.location.lng), 16);
+    _mapController.move(LatLng(landmark.location.lat, landmark.location.lng), 14);
   }
 
   void _animateToRoute(RouteWithProgress route) {
@@ -314,7 +550,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       LatLng(lats.reduce((a, b) => a < b ? a : b), lngs.reduce((a, b) => a < b ? a : b)),
       LatLng(lats.reduce((a, b) => a > b ? a : b), lngs.reduce((a, b) => a > b ? a : b)),
     );
-    _mapController.fitCamera(CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(60)));
+    _mapController.fitCamera(CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(60), maxZoom: 13.5));
   }
 
   Marker _buildUserMarker(dynamic position) => Marker(
@@ -331,23 +567,32 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         ),
       );
 
-  Marker _buildLandmarkMarker(LandmarkModel l) => Marker(
-        point: LatLng(l.location.lat, l.location.lng),
-        width: 36,
-        height: 36,
-        child: GestureDetector(
-          onTap: () => _showLandmarkSheet(l),
-          child: Container(
-            decoration: BoxDecoration(
-              color: _colorForType(l.type),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2),
-              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
-            ),
-            child: Icon(_iconForType(l.type), color: Colors.white, size: 18),
+  Marker _buildLandmarkMarker(LandmarkModel l) {
+    final isNav = _navTarget?.id == l.id;
+    return Marker(
+      point: LatLng(l.location.lat, l.location.lng),
+      width: isNav ? 44 : 36,
+      height: isNav ? 44 : 36,
+      child: GestureDetector(
+        onTap: () => _showLandmarkSheet(l),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isNav ? Colors.green.shade600 : _colorForType(l.type),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: isNav ? 3 : 2),
+            boxShadow: [
+              BoxShadow(
+                color: isNav ? Colors.green.withOpacity(0.45) : Colors.black26,
+                blurRadius: isNav ? 10 : 4,
+                spreadRadius: isNav ? 3 : 0,
+              ),
+            ],
           ),
+          child: Icon(_iconForType(l.type), color: Colors.white, size: isNav ? 22 : 18),
         ),
-      );
+      ),
+    );
+  }
 
   Marker _buildProgressStopMarker(RouteStopWithProgress stop, int index) {
     final visited = stop.visited;
@@ -356,7 +601,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       width: 44,
       height: 44,
       child: GestureDetector(
-        onTap: () => _showLandmarkSheet(stop.landmark),
+        onTap: () => _showLandmarkSheet(stop.landmark), // resolved inside _showLandmarkSheet
         child: Stack(
           children: [
             Container(
@@ -395,7 +640,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         ...stops.map((s) => '${s.landmark.location.lng},${s.landmark.location.lat}'),
       ].join(';');
       final res = await Dio().get(
-        'https://router.project-osrm.org/route/v1/walking/$waypoints',
+        _osrmUrl('walking', waypoints),
         queryParameters: {'overview': 'full', 'geometries': 'geojson'},
       );
       final coords = res.data['routes'][0]['geometry']['coordinates'] as List;
@@ -407,6 +652,85 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         });
       }
     } catch (_) {}
+  }
+
+  Future<void> _fetchNavPolylineOnly(LandmarkModel landmark, String mode) async {
+    final pos = ref.read(mapProvider).position;
+    if (pos == null) return;
+    try {
+      final waypoints = '${pos.longitude},${pos.latitude};${landmark.location.lng},${landmark.location.lat}';
+      final res = await Dio().get(
+        _osrmUrl(mode, waypoints),
+        queryParameters: {'overview': 'full', 'geometries': 'geojson'},
+      );
+      final coords = res.data['routes'][0]['geometry']['coordinates'] as List;
+      if (!mounted) return;
+      setState(() {
+        _navPolyline = coords
+            .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
+            .toList();
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _navigateToLandmark(LandmarkModel landmark, {String? mode}) async {
+    final navMode = mode ?? _navMode;
+    setState(() { _navTarget = landmark; _navPolyline = const []; _navMode = navMode; });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_sheetController.isAttached) {
+        _sheetController.animateTo(0.42, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+      }
+    });
+    final pos = ref.read(mapProvider).position;
+    if (pos == null) return;
+    await _fetchNavPolylineOnly(landmark, navMode);
+    if (!mounted || _navPolyline.isEmpty) return;
+    final lats = [pos.latitude, landmark.location.lat];
+    final lngs = [pos.longitude, landmark.location.lng];
+    _mapController.fitCamera(CameraFit.bounds(
+      bounds: LatLngBounds(
+        LatLng(lats.reduce((a, b) => a < b ? a : b), lngs.reduce((a, b) => a < b ? a : b)),
+        LatLng(lats.reduce((a, b) => a > b ? a : b), lngs.reduce((a, b) => a > b ? a : b)),
+      ),
+      padding: const EdgeInsets.all(80),
+      maxZoom: 13.5,
+    ));
+  }
+
+  Future<void> _fetchRouteOverview(RouteWithProgress route) async {
+    if (route.stops.isEmpty) return;
+    final pos = ref.read(mapProvider).position;
+    try {
+      final stopPoints = route.stops
+          .map((s) => '${s.landmark.location.lng},${s.landmark.location.lat}')
+          .join(';');
+      // Prepend user's current location so the line starts from where they are
+      final waypoints = pos != null
+          ? '${pos.longitude},${pos.latitude};$stopPoints'
+          : stopPoints;
+      final res = await Dio().get(
+        _osrmUrl(_navMode, waypoints), // respects current walk/drive mode
+        queryParameters: {'overview': 'full', 'geometries': 'geojson'},
+      );
+      final coords = res.data['routes'][0]['geometry']['coordinates'] as List;
+      if (mounted) {
+        setState(() {
+          _overviewPolyline = coords
+              .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
+              .toList();
+        });
+      }
+    } catch (_) {
+      // Straight-line fallback from user position through all stops
+      if (mounted) {
+        setState(() {
+          _overviewPolyline = [
+            if (pos != null) LatLng(pos.latitude, pos.longitude),
+            ...route.stops.map((s) => LatLng(s.landmark.location.lat, s.landmark.location.lng)),
+          ];
+        });
+      }
+    }
   }
 
   Future<void> _fetchStreetRouteToLandmark(LandmarkModel target, dynamic origin) async {
@@ -414,7 +738,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     try {
       final waypoints = '${origin.longitude},${origin.latitude};${target.location.lng},${target.location.lat}';
       final res = await Dio().get(
-        'https://router.project-osrm.org/route/v1/walking/$waypoints',
+        _osrmUrl('walking', waypoints),
         queryParameters: {'overview': 'full', 'geometries': 'geojson'},
       );
       final coords = res.data['routes'][0]['geometry']['coordinates'] as List;
@@ -428,14 +752,545 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     } catch (_) {}
   }
 
-  void _showLandmarkSheet(LandmarkModel l) {
+  void _showSuggestSheet(LatLng? picked) {
+    final theme = Theme.of(context);
+    final nameCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    String selectedType = 'monument';
+    const types = ['monument', 'museum', 'park', 'gallery', 'restaurant', 'building', 'square'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final bottom = MediaQuery.of(ctx).viewInsets.bottom;
+          return SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(24, 20, 24, bottom + 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Suggest a Location', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text('Your submission will be reviewed by an admin.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: nameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder()),
+                  onChanged: (_) => setSheetState(() {}),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedType,
+                  decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder()),
+                  items: types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                  onChanged: (v) => setSheetState(() => selectedType = v!),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'Description (optional)', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
+                  ),
+                  child: Row(children: [
+                    Icon(Icons.location_pin, color: theme.colorScheme.primary, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        picked != null
+                            ? '${picked.latitude.toStringAsFixed(5)}, ${picked.longitude.toStringAsFixed(5)}'
+                            : 'No location selected',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
+                      ),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: picked == null || nameCtrl.text.trim().isEmpty
+                        ? null
+                        : () async {
+                            Navigator.pop(ctx);
+                            setState(() => _pickedLocation = null);
+                            try {
+                              await ref.read(apiServiceProvider).post('/landmarks/submit', data: {
+                                'name': nameCtrl.text.trim(),
+                                'type': selectedType,
+                                'location': {'lat': picked.latitude, 'lng': picked.longitude},
+                                'description': descCtrl.text.trim(),
+                              });
+                              if (mounted) {
+                                final m = ScaffoldMessenger.of(context);
+                                m.clearSnackBars();
+                                m.showSnackBar(SnackBar(
+                                  content: const Text('Submitted! An admin will review your suggestion.'),
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: EdgeInsets.only(
+                                    left: 16, right: 16,
+                                    bottom: MediaQuery.of(context).size.height * 0.32,
+                                  ),
+                                ));
+                              }
+                            } catch (_) {
+                              if (mounted) {
+                                final m = ScaffoldMessenger.of(context);
+                                m.clearSnackBars();
+                                m.showSnackBar(SnackBar(
+                                  content: const Text('Submission failed. Please try again.'),
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: EdgeInsets.only(
+                                    left: 16, right: 16,
+                                    bottom: MediaQuery.of(context).size.height * 0.32,
+                                  ),
+                                ));
+                              }
+                            }
+                          },
+                    child: const Text('Submit for Review'),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    ).then((_) {
+      if (mounted) setState(() => _pickedLocation = null);
+    });
+  }
+
+  void _showCommunityReview() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _CommunityReviewSheet(),
+    );
+  }
+
+  void _showPendingSubmissions() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _AdminSubmissionsSheet(),
+    );
+  }
+
+  // ── Events ──────────────────────────────────────────────────────────────────
+
+  Future<List<EventModel>> _fetchEvents(String landmarkId) async {
+    try {
+      final res = await ref.read(apiServiceProvider).get('/events/landmark/$landmarkId');
+      return (res.data as List).map((j) => EventModel.fromJson(j as Map<String, dynamic>)).toList();
+    } catch (_) { return []; }
+  }
+
+  void _showNearbyEventsSheet() {
+    final pos = ref.read(mapProvider).position;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _NearbyEventsSheet(pos: pos, onLandmarkTap: _showLandmarkSheet),
+    );
+  }
+
+  void _showAddEventDialog(String landmarkId, String landmarkName) {
+    final titleCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    DateTime? startDate;
+    DateTime? endDate;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text('Add Event — $landmarkName'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Event title', border: OutlineInputBorder())),
+              const SizedBox(height: 12),
+              TextField(controller: descCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder())),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.calendar_today_outlined),
+                title: Text(startDate == null ? 'Pick start date & time' : DateFormat('dd MMM yyyy HH:mm').format(startDate!)),
+                onTap: () async {
+                  final d = await showDatePicker(context: ctx, initialDate: DateTime.now().add(const Duration(days: 1)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
+                  if (d == null) return;
+                  final t = await showTimePicker(context: ctx, initialTime: const TimeOfDay(hour: 18, minute: 0));
+                  if (t == null) return;
+                  setD(() => startDate = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.calendar_today_outlined),
+                title: Text(endDate == null ? 'Pick end date & time (optional)' : DateFormat('dd MMM yyyy HH:mm').format(endDate!)),
+                onTap: () async {
+                  final d = await showDatePicker(context: ctx, initialDate: startDate ?? DateTime.now().add(const Duration(days: 1)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
+                  if (d == null) return;
+                  final t = await showTimePicker(context: ctx, initialTime: const TimeOfDay(hour: 20, minute: 0));
+                  if (t == null) return;
+                  setD(() => endDate = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+                },
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: titleCtrl.text.trim().isEmpty || startDate == null ? null : () async {
+                Navigator.pop(ctx);
+                if (mounted) Navigator.pop(context); // close landmark sheet
+                try {
+                  await ref.read(apiServiceProvider).post(
+                    '/events/?landmark_id=$landmarkId',
+                    data: {
+                      'title': titleCtrl.text.trim(),
+                      'description': descCtrl.text.trim(),
+                      'start_time': startDate!.toIso8601String(),
+                      'end_time': endDate?.toIso8601String(),
+                    },
+                  );
+                  if (mounted) {
+                    final m = ScaffoldMessenger.of(context);
+                    m.clearSnackBars();
+                    m.showSnackBar(SnackBar(
+                      content: const Text('Event added!'),
+                      behavior: SnackBarBehavior.floating,
+                      margin: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(context).size.height * 0.32),
+                    ));
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    final msg = e is DioException ? (e.response?.data['detail'] ?? 'Failed') : 'Failed';
+                    final m = ScaffoldMessenger.of(context); m.clearSnackBars();
+                    m.showSnackBar(SnackBar(content: Text(msg.toString()),
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                        margin: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(context).size.height * 0.32)));
+                  }
+                }
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSuggestQuestDialog(String landmarkId, String landmarkName) {
+    final titleCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    String questType = 'mission';
+    const types = ['educational', 'challenge', 'mission', 'virtual_note'];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text('Suggest a Quest for $landmarkName'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(labelText: 'Quest title', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: questType,
+                decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder()),
+                items: types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                onChanged: (v) => setD(() => questType = v!),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descCtrl,
+                maxLines: 4,
+                maxLength: 600,
+                decoration: const InputDecoration(labelText: 'Description / challenge text', border: OutlineInputBorder()),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                if (titleCtrl.text.trim().isEmpty) return;
+                Navigator.pop(ctx);
+                if (mounted) Navigator.pop(context); // close landmark sheet
+                try {
+                  final res = await ref.read(apiServiceProvider).post(
+                    '/quests/submit/$landmarkId',
+                    data: {
+                      'type': questType,
+                      'title': titleCtrl.text.trim(),
+                      'description': descCtrl.text.trim(),
+                      'points': 50,
+                      'options': [],
+                    },
+                  );
+                  if (mounted) {
+                    final approved = (res.data as Map)['status'] == 'approved';
+                    final m = ScaffoldMessenger.of(context);
+                    m.clearSnackBars();
+                    m.showSnackBar(SnackBar(
+                      content: Text(approved ? 'Quest added successfully!' : 'Quest submitted for review!'),
+                      behavior: SnackBarBehavior.floating,
+                      margin: EdgeInsets.only(left: 16, right: 16,
+                          bottom: MediaQuery.of(context).size.height * 0.32),
+                    ));
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    final msg = e is DioException ? (e.response?.data['detail'] ?? 'Failed') : 'Failed';
+                    final m = ScaffoldMessenger.of(context); m.clearSnackBars();
+                    m.showSnackBar(SnackBar(content: Text(msg.toString()),
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                        margin: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(context).size.height * 0.32)));
+                  }
+                }
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.tryParse(url.startsWith('http') ? url : 'https://$url');
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _showSetWebsiteDialog(String landmarkId, String landmarkName, String? current) {
+    final ctrl = TextEditingController(text: current ?? '');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Website for $landmarkName'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            labelText: 'URL (e.g. https://example.com)',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.link),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);           // close dialog
+              if (mounted) Navigator.pop(context); // close landmark sheet
+              try {
+                await ref.read(apiServiceProvider).patch(
+                  '/landmarks/$landmarkId/website',
+                  data: {'website': ctrl.text.trim().isEmpty ? null : ctrl.text.trim()},
+                );
+                ref.read(mapProvider.notifier).fetchAllLandmarks();
+                if (mounted) {
+                  final m = ScaffoldMessenger.of(context);
+                  m.clearSnackBars();
+                  m.showSnackBar(SnackBar(
+                    content: const Text('Website updated!'),
+                    behavior: SnackBarBehavior.floating,
+                    margin: EdgeInsets.only(left: 16, right: 16,
+                        bottom: MediaQuery.of(context).size.height * 0.32),
+                  ));
+                }
+              } catch (_) {}
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddStoryDialog(String landmarkId, String landmarkName) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Story for $landmarkName'),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 5,
+          maxLength: 500,
+          decoration: const InputDecoration(
+            hintText: 'Share something memorable about this place…',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              if (ctrl.text.trim().isEmpty) return;
+              Navigator.pop(ctx);
+              if (mounted) Navigator.pop(context); // close landmark sheet
+              try {
+                final res = await ref.read(apiServiceProvider).post(
+                  '/landmarks/$landmarkId/stories',
+                  data: {'text': ctrl.text.trim()},
+                );
+                if (mounted) {
+                  final approved = (res.data as Map)['status'] == 'approved';
+                  if (approved) ref.read(mapProvider.notifier).fetchAllLandmarks();
+                  final m = ScaffoldMessenger.of(context);
+                  m.clearSnackBars();
+                  m.showSnackBar(SnackBar(
+                    content: Text(approved ? 'Story added successfully!' : 'Story submitted for review!'),
+                    behavior: SnackBarBehavior.floating,
+                    margin: EdgeInsets.only(left: 16, right: 16,
+                        bottom: MediaQuery.of(context).size.height * 0.32),
+                  ));
+                }
+              } catch (e) {
+                if (mounted) {
+                  final msg = e is DioException ? (e.response?.data['detail'] ?? 'Failed') : 'Failed';
+                  final m = ScaffoldMessenger.of(context); m.clearSnackBars();
+                  m.showSnackBar(SnackBar(content: Text(msg.toString()),
+                      behavior: SnackBarBehavior.floating,
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                      margin: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(context).size.height * 0.32)));
+                }
+              }
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showNearbyLandmarksList() {
+    final landmarks = ref.read(mapProvider).landmarks;
+    final theme = Theme.of(context);
+    if (landmarks.isEmpty) {
+      final m = ScaffoldMessenger.of(context);
+      m.clearSnackBars();
+      m.showSnackBar(SnackBar(
+        content: const Text('No landmarks within 1.5 km'),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(left: 16, right: 16,
+            bottom: MediaQuery.of(context).size.height * 0.32),
+        duration: const Duration(seconds: 2),
+      ));
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        builder: (_, sc) => ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          child: Material(
+            color: theme.colorScheme.surface,
+            child: Column(children: [
+              const SizedBox(height: 10),
+              Center(child: Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(children: [
+                  const Icon(Icons.radar, size: 18),
+                  const SizedBox(width: 8),
+                  Text('${landmarks.length} Nearby Landmarks',
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                ]),
+              ),
+              const Divider(height: 16),
+              Expanded(
+                child: ListView.separated(
+                  controller: sc,
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+                  itemCount: landmarks.length,
+                  separatorBuilder: (_, __) => const Divider(height: 8),
+                  itemBuilder: (ctx, i) {
+                    final l = landmarks[i];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        width: 38, height: 38,
+                        decoration: BoxDecoration(
+                          color: _colorForType(l.type).withOpacity(0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(_iconForType(l.type), color: _colorForType(l.type), size: 20),
+                      ),
+                      title: Text(l.name, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                      subtitle: Text(l.type, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        if (l.rating > 0) ...[
+                          const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+                          const SizedBox(width: 2),
+                          Text(l.rating.toStringAsFixed(1), style: theme.textTheme.labelSmall),
+                          const SizedBox(width: 8),
+                        ],
+                        const Icon(Icons.chevron_right, size: 18),
+                      ]),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showLandmarkSheet(l);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showLandmarkSheet(LandmarkModel stale) {
+    // Always resolve to freshest copy so map marker and list taps show identical data
+    final all = ref.read(mapProvider).allLandmarks;
+    final l = all.where((x) => x.id == stale.id).firstOrNull ?? stale;
     final theme = Theme.of(context);
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.55,
+        minChildSize: 0.35,
+        maxChildSize: 0.92,
+        builder: (_, sc) => SingleChildScrollView(
+          controller: sc,
+          padding: EdgeInsets.fromLTRB(24, 20, 24, MediaQuery.of(ctx).padding.bottom + 24),
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -457,9 +1312,70 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
             Text(l.description, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             if (l.stories.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text('Story', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
+              Text('${l.stories.length == 1 ? "Story" : "Stories"} (${l.stories.length})',
+                  style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
+              const SizedBox(height: 6),
+              ...l.stories.map((s) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceVariant.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border(left: BorderSide(color: theme.colorScheme.primary, width: 2)),
+                  ),
+                  child: Text(s, style: theme.textTheme.bodySmall?.copyWith(height: 1.5)),
+                ),
+              )),
+            ],
+            // Website
+            if (l.website != null && l.website!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () => _launchUrl(l.website!),
+                child: Row(children: [
+                  Icon(Icons.language, size: 16, color: theme.colorScheme.primary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      l.website!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ]),
+              ),
+            ],
+            // Set website (submitter or admin)
+            if ((l.submittedBy == ref.read(authProvider).user?.id ||
+                (ref.read(authProvider).user?.isAdmin ?? false)) &&
+                (l.website == null || l.website!.isEmpty)) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () => _showSetWebsiteDialog(l.id, l.name, l.website),
+                icon: const Icon(Icons.link, size: 16),
+                label: const Text('Add website'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ] else if (l.submittedBy == ref.read(authProvider).user?.id ||
+                (ref.read(authProvider).user?.isAdmin ?? false)) ...[
               const SizedBox(height: 4),
-              Text(l.stories.first, style: theme.textTheme.bodySmall),
+              TextButton.icon(
+                onPressed: () => _showSetWebsiteDialog(l.id, l.name, l.website),
+                icon: const Icon(Icons.edit_outlined, size: 14),
+                label: const Text('Edit website'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  foregroundColor: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ],
             const SizedBox(height: 16),
             Wrap(
@@ -467,40 +1383,99 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               children: l.categories.map((c) => Chip(label: Text(c), visualDensity: VisualDensity.compact)).toList(),
             ),
             const SizedBox(height: 16),
-            if (l.visitedByMe)
-              _StarRatingRow(
-                currentRating: l.rating,
-                onRate: (stars) async {
-                  ref.read(flProvider.notifier).recordInteraction(l, stars / 5.0);
-                  try {
-                    await ref.read(apiServiceProvider).post(
-                      '/landmarks/${l.id}/rate',
-                      data: {'rating': stars},
-                    );
-                  } catch (_) {}
-                },
-              ),
-            if (l.visitedByMe) const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () {
-                  final pos = ref.read(mapProvider).position;
-                  final isNearby = pos != null &&
-                      Geolocator.distanceBetween(
-                            pos.latitude, pos.longitude,
-                            l.location.lat, l.location.lng,
-                          ) <=
-                          100.0;
-                  Navigator.pop(context);
-                  context.push('/quests/${l.id}',
-                      extra: {'name': l.name, 'type': l.type, 'isNearby': isNearby});
-                },
-                icon: const Icon(Icons.task_alt_outlined, size: 18),
-                label: const Text('View Quests'),
-              ),
+            _EventsSection(
+              landmarkId: l.id,
+              canAdd: l.submittedBy == ref.read(authProvider).user?.id ||
+                  (ref.read(authProvider).user?.isAdmin ?? false),
+              onAdd: () => _showAddEventDialog(l.id, l.name),
+              fetchEvents: () => _fetchEvents(l.id),
             ),
+            const SizedBox(height: 16),
+            _StarRatingRow(
+              averageRating: l.rating,
+              myRating: l.myRating,
+              canRate: l.visitedByMe,
+              onRate: l.visitedByMe ? (stars) async {
+                ref.read(flProvider.notifier).recordInteraction(l, stars / 5.0);
+                final prev = ref.read(localDataProvider).getMyRating(l.id);
+                try {
+                  await ref.read(apiServiceProvider).post(
+                    '/landmarks/${l.id}/rate',
+                    data: {'rating': stars, 'previous_rating': prev?.round()},
+                  );
+                  await ref.read(localDataProvider).setMyRating(l.id, stars.toDouble());
+                  ref.read(mapProvider.notifier).fetchAllLandmarks();
+                } catch (_) {}
+              } : null,
+            ),
+            // Any authenticated user can suggest — submissions go to review
+            if (ref.read(authProvider).user != null) ...[
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showAddStoryDialog(l.id, l.name),
+                    icon: const Icon(Icons.auto_stories_outlined, size: 16),
+                    label: const Text('Add story'),
+                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showSuggestQuestDialog(l.id, l.name),
+                    icon: const Icon(Icons.quiz_outlined, size: 16),
+                    label: const Text('Suggest quest'),
+                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                  ),
+                ),
+              ]),
+            ],
+            const SizedBox(height: 16),
+            // Walk / Drive navigation row
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () { Navigator.pop(context); _navigateToLandmark(l, mode: 'walking'); },
+                  icon: const Icon(Icons.directions_walk, size: 18),
+                  label: const Text('Walk'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () { Navigator.pop(context); _navigateToLandmark(l, mode: 'driving'); },
+                  icon: const Icon(Icons.directions_car, size: 18),
+                  label: const Text('Drive'),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              // Quests button (full width here)
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () {
+                    final pos = ref.read(mapProvider).position;
+                    final isNearby = pos != null &&
+                        Geolocator.distanceBetween(
+                              pos.latitude, pos.longitude,
+                              l.location.lat, l.location.lng,
+                            ) <=
+                            100.0;
+                    Navigator.pop(context);
+                    context.push('/quests/${l.id}',
+                        extra: {'name': l.name, 'type': l.type, 'isNearby': isNearby});
+                  },
+                  icon: const Icon(Icons.task_alt_outlined, size: 18),
+                  label: const Text('Quests'),
+                ),
+              ),
+            ]),
+            // spacer so the sheet doesn't end abruptly
+            const SizedBox(height: 4),
           ],
+          ),
         ),
       ),
     );
@@ -592,20 +1567,82 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 children: l.categories.map((c) => Chip(label: Text(c), visualDensity: VisualDensity.compact)).toList(),
               ),
             ],
+            const SizedBox(height: 16),
+            _EventsSection(
+              landmarkId: l.id,
+              canAdd: (ref.read(authProvider).user?.isAdmin ?? false),
+              onAdd: () => _showAddEventDialog(l.id, l.name),
+              fetchEvents: () => _fetchEvents(l.id),
+            ),
             const SizedBox(height: 20),
             _StarRatingRow(
-              currentRating: l.rating,
+              averageRating: l.rating,
+              myRating: l.myRating,
+              canRate: true,
               onRate: (stars) async {
                 ref.read(flProvider.notifier).recordInteraction(l, stars / 5.0);
+                final prev = ref.read(localDataProvider).getMyRating(l.id);
                 try {
                   await ref.read(apiServiceProvider).post(
                     '/landmarks/${l.id}/rate',
-                    data: {'rating': stars},
+                    data: {'rating': stars, 'previous_rating': prev?.round()},
                   );
+                  await ref.read(localDataProvider).setMyRating(l.id, stars.toDouble());
+                  ref.read(mapProvider.notifier).fetchAllLandmarks();
                 } catch (_) {}
               },
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            // Contribute — always visible in proximity sheet (user is physically here)
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showAddStoryDialog(l.id, l.name),
+                  icon: const Icon(Icons.auto_stories_outlined, size: 16),
+                  label: const Text('Add story'),
+                  style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showSuggestQuestDialog(l.id, l.name),
+                  icon: const Icon(Icons.quiz_outlined, size: 16),
+                  label: const Text('Suggest quest'),
+                  style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            // Walk / Drive
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    ref.read(proximityProvider.notifier).dismiss();
+                    _navigateToLandmark(l, mode: 'walking');
+                  },
+                  icon: const Icon(Icons.directions_walk, size: 16),
+                  label: const Text('Walk'),
+                  style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    ref.read(proximityProvider.notifier).dismiss();
+                    _navigateToLandmark(l, mode: 'driving');
+                  },
+                  icon: const Icon(Icons.directions_car, size: 16),
+                  label: const Text('Drive'),
+                  style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
             Row(children: [
               Expanded(
                 child: OutlinedButton(
@@ -654,6 +1691,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         'gallery' => Icons.palette_outlined,
         'restaurant' => Icons.restaurant_outlined,
         'square' => Icons.location_city_outlined,
+        'building' => Icons.domain_outlined,
         _ => Icons.place_outlined,
       };
 }
@@ -680,186 +1718,67 @@ class _CachedTileProvider extends TileProvider {
 
 // ── Bottom panel ───────────────────────────────────────────────────────────────
 
-class _BottomPanel extends ConsumerWidget {
+// _BottomPanel is now a single CustomScrollView so dragging anywhere
+// (including the handle and tab bar) expands/collapses the sheet.
+class _BottomPanel extends ConsumerStatefulWidget {
   final ScrollController scrollController;
   final MapState mapState;
   final TabController tabController;
+  final void Function(LandmarkModel) onLandmarkTap;
+  final LandmarkModel? navTarget;
+  final String navMode;
+  final void Function(String) onNavModeChanged;
+  final VoidCallback onStopNav;
 
   const _BottomPanel({
     required this.scrollController,
     required this.mapState,
     required this.tabController,
+    required this.onLandmarkTap,
+    required this.navTarget,
+    required this.navMode,
+    required this.onNavModeChanged,
+    required this.onStopNav,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-
-    final bottomInset = MediaQuery.of(context).padding.bottom;
-
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      child: Container(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-        ),
-        child: Column(
-          children: [
-            // Handle
-            const SizedBox(height: 8),
-            Center(
-              child: Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            if (mapState.activeProgressRoute != null) ...[
-              _ProgressRouteHeader(route: mapState.activeProgressRoute!, onClose: () {
-                ref.read(mapProvider.notifier).clearProgressRoute();
-              }),
-              const Divider(height: 1),
-              Expanded(
-                child: _ProgressRouteStopList(
-                  route: mapState.activeProgressRoute!,
-                  scrollController: scrollController,
-                  bottomInset: bottomInset,
-                ),
-              ),
-            ] else if (mapState.activeRoute != null) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _RouteHeader(route: mapState.activeRoute!, onClear: () => ref.read(mapProvider.notifier).clearRoute()),
-              ),
-              const Divider(height: 16),
-              Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, 24 + bottomInset),
-                  children: [
-                    ...mapState.activeRoute!.stops.asMap().entries.map((e) =>
-                      _RouteStopTile(index: e.key + 1, stop: e.value)),
-                  ],
-                ),
-              ),
-            ] else ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: TabBar(
-                  controller: tabController,
-                  tabs: const [Tab(text: 'Explore'), Tab(text: 'My Routes')],
-                  labelStyle: theme.textTheme.labelLarge,
-                ),
-              ),
-              Expanded(
-                child: TabBarView(
-                  controller: tabController,
-                  children: [
-                    _ExploreTab(scrollController: scrollController, mapState: mapState, bottomInset: bottomInset),
-                    _RoutesTab(scrollController: scrollController, mapState: mapState, bottomInset: bottomInset),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+  ConsumerState<_BottomPanel> createState() => _BottomPanelState();
 }
 
-// ── Explore tab ────────────────────────────────────────────────────────────────
+class _BottomPanelState extends ConsumerState<_BottomPanel> {
+  bool _routesFetched = false;
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+  Timer? _searchDebounce;
 
-class _ExploreTab extends ConsumerWidget {
-  final ScrollController scrollController;
-  final MapState mapState;
-  final double bottomInset;
-
-  const _ExploreTab({required this.scrollController, required this.mapState, required this.bottomInset});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    return ListView(
-      controller: scrollController,
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 24 + bottomInset),
-      children: [
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                mapState.isLoadingLandmarks
-                    ? 'Loading...'
-                    : '${mapState.landmarks.length} landmarks nearby',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Load landmarks',
-              onPressed: mapState.isLoadingLandmarks
-                  ? null
-                  : () => ref.read(mapProvider.notifier).seedAndReload(),
-              icon: mapState.isLoadingLandmarks
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.download_outlined),
-            ),
-            const SizedBox(width: 4),
-            FilledButton.icon(
-              onPressed: mapState.isGeneratingRoute || mapState.landmarks.isEmpty
-                  ? null
-                  : () => ref.read(mapProvider.notifier).generateRoute(),
-              icon: mapState.isGeneratingRoute
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.route, size: 18),
-              label: const Text('Generate Route'),
-              style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (mapState.landmarks.isEmpty && !mapState.isLoadingLandmarks)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Column(children: [
-                Icon(Icons.location_off_outlined, size: 48, color: theme.colorScheme.outline),
-                const SizedBox(height: 8),
-                Text('No landmarks nearby', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
-              ]),
-            ),
-          )
-        else
-          ...mapState.landmarks.map((l) => _LandmarkTile(landmark: l)),
-        const SizedBox(height: 24),
-      ],
-    );
-  }
-}
-
-// ── My Routes tab ──────────────────────────────────────────────────────────────
-
-class _RoutesTab extends ConsumerStatefulWidget {
-  final ScrollController scrollController;
-  final MapState mapState;
-  final double bottomInset;
-
-  const _RoutesTab({required this.scrollController, required this.mapState, required this.bottomInset});
-
-  @override
-  ConsumerState<_RoutesTab> createState() => _RoutesTabState();
-}
-
-class _RoutesTabState extends ConsumerState<_RoutesTab> {
   @override
   void initState() {
     super.initState();
-    // Fetch once when the tab is first mounted
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(mapProvider.notifier).fetchMyRoutes();
+    widget.tabController.addListener(_onTabChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.tabController.removeListener(_onTabChanged);
+    _searchCtrl.dispose();
+    _searchDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _onTabChanged() {
+    if (!widget.tabController.indexIsChanging) setState(() {});
+    if (widget.tabController.index == 1 && !_routesFetched) {
+      _routesFetched = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(mapProvider.notifier).fetchMyRoutes();
+      });
+    }
+  }
+
+  void _onSearchChanged(String v) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) setState(() => _searchQuery = v.trim());
     });
   }
 
@@ -867,33 +1786,354 @@ class _RoutesTabState extends ConsumerState<_RoutesTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final mapState = widget.mapState;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
 
-    if (mapState.isLoadingRoutes) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      child: Material(
+        color: theme.colorScheme.surface,
+        elevation: 8,
+        shadowColor: Colors.black12,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: CustomScrollView(
+          controller: widget.scrollController,
+          slivers: [
+            // ── Handle ──────────────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Center(
+                  child: Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
-    if (mapState.myRoutes.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.route_outlined, size: 48, color: theme.colorScheme.outline),
-            const SizedBox(height: 8),
-            Text('No routes yet', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
-            const SizedBox(height: 4),
-            Text('Generate a route from the Explore tab', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+            // ── Header area (depends on active mode) ────────────────────────
+            if (mapState.activeProgressRoute != null) ...[
+              SliverToBoxAdapter(
+                child: _ProgressRouteHeader(
+                  route: mapState.activeProgressRoute!,
+                  navMode: widget.navMode,
+                  onNavModeChanged: widget.onNavModeChanged,
+                  onClose: () => ref.read(mapProvider.notifier).clearProgressRoute(),
+                ),
+              ),
+              const SliverToBoxAdapter(child: Divider(height: 1)),
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + bottomInset),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (ctx, i) {
+                      final route = mapState.activeProgressRoute!;
+                      final nextIdx = route.stops.indexWhere((s) => !s.visited);
+                      return _ProgressStopTile(
+                        stop: route.stops[i],
+                        index: i,
+                        isNext: nextIdx == i,
+                      );
+                    },
+                    childCount: mapState.activeProgressRoute!.stops.length,
+                  ),
+                ),
+              ),
+            ] else if (widget.navTarget != null && mapState.activeRoute == null) ...[
+              ..._buildNavTargetSlivers(context, widget.navTarget!, theme, bottomInset),
+            ] else if (mapState.activeRoute != null) ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                  child: _RouteHeader(
+                    route: mapState.activeRoute!,
+                    onClear: () => ref.read(mapProvider.notifier).clearRoute(),
+                  ),
+                ),
+              ),
+              const SliverToBoxAdapter(child: Divider(height: 16)),
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 24 + bottomInset),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (ctx, i) => _RouteStopTile(
+                      index: i + 1,
+                      stop: mapState.activeRoute!.stops[i],
+                    ),
+                    childCount: mapState.activeRoute!.stops.length,
+                  ),
+                ),
+              ),
+            ] else ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: TabBar(
+                    controller: widget.tabController,
+                    tabs: const [Tab(text: 'Explore'), Tab(text: 'My Routes')],
+                    labelStyle: theme.textTheme.labelLarge,
+                  ),
+                ),
+              ),
+              if (widget.tabController.index == 0) ...[
+                // Search bar in its own sliver so the TextField is never recreated
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'Search landmarks…',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            : null,
+                        isDense: true,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onChanged: _onSearchChanged,
+                    ),
+                  ),
+                ),
+                _buildExploreSliver(context, mapState, bottomInset),
+              ] else
+                _buildRoutesSliver(context, mapState, bottomInset),
+            ],
           ],
         ),
-      );
+      ),
+    );
+  }
+
+  List<Widget> _buildNavTargetSlivers(
+      BuildContext context, LandmarkModel l, ThemeData theme, double bottomInset) {
+    return [
+      // Panel header — mode chips here too for when panel is expanded
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+          child: Row(children: [
+            _ModeChip(
+              label: 'Walk',
+              icon: Icons.directions_walk,
+              selected: widget.navMode == 'walking',
+              onTap: () => widget.onNavModeChanged('walking'),
+            ),
+            const SizedBox(width: 8),
+            _ModeChip(
+              label: 'Drive',
+              icon: Icons.directions_car,
+              selected: widget.navMode == 'driving',
+              onTap: () => widget.onNavModeChanged('driving'),
+            ),
+          ]),
+        ),
+      ),
+      const SliverToBoxAdapter(child: Divider(height: 16)),
+      // Landmark info
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 24 + bottomInset),
+        sliver: SliverList(
+          delegate: SliverChildListDelegate([
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade600.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.navigation, color: Colors.green.shade700, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(l.name, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  Text(l.type, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                ]),
+              ),
+              if (l.rating > 0) ...[
+                const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                const SizedBox(width: 2),
+                Text(l.rating.toStringAsFixed(1), style: theme.textTheme.bodySmall),
+              ],
+            ]),
+            const SizedBox(height: 12),
+            Text(l.description, style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant, height: 1.5)),
+            if (l.stories.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border(left: BorderSide(color: theme.colorScheme.primary, width: 3)),
+                ),
+                child: Text(l.stories.first, style: theme.textTheme.bodySmall?.copyWith(height: 1.5)),
+              ),
+            ],
+            if (l.categories.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(spacing: 6, runSpacing: 4,
+                  children: l.categories.map((c) => Chip(label: Text(c), visualDensity: VisualDensity.compact)).toList()),
+            ],
+            const SizedBox(height: 14),
+            _StarRatingRow(
+              averageRating: l.rating,
+              myRating: l.myRating,
+              canRate: l.visitedByMe,
+              onRate: l.visitedByMe ? (stars) async {
+                ref.read(flProvider.notifier).recordInteraction(l, stars / 5.0);
+                final prev = ref.read(localDataProvider).getMyRating(l.id);
+                try {
+                  await ref.read(apiServiceProvider).post('/landmarks/${l.id}/rate',
+                      data: {'rating': stars, 'previous_rating': prev?.round()});
+                  await ref.read(localDataProvider).setMyRating(l.id, stars.toDouble());
+                  ref.read(mapProvider.notifier).fetchAllLandmarks();
+                } catch (_) {}
+              } : null,
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => context.push('/quests/${l.id}',
+                    extra: {'name': l.name, 'type': l.type, 'isNearby': false}),
+                icon: const Icon(Icons.task_alt_outlined, size: 18),
+                label: const Text('View Quests'),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    ];
+  }
+
+  Widget _buildExploreSliver(BuildContext context, MapState mapState, double bottomInset) {
+    final theme = Theme.of(context);
+
+    // If searching, filter allLandmarks; otherwise show nearby list
+    final isSearching = _searchQuery.isNotEmpty;
+    final displayList = isSearching
+        ? mapState.allLandmarks
+            .where((l) => l.name.toLowerCase().contains(_searchQuery.toLowerCase()))
+            .toList()
+        : mapState.landmarks;
+
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + bottomInset),
+      sliver: SliverList(
+        delegate: SliverChildListDelegate([
+          if (!isSearching)
+            Row(children: [
+              Expanded(
+                child: Text(
+                  mapState.isLoadingLandmarks ? 'Loading…' : '${mapState.landmarks.length} landmarks nearby',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Reload landmarks',
+                onPressed: mapState.isLoadingLandmarks
+                    ? null
+                    : () => ref.read(mapProvider.notifier).seedAndReload(),
+                icon: mapState.isLoadingLandmarks
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.download_outlined),
+              ),
+              const SizedBox(width: 4),
+              FilledButton.icon(
+                onPressed: mapState.isGeneratingRoute || mapState.landmarks.isEmpty
+                    ? null
+                    : () => ref.read(mapProvider.notifier).generateRoute(),
+                icon: mapState.isGeneratingRoute
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.route, size: 18),
+                label: const Text('Generate Route'),
+                style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+              ),
+            ]),
+          if (isSearching) ...[
+            const SizedBox(height: 6),
+            Text('${displayList.length} result${displayList.length == 1 ? "" : "s"}',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ],
+          const SizedBox(height: 8),
+          if (displayList.isEmpty && !mapState.isLoadingLandmarks)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: Column(children: [
+                Icon(Icons.location_off_outlined, size: 48, color: theme.colorScheme.outline),
+                const SizedBox(height: 8),
+                Text(isSearching ? 'No landmarks match "$_searchQuery"' : 'No landmarks nearby',
+                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
+              ])),
+            )
+          else
+            ...displayList.map((l) => _LandmarkTile(
+              landmark: l,
+              onTap: () => widget.onLandmarkTap(l),
+            )),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildRoutesSliver(BuildContext context, MapState mapState, double bottomInset) {
+    final theme = Theme.of(context);
+    if (mapState.isLoadingRoutes) {
+      return const SliverFillRemaining(child: Center(child: CircularProgressIndicator()));
     }
 
-    return ListView(
-      controller: widget.scrollController,
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 24 + widget.bottomInset),
-      children: [
-        for (final route in mapState.myRoutes)
-          _RouteCard(route: route),
-      ],
+    final items = <Widget>[];
+
+    // ── My Routes (locally stored, user-generated) ─────────────────────────
+    items.add(Padding(
+      padding: const EdgeInsets.fromLTRB(0, 12, 0, 6),
+      child: Row(children: [
+        const Icon(Icons.person_outlined, size: 16),
+        const SizedBox(width: 6),
+        Text('My Routes', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+      ]),
+    ));
+    if (mapState.myRoutes.isEmpty) {
+      items.add(Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text('No generated routes yet — use Explore to generate one.',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+      ));
+    } else {
+      for (final r in mapState.myRoutes) items.add(_RouteCard(route: r));
+    }
+
+    // ── Curated Routes (global, visible to all) ────────────────────────────
+    if (mapState.globalRoutes.isNotEmpty) {
+      items.add(Padding(
+        padding: const EdgeInsets.fromLTRB(0, 16, 0, 6),
+        child: Row(children: [
+          Icon(Icons.public, size: 16, color: theme.colorScheme.primary),
+          const SizedBox(width: 6),
+          Text('Curated Routes',
+              style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+        ]),
+      ));
+      for (final r in mapState.globalRoutes) items.add(_RouteCard(route: r));
+    }
+
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 24 + bottomInset),
+      sliver: SliverList(delegate: SliverChildListDelegate(items)),
     );
   }
 }
@@ -919,12 +2159,50 @@ class _RouteCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
+              if (route.isGlobal)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Icon(Icons.public, size: 14, color: theme.colorScheme.primary),
+                ),
               Expanded(
                 child: Text(
                   route.name ?? 'Generated Route',
                   style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
+              if (!route.isGlobal)
+                GestureDetector(
+                  onTap: () {
+                    final ctrl = TextEditingController(text: route.name ?? '');
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Name this route'),
+                        content: TextField(
+                          controller: ctrl,
+                          autofocus: true,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            hintText: 'e.g. Morning walk',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                          FilledButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              ref.read(mapProvider.notifier).renameRoute(route.id, ctrl.text);
+                            },
+                            child: const Text('Save'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  child: Icon(Icons.edit_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                ),
+              const SizedBox(width: 6),
               if (isComplete)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1006,106 +2284,102 @@ class _RouteCard extends ConsumerWidget {
 class _ProgressRouteHeader extends StatelessWidget {
   final RouteWithProgress route;
   final VoidCallback onClose;
+  final String navMode;
+  final void Function(String) onNavModeChanged;
 
-  const _ProgressRouteHeader({required this.route, required this.onClose});
+  const _ProgressRouteHeader({
+    required this.route,
+    required this.onClose,
+    required this.navMode,
+    required this.onNavModeChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 12, 8),
-      child: Row(children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(route.name ?? 'Route', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-            Text('${route.visitedCount}/${route.stops.length} stops visited',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          ]),
-        ),
-        IconButton(icon: const Icon(Icons.close), onPressed: onClose),
+      padding: const EdgeInsets.fromLTRB(20, 8, 12, 4),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(route.name ?? 'Route', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              Text('${route.visitedCount}/${route.stops.length} stops visited',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ]),
+          ),
+          IconButton(icon: const Icon(Icons.close), onPressed: onClose),
+        ]),
+        const SizedBox(height: 6),
+        Row(children: [
+          _ModeChip(label: 'Walk', icon: Icons.directions_walk,
+              selected: navMode == 'walking', onTap: () => onNavModeChanged('walking')),
+          const SizedBox(width: 8),
+          _ModeChip(label: 'Drive', icon: Icons.directions_car,
+              selected: navMode == 'driving', onTap: () => onNavModeChanged('driving')),
+        ]),
       ]),
     );
   }
 }
 
-class _ProgressRouteStopList extends StatelessWidget {
-  final RouteWithProgress route;
-  final ScrollController scrollController;
-  final double bottomInset;
-
-  const _ProgressRouteStopList({required this.route, required this.scrollController, required this.bottomInset});
+class _ProgressStopTile extends StatelessWidget {
+  final RouteStopWithProgress stop;
+  final int index;
+  final bool isNext;
+  const _ProgressStopTile({
+    super.key,
+    required this.stop,
+    required this.index,
+    required this.isNext,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final nextIndex = route.stops.indexWhere((s) => !s.visited);
-    return ListView.builder(
-      controller: scrollController,
-      padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + bottomInset),
-      itemCount: route.stops.length,
-      itemBuilder: (context, index) {
-        final stop = route.stops[index];
-        final isNext = index == nextIndex;
-        final theme = Theme.of(context);
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: stop.visited
-                    ? Colors.green.shade600
-                    : isNext
-                        ? theme.colorScheme.primary
-                        : Colors.grey.shade300,
-                shape: BoxShape.circle,
+    final theme = Theme.of(context);
+    final tile = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(children: [
+        Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(
+            color: stop.visited ? Colors.green.shade600 : isNext ? theme.colorScheme.primary : Colors.grey.shade300,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: stop.visited
+                ? const Icon(Icons.check, color: Colors.white, size: 16)
+                : isNext
+                    ? const Icon(Icons.navigation, color: Colors.white, size: 14)
+                    : Text('${index + 1}', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(
+                child: Text(stop.landmark.name,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: stop.visited ? theme.colorScheme.onSurfaceVariant : null,
+                    )),
               ),
-              child: Center(
-                child: stop.visited
-                    ? const Icon(Icons.check, color: Colors.white, size: 16)
-                    : isNext
-                        ? const Icon(Icons.navigation, color: Colors.white, size: 14)
-                        : Text('${index + 1}', style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          )),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Expanded(
-                    child: Text(stop.landmark.name,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: stop.visited
-                              ? theme.colorScheme.onSurfaceVariant
-                              : null,
-                        )),
-                  ),
-                  if (isNext)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text('Next', style: TextStyle(fontSize: 10, color: theme.colorScheme.primary, fontWeight: FontWeight.w600)),
-                    ),
-                ]),
-                Text(stop.landmark.type,
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              ]),
-            ),
-            const SizedBox(width: 8),
-            if (stop.visited)
-              Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
+              if (isNext)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: theme.colorScheme.primaryContainer, borderRadius: BorderRadius.circular(8)),
+                  child: Text('Next', style: TextStyle(fontSize: 10, color: theme.colorScheme.primary, fontWeight: FontWeight.w600)),
+                ),
+            ]),
+            Text(stop.landmark.type, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ]),
-        );
-      },
+        ),
+        const SizedBox(width: 8),
+        if (stop.visited) Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
+      ]),
     );
+    return tile;
   }
 }
 
@@ -1164,83 +2438,1164 @@ class _RouteStopTile extends StatelessWidget {
 
 class _LandmarkTile extends StatelessWidget {
   final LandmarkModel landmark;
+  final VoidCallback? onTap;
 
-  const _LandmarkTile({required this.landmark});
+  const _LandmarkTile({required this.landmark, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(Icons.place_outlined, color: theme.colorScheme.primary, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(landmark.name, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-              Text(landmark.type, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ]),
-          ),
-        ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+        child: Row(
+          children: [
+            Icon(Icons.place_outlined, color: theme.colorScheme.primary, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(landmark.name, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Text(landmark.type, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              ]),
+            ),
+            Icon(Icons.chevron_right, size: 18, color: theme.colorScheme.outline),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _StarRatingRow extends StatefulWidget {
-  final double currentRating;
-  final Future<void> Function(int stars) onRate;
+// ── Admin: pending submissions ─────────────────────────────────────────────────
 
-  const _StarRatingRow({required this.currentRating, required this.onRate});
+// ── Community review sheet ─────────────────────────────────────────────────────
+
+class _CommunityReviewSheet extends ConsumerStatefulWidget {
+  const _CommunityReviewSheet();
+  @override
+  ConsumerState<_CommunityReviewSheet> createState() => _CommunityReviewSheetState();
+}
+
+class _CommunityReviewSheetState extends ConsumerState<_CommunityReviewSheet>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tab;
+  Map<String, dynamic> _data = {'landmarks': [], 'stories': [], 'quests': []};
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 2, vsync: this);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final res = await ref.read(apiServiceProvider).get('/community/pending');
+      setState(() { _data = Map<String, dynamic>.from(res.data as Map); _loading = false; });
+    } catch (_) { setState(() => _loading = false); }
+  }
+
+  void _vote(String type, String id) {
+    final key = type == 'story' ? 'stories' : '${type}s';
+    final list = (_data[key] as List?) ?? [];
+    final idx = list.indexWhere((x) => x['id'] == id);
+    if (idx < 0) return;
+
+    final currentVotes = (list[idx]['votes'] as int? ?? 0);
+    final newVotes = currentVotes + 1;
+    final needed = (list[idx]['needed'] as int? ?? 5);
+    final approved = newVotes >= needed;
+
+    // Optimistic update — no waiting, instant feedback
+    ref.read(localDataProvider).markVoted(id);
+    setState(() {
+      if (approved) {
+        list.removeAt(idx);
+      } else {
+        list[idx] = Map.from(list[idx] as Map)..['votes'] = newVotes;
+      }
+    });
+
+    // Fire-and-forget API call in background
+    ref.read(apiServiceProvider).post('/community/vote/$type/$id').then((res) {
+      if ((res.data as Map)['approved'] == true) {
+        // Refresh map so approved content appears — non-blocking
+        ref.read(mapProvider.notifier).fetchAllLandmarks();
+      }
+    }).catchError((_) {});  // silent on failure
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final stories = (_data['stories'] as List?) ?? [];
+    final quests = (_data['quests'] as List?) ?? [];
+    final visitedIds = ref.read(localDataProvider).getVisitedIds();
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.65,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (_, sc) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: Material(
+          color: theme.colorScheme.surface,
+          child: Column(children: [
+            const SizedBox(height: 10),
+            Center(child: Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(children: [
+                const Icon(Icons.how_to_vote_outlined, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('Community Review',
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: 8),
+                Text('5 = approved', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline)),
+                IconButton(icon: const Icon(Icons.refresh, size: 18), onPressed: _load, padding: EdgeInsets.zero),
+              ]),
+            ),
+            TabBar(
+              controller: _tab,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              tabs: [
+                Tab(text: stories.isEmpty ? 'Stories' : 'Stories (${stories.length})'),
+                Tab(text: quests.isEmpty ? 'Quests' : 'Quests (${quests.length})'),
+              ],
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : TabBarView(
+                      controller: _tab,
+                      children: [
+                        _buildVoteList(sc, stories, 'story', theme, visitedIds),
+                        _buildVoteList(sc, quests, 'quest', theme, visitedIds),
+                      ],
+                    ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVoteList(ScrollController sc, List items, String type, ThemeData theme, Set<String> visitedIds) {
+    if (items.isEmpty) {
+      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.check_circle_outline, size: 48, color: Colors.green.shade400),
+        const SizedBox(height: 8),
+        Text('Nothing pending', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
+      ]));
+    }
+    return ListView.separated(
+      controller: sc,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const Divider(height: 12),
+      itemBuilder: (ctx, i) {
+        final p = Map<String, dynamic>.from(items[i] as Map);
+        final votes = (p['votes'] as int?) ?? 0;
+        final needed = (p['needed'] as int?) ?? 5;
+        final userVoted = ref.read(localDataProvider).hasVoted(p['id'] as String? ?? '');
+        final isOwn = (p['is_own'] as bool?) ?? false;
+        final landmarkId = p['landmark_id'] as String? ?? '';
+        final hasVisited = visitedIds.contains(landmarkId);
+        final title = p['name'] ?? p['title'] ?? p['text'] ?? '';
+        final sub = p['landmark_name'] ?? p['type'] ?? '';
+
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (sub.isNotEmpty)
+            Text('📍 $sub', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
+          const SizedBox(height: 3),
+          Text(title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: votes / needed,
+                  minHeight: 6,
+                  backgroundColor: theme.colorScheme.surfaceVariant,
+                  valueColor: AlwaysStoppedAnimation(
+                    votes >= needed ? Colors.green : theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text('$votes/$needed', style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.primary,
+            )),
+          ]),
+          const SizedBox(height: 8),
+          if (isOwn)
+            Text('You submitted this — others must validate it',
+                style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline))
+          else if (!hasVisited)
+            Text('Complete a quest at this location to validate',
+                style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline))
+          else
+            FilledButton.icon(
+              onPressed: userVoted ? null : () => _vote(type, p['id']),
+              icon: Icon(userVoted ? Icons.check : Icons.thumb_up_outlined, size: 15),
+              label: Text(userVoted ? 'Voted' : 'Validate'),
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                backgroundColor: userVoted ? Colors.grey.shade300 : null,
+                foregroundColor: userVoted ? Colors.grey.shade600 : null,
+              ),
+            ),
+        ]);
+      },
+    );
+  }
+}
+
+class _AdminSubmissionsSheet extends ConsumerStatefulWidget {
+  const _AdminSubmissionsSheet();
+
+  @override
+  ConsumerState<_AdminSubmissionsSheet> createState() => _AdminSubmissionsSheetState();
+}
+
+class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tab;
+  List<Map<String, dynamic>> _all = [];
+  List<Map<String, dynamic>> _stories = [];
+  List<Map<String, dynamic>> _quests = [];
+  bool _loading = true;
+  final _locationSearchCtrl = TextEditingController();
+  String _locationSearch = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 4, vsync: this);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    _locationSearchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      // Fetch each independently so one failure doesn't hide the others
+      List<Map<String, dynamic>> all = [], stories = [], quests = [];
+      try {
+        final r = await ref.read(apiServiceProvider).get('/landmarks/admin/submissions');
+        all = List<Map<String, dynamic>>.from(r.data as List);
+      } catch (_) {}
+      try {
+        final r = await ref.read(apiServiceProvider).get('/landmarks/admin/pending-stories');
+        stories = List<Map<String, dynamic>>.from(r.data as List);
+      } catch (_) {}
+      try {
+        final r = await ref.read(apiServiceProvider).get('/quests/admin/pending');
+        quests = List<Map<String, dynamic>>.from(r.data as List);
+      } catch (_) {}
+      setState(() {
+        _all = all; _stories = stories; _quests = quests;
+        _loading = false;
+      });
+    } catch (_) {
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _approveStory(String id) async {
+    await ref.read(apiServiceProvider).post('/landmarks/admin/stories/$id/approve');
+    ref.read(mapProvider.notifier).fetchAllLandmarks();
+    setState(() => _stories.removeWhere((s) => s['id'] == id));
+  }
+
+  Future<void> _rejectStory(String id) async {
+    await ref.read(apiServiceProvider).post('/landmarks/admin/stories/$id/reject');
+    setState(() => _stories.removeWhere((s) => s['id'] == id));
+  }
+
+  Future<void> _approveQuest(String id) async {
+    await ref.read(apiServiceProvider).post('/quests/admin/$id/approve');
+    setState(() => _quests.removeWhere((q) => q['id'] == id));
+  }
+
+  Future<void> _rejectQuest(String id) async {
+    await ref.read(apiServiceProvider).post('/quests/admin/$id/reject');
+    setState(() => _quests.removeWhere((q) => q['id'] == id));
+  }
+
+
+  List<Map<String, dynamic>> get _pending => _all.where((p) => p['status'] == 'pending').toList();
+  List<Map<String, dynamic>> get _reviewed => _all.where((p) => p['status'] != 'pending').toList();
+
+  Future<void> _approve(String id) async {
+    await ref.read(apiServiceProvider).post('/landmarks/admin/$id/approve');
+    // Refresh map so the newly approved landmark appears
+    ref.read(mapProvider.notifier).fetchAllLandmarks();
+    setState(() {
+      final idx = _all.indexWhere((p) => p['id'] == id);
+      if (idx != -1) _all[idx] = Map.from(_all[idx])..['status'] = 'approved';
+    });
+  }
+
+  Future<void> _reject(String id) async {
+    await ref.read(apiServiceProvider).post('/landmarks/admin/$id/reject');
+    setState(() {
+      final idx = _all.indexWhere((p) => p['id'] == id);
+      if (idx != -1) _all[idx] = Map.from(_all[idx])..['status'] = 'rejected';
+    });
+  }
+
+  Future<void> _delete(String id) async {
+    await ref.read(apiServiceProvider).delete('/landmarks/admin/$id');
+    ref.read(mapProvider.notifier).fetchAllLandmarks();
+    setState(() => _all.removeWhere((p) => p['id'] == id));
+  }
+
+  void _showEditDialog(Map<String, dynamic> p) {
+    final theme = Theme.of(context);
+    final nameCtrl    = TextEditingController(text: p['name'] ?? '');
+    final descCtrl    = TextEditingController(text: p['description'] ?? '');
+    final websiteCtrl = TextEditingController(text: p['website'] ?? '');
+    String type = p['type'] ?? 'monument';
+    const types = ['monument', 'museum', 'park', 'gallery', 'restaurant', 'building', 'square'];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: const Text('Edit Submission'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder())),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: type,
+                decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder()),
+                items: types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                onChanged: (v) => setD(() => type = v!),
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: descCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder())),
+              const SizedBox(height: 12),
+              TextField(controller: websiteCtrl, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'Website URL (optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.link))),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  await ref.read(apiServiceProvider).patch('/landmarks/admin/${p['id']}', data: {
+                    'name': nameCtrl.text.trim(),
+                    'type': type,
+                    'description': descCtrl.text.trim(),
+                    'website': websiteCtrl.text.trim().isEmpty ? null : websiteCtrl.text.trim(),
+                  });
+                  ref.read(mapProvider.notifier).fetchAllLandmarks();
+                  setState(() {
+                    final idx = _all.indexWhere((x) => x['id'] == p['id']);
+                    if (idx != -1) {
+                      _all[idx] = Map.from(_all[idx])
+                        ..['name'] = nameCtrl.text.trim()
+                        ..['type'] = type
+                        ..['description'] = descCtrl.text.trim();
+                    }
+                  });
+                } catch (_) {}
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.65,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (_, sc) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: Material(
+          color: theme.colorScheme.surface,
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(children: [
+                  Text('Submissions', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  IconButton(icon: const Icon(Icons.refresh), onPressed: _load, tooltip: 'Refresh'),
+                ]),
+              ),
+              TabBar(
+                controller: _tab,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                tabs: [
+                  Tab(text: _pending.isEmpty
+                      ? 'Pending Locations'
+                      : 'Pending Locations (${_pending.length})'),
+                  const Tab(text: 'All Locations'),
+                  Tab(text: _stories.isEmpty ? 'Stories' : 'Stories (${_stories.length})'),
+                  Tab(text: _quests.isEmpty ? 'Quests' : 'Quests (${_quests.length})'),
+                ],
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : TabBarView(
+                        controller: _tab,
+                        children: [
+                          _buildLocationList(sc, _pending, isPending: true, theme: theme),
+                          _buildLocationList(sc, _all, isPending: false, theme: theme),
+                          _buildStoriesList(sc, theme),
+                          _buildQuestsList(sc, theme),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocationList(ScrollController sc, List<Map<String, dynamic>> items,
+      {required bool isPending, required ThemeData theme}) {
+    final query = _locationSearch.toLowerCase();
+    final filtered = query.isEmpty
+        ? items
+        : items.where((p) =>
+            (p['name'] as String? ?? '').toLowerCase().contains(query) ||
+            (p['type'] as String? ?? '').toLowerCase().contains(query) ||
+            (p['description'] as String? ?? '').toLowerCase().contains(query)).toList();
+
+    return Column(children: [
+      // Persistent search bar — outside ListView so it doesn't scroll away
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        child: TextField(
+          controller: _locationSearchCtrl,
+          decoration: InputDecoration(
+            hintText: 'Search locations…',
+            prefixIcon: const Icon(Icons.search, size: 20),
+            suffixIcon: _locationSearch.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () {
+                      _locationSearchCtrl.clear();
+                      setState(() => _locationSearch = '');
+                    },
+                  )
+                : null,
+            isDense: true,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          ),
+          onChanged: (v) => setState(() => _locationSearch = v.trim()),
+        ),
+      ),
+      Expanded(
+        child: filtered.isEmpty
+            ? Center(child: Text(
+                query.isNotEmpty ? 'No locations match "$query"'
+                    : isPending ? 'No pending locations' : 'No locations yet',
+                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)))
+            : ListView.separated(
+                controller: sc,
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+                itemCount: filtered.length,
+                separatorBuilder: (_, __) => const Divider(height: 16),
+                itemBuilder: (ctx, i) => _buildLocationItem(filtered[i], theme),
+              ),
+      ),
+    ]);
+  }
+
+  Widget _buildLocationItem(Map<String, dynamic> p, ThemeData theme) {
+    final st = p['status'] as String? ?? 'pending';
+    final statusColor = st == 'approved' ? Colors.green : st == 'rejected' ? Colors.red : Colors.orange;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Expanded(child: Text(p['name'] ?? '',
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold))),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: statusColor.withOpacity(0.4))),
+          child: Text(st, style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.w600)),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(color: theme.colorScheme.surfaceVariant, borderRadius: BorderRadius.circular(8)),
+          child: Text(p['type'] ?? '', style: theme.textTheme.bodySmall),
+        ),
+      ]),
+      if ((p['description'] as String?)?.isNotEmpty == true) ...[
+        const SizedBox(height: 4),
+        Text(p['description'], style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            maxLines: 2, overflow: TextOverflow.ellipsis),
+      ],
+      const SizedBox(height: 10),
+      Wrap(spacing: 8, runSpacing: 6, children: [
+        if (st == 'pending') ...[
+          OutlinedButton.icon(
+            onPressed: () => _reject(p['id']),
+            icon: const Icon(Icons.close, size: 15),
+            label: const Text('Reject'),
+            style: OutlinedButton.styleFrom(
+                foregroundColor: theme.colorScheme.error,
+                side: BorderSide(color: theme.colorScheme.error),
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+          ),
+          FilledButton.icon(
+            onPressed: () => _approve(p['id']),
+            icon: const Icon(Icons.check, size: 15),
+            label: const Text('Approve'),
+            style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+          ),
+        ],
+        OutlinedButton.icon(
+          onPressed: () => _showEditDialog(p),
+          icon: const Icon(Icons.edit_outlined, size: 15),
+          label: const Text('Edit'),
+          style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => _delete(p['id']),
+          icon: const Icon(Icons.delete_outline, size: 15),
+          label: const Text('Delete'),
+          style: OutlinedButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+              side: BorderSide(color: theme.colorScheme.error),
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+        ),
+      ]),
+    ]);
+  }
+
+  Widget _buildList(ScrollController sc, List<Map<String, dynamic>> items, {required bool isPending, required ThemeData theme}) {
+    if (items.isEmpty) {
+      return Center(child: Text(isPending ? 'No pending submissions' : 'No submissions yet',
+          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)));
+    }
+    return ListView.separated(
+      controller: sc,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const Divider(height: 16),
+      itemBuilder: (ctx, i) {
+        final p = items[i];
+        final st = p['status'] as String? ?? 'pending';
+        final statusColor = st == 'approved' ? Colors.green : st == 'rejected' ? Colors.red : Colors.orange;
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(p['name'] ?? '', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold))),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8), border: Border.all(color: statusColor.withOpacity(0.4))),
+              child: Text(st, style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(color: theme.colorScheme.surfaceVariant, borderRadius: BorderRadius.circular(8)),
+              child: Text(p['type'] ?? '', style: theme.textTheme.bodySmall),
+            ),
+          ]),
+          if ((p['description'] as String?)?.isNotEmpty == true) ...[
+            const SizedBox(height: 4),
+            Text(p['description'], style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis),
+          ],
+          const SizedBox(height: 10),
+          Wrap(spacing: 8, runSpacing: 6, children: [
+            if (st == 'pending') ...[
+              OutlinedButton.icon(
+                onPressed: () => _reject(p['id']),
+                icon: const Icon(Icons.close, size: 15),
+                label: const Text('Reject'),
+                style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error), visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+              ),
+              FilledButton.icon(
+                onPressed: () => _approve(p['id']),
+                icon: const Icon(Icons.check, size: 15),
+                label: const Text('Approve'),
+                style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600, visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+              ),
+            ],
+            OutlinedButton.icon(
+              onPressed: () => _showEditDialog(p),
+              icon: const Icon(Icons.edit_outlined, size: 15),
+              label: const Text('Edit'),
+              style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _delete(p['id']),
+              icon: const Icon(Icons.delete_outline, size: 15),
+              label: const Text('Delete'),
+              style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error), visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+            ),
+          ]),
+        ]);
+      },
+    );
+  }
+
+  Widget _buildQuestsList(ScrollController sc, ThemeData theme) {
+    if (_quests.isEmpty) {
+      return Center(child: Text('No pending quests',
+          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)));
+    }
+    return ListView.separated(
+      controller: sc,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      itemCount: _quests.length,
+      separatorBuilder: (_, __) => const Divider(height: 16),
+      itemBuilder: (ctx, i) {
+        final q = _quests[i];
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(q['title'] ?? '', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold))),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(color: theme.colorScheme.surfaceVariant, borderRadius: BorderRadius.circular(8)),
+              child: Text(q['type'] ?? '', style: theme.textTheme.bodySmall),
+            ),
+          ]),
+          if ((q['landmark_name'] as String?)?.isNotEmpty == true) ...[
+            const SizedBox(height: 3),
+            Text('📍 ${q['landmark_name']}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
+          ],
+          if ((q['description'] as String?)?.isNotEmpty == true) ...[
+            const SizedBox(height: 6),
+            Text(q['description'], style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant), maxLines: 3, overflow: TextOverflow.ellipsis),
+          ],
+          const SizedBox(height: 10),
+          Row(children: [
+            OutlinedButton.icon(
+              onPressed: () => _rejectQuest(q['id']),
+              icon: const Icon(Icons.close, size: 15),
+              label: const Text('Reject'),
+              style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error,
+                  side: BorderSide(color: theme.colorScheme.error),
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+            ),
+            const SizedBox(width: 10),
+            FilledButton.icon(
+              onPressed: () => _approveQuest(q['id']),
+              icon: const Icon(Icons.check, size: 15),
+              label: const Text('Approve'),
+              style: FilledButton.styleFrom(
+                  backgroundColor: Colors.green.shade600,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+            ),
+          ]),
+        ]);
+      },
+    );
+  }
+
+
+  Widget _buildStoriesList(ScrollController sc, ThemeData theme) {
+    if (_stories.isEmpty) {
+      return Center(child: Text('No pending stories',
+          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)));
+    }
+    return ListView.separated(
+      controller: sc,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      itemCount: _stories.length,
+      separatorBuilder: (_, __) => const Divider(height: 16),
+      itemBuilder: (ctx, i) {
+        final s = _stories[i];
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(s['landmark_name'] ?? 'Unknown landmark',
+              style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border(left: BorderSide(color: theme.colorScheme.primary, width: 3)),
+            ),
+            child: Text(s['text'] ?? '', style: theme.textTheme.bodySmall?.copyWith(height: 1.5)),
+          ),
+          const SizedBox(height: 10),
+          Row(children: [
+            OutlinedButton.icon(
+              onPressed: () => _rejectStory(s['id']),
+              icon: const Icon(Icons.close, size: 15),
+              label: const Text('Reject'),
+              style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error,
+                  side: BorderSide(color: theme.colorScheme.error),
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+            ),
+            const SizedBox(width: 10),
+            FilledButton.icon(
+              onPressed: () => _approveStory(s['id']),
+              icon: const Icon(Icons.check, size: 15),
+              label: const Text('Approve'),
+              style: FilledButton.styleFrom(
+                  backgroundColor: Colors.green.shade600,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+            ),
+          ]),
+        ]);
+      },
+    );
+  }
+}
+
+// ── Events section ─────────────────────────────────────────────────────────────
+
+class _EventsSection extends StatefulWidget {
+  final String landmarkId;
+  final bool canAdd;
+  final VoidCallback onAdd;
+  final Future<List<EventModel>> Function() fetchEvents;
+
+  const _EventsSection({
+    required this.landmarkId,
+    required this.canAdd,
+    required this.onAdd,
+    required this.fetchEvents,
+  });
+
+  @override
+  State<_EventsSection> createState() => _EventsSectionState();
+}
+
+class _EventsSectionState extends State<_EventsSection> {
+  late Future<List<EventModel>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.fetchEvents();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FutureBuilder<List<EventModel>>(
+      future: _future,
+      builder: (ctx, snap) {
+        final events = snap.data ?? [];
+        if (!snap.hasData && snap.connectionState == ConnectionState.waiting) {
+          return const SizedBox(height: 4);
+        }
+        if (events.isEmpty && !widget.canAdd) return const SizedBox.shrink();
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(Icons.event_outlined, size: 16, color: theme.colorScheme.primary),
+            const SizedBox(width: 6),
+            Text('Events', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            if (widget.canAdd)
+              TextButton.icon(
+                onPressed: () {
+                  widget.onAdd();
+                  setState(() { _future = widget.fetchEvents(); });
+                },
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add'),
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+              ),
+          ]),
+          if (events.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 4),
+              child: Text('No upcoming events', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+            )
+          else
+            ...events.map((e) => _EventTile(event: e, theme: theme)),
+        ]);
+      },
+    );
+  }
+}
+
+class _EventTile extends StatelessWidget {
+  final EventModel event;
+  final ThemeData theme;
+  const _EventTile({required this.event, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = event.isOngoing ? Colors.green.shade700 : Colors.orange.shade700;
+    final badge = event.isOngoing ? 'Happening now' : 'Upcoming';
+    final dateStr = DateFormat('dd MMM, HH:mm').format(event.startTime.toLocal());
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+            child: Text(badge, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(event.title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold))),
+        ]),
+        const SizedBox(height: 4),
+        if (event.description.isNotEmpty)
+          Text(event.description, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 4),
+        Row(children: [
+          Icon(Icons.access_time, size: 13, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 4),
+          Text(dateStr, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          if (event.endTime != null) ...[
+            Text(' – ${DateFormat('HH:mm').format(event.endTime!.toLocal())}',
+                style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ],
+        ]),
+      ]),
+    );
+  }
+}
+
+// ── Nearby events sheet ────────────────────────────────────────────────────────
+
+class _NearbyEventsSheet extends ConsumerStatefulWidget {
+  final dynamic pos;
+  final void Function(LandmarkModel)? onLandmarkTap;
+
+  const _NearbyEventsSheet({required this.pos, this.onLandmarkTap});
+
+  @override
+  ConsumerState<_NearbyEventsSheet> createState() => _NearbyEventsSheetState();
+}
+
+class _NearbyEventsSheetState extends ConsumerState<_NearbyEventsSheet> {
+  List<EventModel> _events = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final pos = widget.pos ?? ref.read(mapProvider).position;
+    if (pos == null) { setState(() => _loading = false); return; }
+    try {
+      final res = await ref.read(apiServiceProvider).get(
+        '/events/nearby',
+        params: {'lat': pos.latitude, 'lng': pos.longitude, 'radius_m': 1500},
+      );
+      setState(() {
+        _events = (res.data as List).map((j) => EventModel.fromJson(j as Map<String, dynamic>)).toList();
+        _loading = false;
+      });
+    } catch (_) { setState(() => _loading = false); }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.55,
+      minChildSize: 0.35,
+      maxChildSize: 0.92,
+      builder: (_, sc) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: Material(
+          color: theme.colorScheme.surface,
+          child: Column(children: [
+            const SizedBox(height: 10),
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(children: [
+                const Icon(Icons.event_outlined, size: 20),
+                const SizedBox(width: 8),
+                Text('Events Nearby', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                const Spacer(),
+                IconButton(icon: const Icon(Icons.refresh), onPressed: _load, tooltip: 'Refresh'),
+              ]),
+            ),
+            const Divider(height: 8),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _events.isEmpty
+                      ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.event_busy_outlined, size: 48, color: theme.colorScheme.outline),
+                          const SizedBox(height: 8),
+                          Text('No events within 1.5 km', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
+                        ]))
+                      : ListView.separated(
+                          controller: sc,
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                          itemCount: _events.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (ctx, i) {
+                            final e = _events[i];
+                            // Find matching landmark for the tap handler
+                            final allLandmarks = ref.read(mapProvider).allLandmarks;
+                            final landmark = allLandmarks.where((l) => l.id == e.landmarkId).firstOrNull;
+                            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              if (e.landmarkName != null)
+                                GestureDetector(
+                                  onTap: landmark != null && widget.onLandmarkTap != null
+                                      ? () {
+                                          Navigator.pop(context);
+                                          widget.onLandmarkTap!(landmark);
+                                        }
+                                      : null,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Row(children: [
+                                      Icon(Icons.place_outlined, size: 13,
+                                          color: landmark != null ? theme.colorScheme.primary : theme.colorScheme.outline),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        e.landmarkName!,
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: landmark != null ? theme.colorScheme.primary : theme.colorScheme.outline,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: landmark != null ? TextDecoration.underline : null,
+                                        ),
+                                      ),
+                                      if (landmark != null) ...[
+                                        const SizedBox(width: 4),
+                                        Icon(Icons.chevron_right, size: 13, color: theme.colorScheme.primary),
+                                      ],
+                                    ]),
+                                  ),
+                                ),
+                              _EventTile(event: e, theme: theme),
+                            ]);
+                          },
+                        ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavModeChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _NavModeChip({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: selected ? Colors.white.withOpacity(0.25) : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.6)),
+      ),
+      child: Text(label, style: TextStyle(
+        color: Colors.white,
+        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+        fontSize: 13,
+      )),
+    ),
+  );
+}
+
+class _ModeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ModeChip({required this.label, required this.icon, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? theme.colorScheme.primary : theme.colorScheme.surfaceVariant,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 15, color: selected ? Colors.white : theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : theme.colorScheme.onSurfaceVariant,
+          )),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Shows the community average rating always.
+/// When [canRate] is true (user visited the place), stars are interactive.
+/// [myRating] pre-fills the user's existing rating if they already rated.
+class _StarRatingRow extends StatefulWidget {
+  final double averageRating;
+  final double? myRating;
+  final bool canRate;
+  final Future<void> Function(int stars)? onRate;
+
+  const _StarRatingRow({
+    required this.averageRating,
+    this.myRating,
+    this.canRate = false,
+    this.onRate,
+  });
 
   @override
   State<_StarRatingRow> createState() => _StarRatingRowState();
 }
 
 class _StarRatingRowState extends State<_StarRatingRow> {
-  late int _selected;
+  // 0 = no new selection yet; user always starts fresh so re-rating is always possible
+  int _selected = 0;
   bool _submitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = widget.currentRating.round().clamp(0, 5);
-  }
+  bool _rated = false; // true after a successful submission this session
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
+    final avgStars = widget.averageRating.round().clamp(0, 5);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Rate:', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-        const SizedBox(width: 8),
-        ...List.generate(5, (i) {
-          final star = i + 1;
-          return GestureDetector(
-            onTap: _submitting
-                ? null
-                : () async {
-                    setState(() {
-                      _selected = star;
-                      _submitting = true;
-                    });
-                    await widget.onRate(star);
-                    if (mounted) setState(() => _submitting = false);
-                  },
-            child: Icon(
-              star <= _selected ? Icons.star_rounded : Icons.star_outline_rounded,
-              color: star <= _selected ? Colors.amber.shade600 : theme.colorScheme.outline,
-              size: 28,
-            ),
-          );
-        }),
-        if (_selected > 0) ...[
+        // ── Overall community rating (always shown, read-only) ──────────────
+        Row(children: [
+          Text('Overall rating:',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           const SizedBox(width: 8),
+          ...List.generate(5, (i) => Icon(
+            i < avgStars ? Icons.star_rounded : Icons.star_outline_rounded,
+            color: i < avgStars ? Colors.amber.shade300 : theme.colorScheme.outlineVariant,
+            size: 22,
+          )),
+          const SizedBox(width: 6),
           Text(
-            _selected.toStringAsFixed(0),
+            widget.averageRating > 0 ? widget.averageRating.toStringAsFixed(1) : '—',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
+        ]),
+
+        // ── Previous personal rating ──────────────────────────────────────
+        if (widget.myRating != null && widget.myRating! > 0) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Your previous rating: ${widget.myRating!.toStringAsFixed(0)} ★',
+            style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary),
+          ),
+        ],
+
+        // ── Interactive rating row (only when canRate) ────────────────────
+        if (widget.canRate) ...[
+          const SizedBox(height: 8),
+          Row(children: [
+            Text(
+              _rated ? 'Rated!' : 'Rate:',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: _rated ? Colors.green.shade700 : theme.colorScheme.onSurfaceVariant,
+                fontWeight: _rated ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+            const SizedBox(width: 8),
+            ...List.generate(5, (i) {
+              final star = i + 1;
+              return GestureDetector(
+                onTap: _submitting
+                    ? null
+                    : () async {
+                        setState(() { _selected = star; _submitting = true; });
+                        await widget.onRate?.call(star);
+                        if (mounted) setState(() { _submitting = false; _rated = true; });
+                      },
+                child: Icon(
+                  star <= _selected ? Icons.star_rounded : Icons.star_outline_rounded,
+                  color: star <= _selected ? Colors.amber.shade600 : theme.colorScheme.outline,
+                  size: 28,
+                ),
+              );
+            }),
+            if (_submitting) ...[
+              const SizedBox(width: 8),
+              const SizedBox(width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+            ],
+          ]),
+        ] else ...[
+          const SizedBox(height: 4),
+          Text('Complete a quest here to unlock rating',
+              style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline)),
         ],
       ],
     );

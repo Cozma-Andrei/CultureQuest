@@ -36,3 +36,8 @@ class RouteWithProgress(BaseModel):
     total_duration_minutes: int
     generated_at: str
     visited_count: int = 0
+    is_global: bool = False
+
+
+class ReorderPayload(BaseModel):
+    stop_ids: list[str]

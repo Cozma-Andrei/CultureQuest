@@ -1,3 +1,4 @@
+from bson import ObjectId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from app.core.security import decode_token
@@ -18,6 +19,13 @@ async def get_optional_user(token: str | None = Depends(_optional_oauth2)) -> st
     if not token:
         return None
     return decode_token(token)
+
+
+async def get_admin_user(user_id: str = Depends(get_current_user), db=Depends(get_database)):
+    doc = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not doc or not doc.get("is_admin", False):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return user_id
 
 
 def get_db():

@@ -60,6 +60,7 @@ class RouteWithProgress {
   final int totalDurationMinutes;
   final String generatedAt;
   final int visitedCount;
+  final bool isGlobal;
 
   const RouteWithProgress({
     required this.id,
@@ -69,6 +70,7 @@ class RouteWithProgress {
     required this.totalDurationMinutes,
     required this.generatedAt,
     required this.visitedCount,
+    this.isGlobal = false,
   });
 
   factory RouteWithProgress.fromJson(Map<String, dynamic> json) =>
@@ -82,5 +84,6 @@ class RouteWithProgress {
         totalDurationMinutes: json['total_duration_minutes'],
         generatedAt: json['generated_at'] ?? '',
         visitedCount: json['visited_count'] as int? ?? 0,
+        isGlobal: json['is_global'] as bool? ?? false,
       );
 }

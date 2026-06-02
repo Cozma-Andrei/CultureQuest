@@ -31,6 +31,7 @@ class UserProfile(BaseModel):
     interests: list[InterestCategory]
     points: int = 0
     completed_quests: int = 0
+    is_admin: bool = False
 
 
 class TokenResponse(BaseModel):

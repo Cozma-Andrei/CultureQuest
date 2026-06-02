@@ -3,7 +3,7 @@ import '../services/fl_client_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../shared/models/landmark_model.dart';
 
-const _autoRoundThreshold = 5; // trigger FL round after this many interactions
+const _autoRoundThreshold = 10; // trigger FL round after this many interactions
 
 class FLState {
   final int round;
@@ -64,6 +64,11 @@ class FLNotifier extends StateNotifier<FLState> {
     if (_client.pendingInteractions >= _autoRoundThreshold) {
       runRound();
     }
+  }
+
+  void clearBuffer() {
+    _client.clearInteractions();
+    state = state.copyWith(pendingInteractions: 0);
   }
 
   Future<void> runRound() async {

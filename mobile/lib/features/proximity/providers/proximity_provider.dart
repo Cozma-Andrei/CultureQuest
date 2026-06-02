@@ -10,55 +10,44 @@ class ProximityState {
 
 class ProximityNotifier extends StateNotifier<ProximityState> {
   final Ref _ref;
-  final Set<String> _inside = {};
+  static const _radiusM = 1500.0; // matches the map landmark display radius
 
-  // Hysteresis: require more distance to exit than to enter so GPS
-  // noise cannot cause a false exit → re-enter loop.
-  static const _enterRadiusM = 100.0;
-  static const _exitRadiusM  = 130.0;
+  ProximityNotifier(this._ref) : super(const ProximityState());
 
-  ProximityNotifier(this._ref) : super(const ProximityState()) {
-    // Check immediately with whatever is already loaded.
+  /// Call this when the user explicitly taps "Find Nearby".
+  /// Returns true if a landmark was found within radius.
+  bool checkNow() {
     final mapState = _ref.read(mapProvider);
-    if (mapState.position != null) {
-      _check(mapState.position!.latitude, mapState.position!.longitude, mapState.landmarks);
+    final pos = mapState.position;
+    if (pos == null) return false;
+
+    // Find the closest landmark within radius
+    LandmarkModel? closest;
+    double closestDist = double.infinity;
+    for (final l in mapState.allLandmarks.isNotEmpty
+        ? mapState.allLandmarks
+        : mapState.landmarks) {
+      final dist = Geolocator.distanceBetween(
+          pos.latitude, pos.longitude, l.location.lat, l.location.lng);
+      if (dist <= _radiusM && dist < closestDist) {
+        closest = l;
+        closestDist = dist;
+      }
     }
 
-    // Single source of position truth: reuse mapProvider's stream.
-    // This avoids running a second parallel Geolocator stream.
-    _ref.listen<MapState>(mapProvider, (prev, next) {
-      final pos = next.position;
-      if (pos == null) return;
-      final landmarksChanged = prev?.landmarks != next.landmarks;
-      final posChanged = prev?.position != next.position;
-      if (landmarksChanged || posChanged) {
-        _check(pos.latitude, pos.longitude, next.landmarks);
-      }
-    });
-  }
-
-  void _check(double lat, double lng, List<LandmarkModel> landmarks) {
-    for (final l in landmarks) {
-      final dist = Geolocator.distanceBetween(lat, lng, l.location.lat, l.location.lng);
-      final wasInside = _inside.contains(l.id);
-
-      if (!wasInside && dist <= _enterRadiusM) {
-        _inside.add(l.id);
-        if (state.nearbyLandmark == null) {
-          state = ProximityState(nearbyLandmark: l);
-        }
-      } else if (wasInside && dist > _exitRadiusM) {
-        _inside.remove(l.id);
-        if (state.nearbyLandmark?.id == l.id) {
-          state = const ProximityState();
-        }
-      }
+    if (closest != null) {
+      state = ProximityState(nearbyLandmark: closest);
+      return true;
+    } else {
+      state = const ProximityState();
+      return false;
     }
   }
 
   void dismiss() => state = const ProximityState();
 }
 
-final proximityProvider = StateNotifierProvider<ProximityNotifier, ProximityState>(
+final proximityProvider =
+    StateNotifierProvider<ProximityNotifier, ProximityState>(
   (ref) => ProximityNotifier(ref),
 );

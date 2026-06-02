@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/quest_model.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/services/local_data_service.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class QuestState {
@@ -41,11 +42,15 @@ class QuestNotifier extends StateNotifier<QuestState> {
     state = QuestState(isLoading: true, landmarkName: landmarkName);
     try {
       if (isNearby) {
-        _api.post('/landmarks/$landmarkId/visit').ignore();
+        final isFirst = !_ref.read(localDataProvider).isVisited(landmarkId);
+        await _ref.read(localDataProvider).markVisited(landmarkId);
+        if (isFirst) _api.post('/landmarks/$landmarkId/visit').ignore();
       }
       final res = await _api.get('/quests/', params: {'landmark_id': landmarkId});
+      final completedIds = _ref.read(localDataProvider).getCompletedQuestIds();
       final quests = (res.data as List)
           .map((j) => QuestModel.fromJson(j as Map<String, dynamic>))
+          .map((q) => completedIds.contains(q.id) ? q.copyWith(completed: true) : q)
           .toList();
       state = QuestState(quests: quests, landmarkName: landmarkName);
     } catch (_) {
@@ -66,7 +71,9 @@ class QuestNotifier extends StateNotifier<QuestState> {
       final res = await _api.post('/quests/$questId/complete', data: body);
       final result = Map<String, dynamic>.from(res.data as Map);
 
-      if (result['correct'] == true || result['already_completed'] == true) {
+      if (result['correct'] == true) {
+        // Mark completed locally — server no longer tracks which quests each user finished
+        await _ref.read(localDataProvider).markQuestCompleted(questId);
         state = state.copyWith(
           quests: state.quests
               .map((q) => q.id == questId ? q.copyWith(completed: true) : q)
@@ -74,7 +81,6 @@ class QuestNotifier extends StateNotifier<QuestState> {
         );
       }
 
-      // Update cached user points/completedQuests
       await _ref.read(authProvider.notifier).refreshUser();
 
       return result;

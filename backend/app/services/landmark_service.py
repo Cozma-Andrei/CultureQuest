@@ -1,11 +1,15 @@
 from bson import ObjectId
 from bson.errors import InvalidId
+from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from app.models.landmark import LandmarkCreate, LandmarkResponse, GeoPoint, LandmarkType
+from app.models.landmark import LandmarkCreate, LandmarkResponse, GeoPoint, LandmarkType, LandmarkSubmit, LandmarkEdit, LandmarkStatus, StorySubmit, StoryResponse
 from app.services.quest_service import seed_quests_for_landmark
 
+_MAX_STORIES = 5
+_MAX_QUESTS = 5
 
-def _doc_to_landmark(doc: dict, visited_by_me: bool = False) -> LandmarkResponse:
+
+def _doc_to_landmark(doc: dict) -> LandmarkResponse:
     coords = doc["location"]["coordinates"]  # GeoJSON stores [lng, lat]
     return LandmarkResponse(
         id=str(doc["_id"]),
@@ -15,10 +19,12 @@ def _doc_to_landmark(doc: dict, visited_by_me: bool = False) -> LandmarkResponse
         description=doc["description"],
         categories=doc.get("categories", []),
         stories=doc.get("stories", []),
+        website=doc.get("website"),
         rating=doc.get("rating", 0.0),
         visit_count=doc.get("visit_count", 0),
         has_active_quest=doc.get("has_active_quest", False),
-        visited_by_me=visited_by_me,
+        status=doc.get("status", LandmarkStatus.approved),
+        submitted_by=doc.get("submitted_by"),
     )
 
 
@@ -26,6 +32,7 @@ async def get_nearby_landmarks(
     db: AsyncIOMotorDatabase, lat: float, lng: float, radius_m: int, user_id: str | None = None
 ) -> list[LandmarkResponse]:
     cursor = db.landmarks.find({
+        "status": {"$in": ["approved", None]},
         "location": {
             "$nearSphere": {
                 "$geometry": {"type": "Point", "coordinates": [lng, lat]},
@@ -34,26 +41,14 @@ async def get_nearby_landmarks(
         }
     }).limit(50)
     docs = await cursor.to_list(50)
-
-    visited_ids: set[str] = set()
-    if user_id and docs:
-        landmark_ids = [str(d["_id"]) for d in docs]
-        async for v in db.visits.find({"user_id": user_id, "landmark_id": {"$in": landmark_ids}}):
-            visited_ids.add(v["landmark_id"])
-
-    return [_doc_to_landmark(doc, visited_by_me=str(doc["_id"]) in visited_ids) for doc in docs]
+    return [_doc_to_landmark(doc) for doc in docs]
 
 
 async def get_all_landmarks(
     db: AsyncIOMotorDatabase, user_id: str | None = None
 ) -> list[LandmarkResponse]:
-    docs = await db.landmarks.find({}).to_list(None)
-    visited_ids: set[str] = set()
-    if user_id and docs:
-        landmark_ids = [str(d["_id"]) for d in docs]
-        async for v in db.visits.find({"user_id": user_id, "landmark_id": {"$in": landmark_ids}}):
-            visited_ids.add(v["landmark_id"])
-    return [_doc_to_landmark(doc, visited_by_me=str(doc["_id"]) in visited_ids) for doc in docs]
+    docs = await db.landmarks.find({"status": {"$in": ["approved", None]}}).to_list(None)
+    return [_doc_to_landmark(doc) for doc in docs]
 
 
 async def get_landmark_by_id(db: AsyncIOMotorDatabase, landmark_id: str) -> LandmarkResponse | None:
@@ -84,42 +79,45 @@ async def create_landmark(db: AsyncIOMotorDatabase, payload: LandmarkCreate) -> 
     return _doc_to_landmark(doc)
 
 
-async def record_visit(db: AsyncIOMotorDatabase, landmark_id: str, user_id: str) -> None:
-    """Increment visit_count once per user per landmark."""
+async def record_visit(db: AsyncIOMotorDatabase, landmark_id: str) -> None:
+    """Anonymously increment visit_count. No user identity stored."""
     try:
         oid = ObjectId(landmark_id)
     except InvalidId:
         return
-    existing = await db.visits.find_one({"landmark_id": landmark_id, "user_id": user_id})
-    if existing:
-        return
-    await db.visits.insert_one({"landmark_id": landmark_id, "user_id": user_id})
     await db.landmarks.update_one({"_id": oid}, {"$inc": {"visit_count": 1}})
 
 
-async def rate_landmark(db: AsyncIOMotorDatabase, landmark_id: str, user_id: str, rating: int) -> LandmarkResponse | None:
-    """Upsert a per-user rating and recompute the landmark average."""
+async def rate_landmark(
+    db: AsyncIOMotorDatabase, landmark_id: str, rating: int, previous_rating: int | None = None
+) -> LandmarkResponse | None:
+    """Update aggregate rating using sum/count — no per-user record stored."""
     try:
         oid = ObjectId(landmark_id)
     except InvalidId:
         return None
-    await db.ratings.update_one(
-        {"landmark_id": landmark_id, "user_id": user_id},
-        {"$set": {"rating": rating}},
-        upsert=True,
-    )
-    pipeline = [
-        {"$match": {"landmark_id": landmark_id}},
-        {"$group": {"_id": None, "avg": {"$avg": "$rating"}}},
-    ]
-    cursor = db.ratings.aggregate(pipeline)
-    result = await cursor.to_list(1)
-    avg = round(result[0]["avg"], 2) if result else float(rating)
-    await db.landmarks.update_one({"_id": oid}, {"$set": {"rating": avg}})
+    if previous_rating is None:
+        # First-time rating: add to sum, increment count
+        await db.landmarks.update_one(
+            {"_id": oid},
+            {"$inc": {"rating_sum": rating, "rating_count": 1}},
+        )
+    else:
+        # Re-rating: adjust sum, count stays the same
+        await db.landmarks.update_one(
+            {"_id": oid},
+            {"$inc": {"rating_sum": rating - previous_rating}},
+        )
+    doc = await db.landmarks.find_one({"_id": oid}, {"rating_sum": 1, "rating_count": 1})
+    if doc:
+        r_sum = doc.get("rating_sum", rating)
+        r_count = doc.get("rating_count", 1)
+        avg = round(r_sum / max(r_count, 1), 2)
+        await db.landmarks.update_one({"_id": oid}, {"$set": {"rating": avg}})
     return await get_landmark_by_id(db, landmark_id)
 
 
-async def seed_landmarks(db: AsyncIOMotorDatabase, center_lat: float, center_lng: float) -> list[LandmarkResponse]:
+async def seed_landmarks(db: AsyncIOMotorDatabase, center_lat: float, center_lng: float, user_id: str | None = None) -> list[LandmarkResponse]:
     """Insert sample landmarks around a coordinate for development/testing."""
     samples = [
         dict(name="Nearby Test Spot", type=LandmarkType.monument, offset=(0.0003, 0.0002),
@@ -179,6 +177,8 @@ async def seed_landmarks(db: AsyncIOMotorDatabase, center_lat: float, center_lng
             "visit_count": 0,
             "has_active_quest": True,
             "seeded": True,
+            "submitted_by": user_id,
+            "status": "approved",
         }
         result = await db.landmarks.insert_one(doc)
         doc["_id"] = result.inserted_id
@@ -186,3 +186,161 @@ async def seed_landmarks(db: AsyncIOMotorDatabase, center_lat: float, center_lng
         created.append(landmark)
         await seed_quests_for_landmark(db, landmark.id, landmark.name)
     return created
+
+
+async def submit_landmark(
+    db: AsyncIOMotorDatabase, payload: LandmarkSubmit, user_id: str
+) -> LandmarkResponse:
+    doc = {
+        "name": payload.name,
+        "type": payload.type.value,
+        "location": {"type": "Point", "coordinates": [payload.location.lng, payload.location.lat]},
+        "description": payload.description,
+        "categories": payload.categories,
+        "stories": [],
+        "rating": 0.0,
+        "visit_count": 0,
+        "has_active_quest": False,
+        "status": LandmarkStatus.pending,
+        "submitted_by": user_id,
+    }
+    result = await db.landmarks.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    return _doc_to_landmark(doc)
+
+
+async def get_pending_landmarks(db: AsyncIOMotorDatabase) -> list[LandmarkResponse]:
+    docs = await db.landmarks.find({"status": LandmarkStatus.pending}).to_list(None)
+    return [_doc_to_landmark(doc) for doc in docs]
+
+
+async def approve_landmark(db: AsyncIOMotorDatabase, landmark_id: str) -> LandmarkResponse | None:
+    try:
+        oid = ObjectId(landmark_id)
+    except InvalidId:
+        return None
+    await db.landmarks.update_one({"_id": oid}, {"$set": {"status": LandmarkStatus.approved, "has_active_quest": True}})
+    return await get_landmark_by_id(db, landmark_id)
+
+
+async def reject_landmark(db: AsyncIOMotorDatabase, landmark_id: str) -> bool:
+    try:
+        oid = ObjectId(landmark_id)
+    except InvalidId:
+        return False
+    result = await db.landmarks.update_one({"_id": oid}, {"$set": {"status": LandmarkStatus.rejected}})
+    return result.modified_count > 0
+
+
+async def get_all_submissions(db: AsyncIOMotorDatabase) -> list[LandmarkResponse]:
+    """All user-submitted landmarks (any status)."""
+    docs = await db.landmarks.find({"submitted_by": {"$exists": True}}).to_list(None)
+    return [_doc_to_landmark(doc) for doc in docs]
+
+
+async def edit_landmark(db: AsyncIOMotorDatabase, landmark_id: str, payload: LandmarkEdit) -> LandmarkResponse | None:
+    try:
+        oid = ObjectId(landmark_id)
+    except InvalidId:
+        return None
+    updates = {k: v for k, v in {
+        "name": payload.name,
+        "type": payload.type.value if payload.type else None,
+        "description": payload.description,
+        "categories": payload.categories,
+        "website": payload.website,
+    }.items() if v is not None}
+    if not updates:
+        return await get_landmark_by_id(db, landmark_id)
+    await db.landmarks.update_one({"_id": oid}, {"$set": updates})
+    return await get_landmark_by_id(db, landmark_id)
+
+
+async def submit_story(db: AsyncIOMotorDatabase, landmark_id: str, user_id: str, text: str) -> StoryResponse | None:
+    try:
+        oid = ObjectId(landmark_id)
+    except InvalidId:
+        return None
+    lm = await db.landmarks.find_one({"_id": oid})
+    if not lm:
+        return None
+    if len(lm.get("stories", [])) >= _MAX_STORIES:
+        raise HTTPException(status_code=422, detail=f"Landmark already has {_MAX_STORIES} stories (maximum)")
+    # Admins bypass the review queue — story is added directly
+    user_doc = await db.users.find_one({"_id": ObjectId(user_id)})
+    is_admin = user_doc.get("is_admin", False) if user_doc else False
+    if is_admin:
+        await db.landmarks.update_one({"_id": oid}, {"$push": {"stories": text.strip()}})
+        return StoryResponse(
+            id="direct",
+            landmark_id=landmark_id,
+            landmark_name=lm.get("name"),
+            text=text.strip(),
+            status="approved",
+            submitted_by=user_id,
+        )
+    result = await db.stories.insert_one({
+        "landmark_id": landmark_id,
+        "submitted_by": user_id,
+        "text": text.strip(),
+        "status": "pending",
+    })
+    return StoryResponse(
+        id=str(result.inserted_id),
+        landmark_id=landmark_id,
+        landmark_name=lm.get("name"),
+        text=text.strip(),
+        status="pending",
+        submitted_by=user_id,
+    )
+
+
+async def get_pending_stories(db: AsyncIOMotorDatabase) -> list[StoryResponse]:
+    docs = await db.stories.find({"status": "pending"}).to_list(None)
+    results = []
+    for doc in docs:
+        lm = await db.landmarks.find_one({"_id": ObjectId(doc["landmark_id"])}, {"name": 1})
+        results.append(StoryResponse(
+            id=str(doc["_id"]),
+            landmark_id=doc["landmark_id"],
+            landmark_name=lm.get("name") if lm else None,
+            text=doc["text"],
+            status=doc["status"],
+            submitted_by=doc.get("submitted_by"),
+        ))
+    return results
+
+
+async def approve_story(db: AsyncIOMotorDatabase, story_id: str) -> bool:
+    try:
+        oid = ObjectId(story_id)
+    except InvalidId:
+        return False
+    doc = await db.stories.find_one({"_id": oid})
+    if not doc:
+        return False
+    await db.stories.update_one({"_id": oid}, {"$set": {"status": "approved"}})
+    # Append to landmark's stories array
+    await db.landmarks.update_one(
+        {"_id": ObjectId(doc["landmark_id"])},
+        {"$push": {"stories": doc["text"]}},
+    )
+    return True
+
+
+async def reject_story(db: AsyncIOMotorDatabase, story_id: str) -> bool:
+    try:
+        oid = ObjectId(story_id)
+    except InvalidId:
+        return False
+    result = await db.stories.update_one({"_id": oid}, {"$set": {"status": "rejected"}})
+    return result.modified_count > 0
+
+
+async def delete_landmark(db: AsyncIOMotorDatabase, landmark_id: str) -> bool:
+    try:
+        oid = ObjectId(landmark_id)
+    except InvalidId:
+        return False
+    result = await db.landmarks.delete_one({"_id": oid})
+    return result.deleted_count > 0

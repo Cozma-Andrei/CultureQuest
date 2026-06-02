@@ -1,3 +1,4 @@
+from bson import ObjectId
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
 from app.api.deps import get_current_user, get_db
 from app.models.user import LocationUpdate, NearbyUser
@@ -7,6 +8,15 @@ router = APIRouter()
 
 # Default radius for user-to-user proximity notifications (metres)
 _DEFAULT_RADIUS_M = 100
+
+
+@router.post("/me/reset-progress", status_code=204)
+async def reset_progress(user_id: str = Depends(get_current_user), db=Depends(get_db)):
+    """Reset points and completed_quests to 0. Interests are preserved."""
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"points": 0, "completed_quests": 0}},
+    )
 
 
 @router.post("/location")

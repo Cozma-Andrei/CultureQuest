@@ -5,7 +5,7 @@ from bson.errors import InvalidId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException, status
 
-from app.models.route import RouteRequest, RouteResponse, RouteStop, RouteWithProgress, RouteStopWithProgress
+from app.models.route import RouteRequest, RouteResponse, RouteStop, RouteWithProgress, RouteStopWithProgress, ReorderPayload
 from app.models.landmark import LandmarkResponse
 from app.services.landmark_service import get_nearby_landmarks, get_landmark_by_id
 from app.services.auth_service import get_user_by_id
@@ -70,21 +70,44 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
         prev_lat, prev_lng = landmark.location.lat, landmark.location.lng
 
     generated_at = datetime.utcnow().isoformat()
-    result = await db.routes.insert_one({
-        "user_id": user_id,
-        "stop_ids": [l.id for l, _, _ in stops],
-        "total_distance_m": total_dist,
-        "total_duration_minutes": total_minutes,
-        "generated_at": generated_at,
-    })
-
+    # Route is returned to the client for local storage — not persisted server-side
+    import uuid
     return RouteResponse(
-        id=str(result.inserted_id),
+        id=str(uuid.uuid4()),
         stops=[RouteStop(landmark=l, estimated_duration_minutes=d, relevance_score=s) for l, d, s in stops],
         total_distance_m=round(total_dist),
         total_duration_minutes=total_minutes,
         generated_at=generated_at,
     )
+
+
+async def get_global_routes(db: AsyncIOMotorDatabase) -> list[RouteWithProgress]:
+    """Return all routes marked global (curated/admin routes visible to everyone)."""
+    docs = await db.routes.find({"is_global": True}).sort("name", 1).to_list(None)
+
+    all_stop_ids: set[str] = set()
+    for doc in docs:
+        all_stop_ids.update(doc.get("stop_ids", []))
+
+    routes: list[RouteWithProgress] = []
+    for doc in docs:
+        stop_ids = doc.get("stop_ids", [])
+        stops: list[RouteStopWithProgress] = []
+        for lid in stop_ids:
+            landmark = await get_landmark_by_id(db, lid)
+            if landmark:
+                stops.append(RouteStopWithProgress(landmark=landmark, visited=False))
+        routes.append(RouteWithProgress(
+            id=str(doc["_id"]),
+            name=doc.get("name"),
+            stops=stops,
+            total_distance_m=doc.get("total_distance_m", 0),
+            total_duration_minutes=doc.get("total_duration_minutes", 0),
+            generated_at=doc.get("generated_at", ""),
+            visited_count=0,
+            is_global=True,
+        ))
+    return routes
 
 
 async def get_user_routes(db: AsyncIOMotorDatabase, user_id: str) -> list[RouteWithProgress]:
@@ -118,3 +141,38 @@ async def get_user_routes(db: AsyncIOMotorDatabase, user_id: str) -> list[RouteW
             visited_count=sum(1 for s in stops if s.visited),
         ))
     return routes
+
+
+async def reorder_route_stops(
+    db: AsyncIOMotorDatabase, route_id: str, user_id: str, payload: ReorderPayload
+) -> RouteWithProgress | None:
+    try:
+        oid = ObjectId(route_id)
+    except InvalidId:
+        return None
+    doc = await db.routes.find_one({"_id": oid, "user_id": user_id})
+    if not doc:
+        return None
+    current_ids = set(doc.get("stop_ids", []))
+    # Keep only IDs that actually belong to this route, in the requested order
+    new_ids = [sid for sid in payload.stop_ids if sid in current_ids]
+    await db.routes.update_one({"_id": oid}, {"$set": {"stop_ids": new_ids}})
+    # Return the updated route with progress
+    updated = await db.routes.find_one({"_id": oid})
+    visited_ids: set[str] = set()
+    async for v in db.visits.find({"user_id": user_id, "landmark_id": {"$in": new_ids}}):
+        visited_ids.add(v["landmark_id"])
+    stops: list[RouteStopWithProgress] = []
+    for lid in new_ids:
+        landmark = await get_landmark_by_id(db, lid)
+        if landmark:
+            stops.append(RouteStopWithProgress(landmark=landmark, visited=lid in visited_ids))
+    return RouteWithProgress(
+        id=route_id,
+        name=updated.get("name"),
+        stops=stops,
+        total_distance_m=updated.get("total_distance_m", 0),
+        total_duration_minutes=updated.get("total_duration_minutes", 0),
+        generated_at=updated.get("generated_at", ""),
+        visited_count=sum(1 for s in stops if s.visited),
+    )
