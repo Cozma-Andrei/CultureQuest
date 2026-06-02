@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -37,6 +38,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   List<LatLng> _navPolyline = const [];      // teal: standalone landmark navigation
   LandmarkModel? _navTarget;
   String _navMode = 'walking'; // 'walking' | 'driving'
+  int? _navDurationSec;        // seconds from OSRM for current nav
+  int? _routeDurationSec;      // seconds from OSRM for route overview
   bool _headingUp = false;     // rotate map to travel direction when navigating
   // Location picker state
   bool _pickingLocation = false;
@@ -67,7 +70,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         _fetchStreetRoute(next.activeRoute!.stops, next.position);
       }
       if (next.activeRoute == null && prev?.activeRoute != null) {
-        setState(() => _streetPolyline = const []);
+        setState(() { _streetPolyline = const []; _headingUp = false; });
+        _mapController.rotate(0);
       }
       if (next.activeProgressRoute != null && prev?.activeProgressRoute != next.activeProgressRoute) {
         setState(() { _streetPolyline = const []; _navTarget = null; _navPolyline = const []; });
@@ -77,27 +81,24 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
             _sheetController.animateTo(0.45, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
           }
         });
-        if (next.resumeTarget != null) {
-          _animateToLandmark(next.resumeTarget!);
-          // Route overview already covers the full path; no separate nav line needed
-          ref.read(mapProvider.notifier).consumeResumeTarget();
-        } else {
-          _animateToRoute(next.activeProgressRoute!);
-        }
-      }
-      // Resume target set while route already active (proximity auto-advance or re-resume)
-      if (next.resumeTarget != null && prev?.resumeTarget != next.resumeTarget) {
-        _animateToLandmark(next.resumeTarget!);
-        ref.read(mapProvider.notifier).consumeResumeTarget();
+        _animateToRoute(next.activeProgressRoute!);
       }
       if (next.activeProgressRoute == null && prev?.activeProgressRoute != null) {
-        setState(() { _streetPolyline = const []; _overviewPolyline = const []; });
+        setState(() { _streetPolyline = const []; _overviewPolyline = const []; _routeDurationSec = null; _headingUp = false; });
+        _mapController.rotate(0);
       }
-      // Heading-up: rotate map to follow travel direction
-      if (_headingUp && _navTarget != null &&
-          next.position != null &&
-          (next.position?.heading ?? 0) != (prev?.position?.heading ?? 0)) {
-        _mapController.rotate(-(next.position!.heading));
+      // Heading-up: rotate map to follow path direction in real time
+      if (_headingUp &&
+          (_navTarget != null || next.activeProgressRoute != null || next.activeRoute != null) &&
+          next.position != null) {
+        final lookahead = _lookaheadOnPath(next.position!);
+        if (lookahead != null) {
+          final bearing = _bearingTo(
+            LatLng(next.position!.latitude, next.position!.longitude),
+            lookahead,
+          );
+          _mapController.rotate(-bearing);
+        }
       }
     });
 
@@ -188,7 +189,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   _showCommunityReview();
                 },
               ),
-              if (authState.user?.isAdmin == true)
+              if (authState.user?.isAdmin == true) ...[
+                ListTile(
+                  leading: const Icon(Icons.add_road),
+                  title: const Text('Create Route'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCreateRouteSheet();
+                  },
+                ),
                 ListTile(
                   leading: const Icon(Icons.admin_panel_settings_outlined),
                   title: const Text('Pending Submissions'),
@@ -197,6 +206,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                     _showPendingSubmissions();
                   },
                 ),
+              ],
               const Spacer(),
               const Divider(),
               ListTile(
@@ -257,9 +267,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               // Standalone navigation polyline
               if (_navTarget != null && progressRoute == null && mapState.activeRoute == null && _navPolyline.isNotEmpty)
                 PolylineLayer(polylines: [Polyline(points: _navPolyline, strokeWidth: 4, color: Colors.teal)]),
-              // All landmarks layer (nav target rendered green via _buildLandmarkMarker)
+              // Landmark markers — numbered for generated route stops, normal otherwise
               if (progressRoute == null && mapLandmarks.isNotEmpty)
-                MarkerLayer(markers: mapLandmarks.map((l) => _buildLandmarkMarker(l)).toList()),
+                MarkerLayer(
+                  markers: mapState.activeRoute != null
+                      ? mapState.activeRoute!.stops.asMap().entries
+                          .map((e) => _buildGeneratedStopMarker(e.value.landmark, e.key + 1))
+                          .toList()
+                      : mapLandmarks.map((l) => _buildLandmarkMarker(l)).toList(),
+                ),
               // Progress route stop markers
               if (progressRoute != null)
                 MarkerLayer(
@@ -389,17 +405,26 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                     const Icon(Icons.navigation, color: Colors.white, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        'To: ${_navTarget!.name}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('To: ${_navTarget!.name}',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis),
+                          if (_navDurationSec != null)
+                            Text(
+                              '~${(_navDurationSec! / 60).ceil()} min ${_navMode == "driving" ? "drive" : "walk"}',
+                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                        ],
                       ),
                     ),
                     // Heading-up toggle
                     GestureDetector(
                       onTap: () {
                         setState(() => _headingUp = !_headingUp);
-                        if (!_headingUp) _mapController.rotate(0);
+                        if (_headingUp) _applyHeadingNow(); else _mapController.rotate(0);
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -498,16 +523,85 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 onNavModeChanged: (mode) {
                   setState(() => _navMode = mode);
                   if (_navTarget != null) _fetchNavPolylineOnly(_navTarget!, mode);
-                  // Re-fetch route overview with new mode when following a progress route
+                  // Re-fetch progress route overview
                   final pr = ref.read(mapProvider).activeProgressRoute;
                   if (pr != null) _fetchRouteOverview(pr);
+                  // Re-fetch generated route polyline
+                  final ar = ref.read(mapProvider).activeRoute;
+                  if (ar != null) _fetchStreetRoute(ar.stops, ref.read(mapProvider).position);
                 },
                 onStopNav: () => setState(() { _navTarget = null; _navPolyline = const []; }),
+                routeDurationSec: _routeDurationSec,
+                headingUp: _headingUp,
+                onHeadingUpToggle: () {
+                  setState(() => _headingUp = !_headingUp);
+                  if (_headingUp) _applyHeadingNow(); else _mapController.rotate(0);
+                },
               ),
             ),
         ],
       ),
     );
+  }
+
+  // ── Path-bearing helpers ──────────────────────────────────────────────────────
+
+  double _distM(LatLng a, LatLng b) {
+    final lat1 = a.latitude * math.pi / 180;
+    final lat2 = b.latitude * math.pi / 180;
+    final dLat = (b.latitude - a.latitude) * math.pi / 180;
+    final dLng = (b.longitude - a.longitude) * math.pi / 180;
+    final s = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) * math.cos(lat2) * math.sin(dLng / 2) * math.sin(dLng / 2);
+    return 2 * 6371000 * math.asin(math.sqrt(s));
+  }
+
+  double _bearingTo(LatLng from, LatLng to) {
+    final lat1 = from.latitude * math.pi / 180;
+    final lat2 = to.latitude * math.pi / 180;
+    final dLng = (to.longitude - from.longitude) * math.pi / 180;
+    final y = math.sin(dLng) * math.cos(lat2);
+    final x = math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
+    return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
+  }
+
+  /// Finds a lookahead point ~80 m ahead of the user on the active polyline.
+  /// Apply heading-up rotation immediately using the current position.
+  void _applyHeadingNow() {
+    final pos = ref.read(mapProvider).position;
+    if (pos == null) return;
+    final lookahead = _lookaheadOnPath(pos);
+    if (lookahead != null) {
+      _mapController.rotate(-_bearingTo(LatLng(pos.latitude, pos.longitude), lookahead));
+    }
+  }
+
+  LatLng? _lookaheadOnPath(Position pos) {
+    // Priority: progress-route overview → generated-route street line → standalone nav
+    final polyline = _overviewPolyline.isNotEmpty
+        ? _overviewPolyline
+        : _streetPolyline.isNotEmpty
+            ? _streetPolyline
+            : _navPolyline.isNotEmpty
+                ? _navPolyline
+                : <LatLng>[];
+    if (polyline.length < 2) return null;
+    final user = LatLng(pos.latitude, pos.longitude);
+    // Find the closest index
+    int closest = 0;
+    double minD = double.infinity;
+    for (int i = 0; i < polyline.length; i++) {
+      final d = _distM(user, polyline[i]);
+      if (d < minD) { minD = d; closest = i; }
+    }
+    // Walk forward ~80 m from that point
+    double cum = 0;
+    for (int i = closest; i < polyline.length - 1; i++) {
+      cum += _distM(polyline[i], polyline[i + 1]);
+      if (cum >= 80) return polyline[i + 1];
+    }
+    return polyline.last;
   }
 
   /// Returns the correct OSRM endpoint for the given profile.
@@ -550,7 +644,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       LatLng(lats.reduce((a, b) => a < b ? a : b), lngs.reduce((a, b) => a < b ? a : b)),
       LatLng(lats.reduce((a, b) => a > b ? a : b), lngs.reduce((a, b) => a > b ? a : b)),
     );
-    _mapController.fitCamera(CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(60), maxZoom: 13.5));
+    _mapController.fitCamera(CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(48), maxZoom: 15.5));
   }
 
   Marker _buildUserMarker(dynamic position) => Marker(
@@ -593,6 +687,26 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       ),
     );
   }
+
+  Marker _buildGeneratedStopMarker(LandmarkModel l, int index) => Marker(
+        point: LatLng(l.location.lat, l.location.lng),
+        width: 40, height: 40,
+        child: GestureDetector(
+          onTap: () => _showLandmarkSheet(l),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.deepPurple,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+            ),
+            child: Center(
+              child: Text('$index', style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+          ),
+        ),
+      );
 
   Marker _buildProgressStopMarker(RouteStopWithProgress stop, int index) {
     final visited = stop.visited;
@@ -640,7 +754,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         ...stops.map((s) => '${s.landmark.location.lng},${s.landmark.location.lat}'),
       ].join(';');
       final res = await Dio().get(
-        _osrmUrl('walking', waypoints),
+        _osrmUrl(_navMode, waypoints),
         queryParameters: {'overview': 'full', 'geometries': 'geojson'},
       );
       final coords = res.data['routes'][0]['geometry']['coordinates'] as List;
@@ -663,12 +777,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         _osrmUrl(mode, waypoints),
         queryParameters: {'overview': 'full', 'geometries': 'geojson'},
       );
-      final coords = res.data['routes'][0]['geometry']['coordinates'] as List;
+      final route = res.data['routes'][0];
+      final coords = route['geometry']['coordinates'] as List;
+      final duration = (route['duration'] as num).toInt();
       if (!mounted) return;
       setState(() {
         _navPolyline = coords
             .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
             .toList();
+        _navDurationSec = duration;
       });
     } catch (_) {}
   }
@@ -684,17 +801,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     final pos = ref.read(mapProvider).position;
     if (pos == null) return;
     await _fetchNavPolylineOnly(landmark, navMode);
-    if (!mounted || _navPolyline.isEmpty) return;
-    final lats = [pos.latitude, landmark.location.lat];
-    final lngs = [pos.longitude, landmark.location.lng];
-    _mapController.fitCamera(CameraFit.bounds(
-      bounds: LatLngBounds(
-        LatLng(lats.reduce((a, b) => a < b ? a : b), lngs.reduce((a, b) => a < b ? a : b)),
-        LatLng(lats.reduce((a, b) => a > b ? a : b), lngs.reduce((a, b) => a > b ? a : b)),
-      ),
-      padding: const EdgeInsets.all(80),
-      maxZoom: 13.5,
-    ));
+    if (!mounted) return;
+    // Keep map focused on user's location at a comfortable zoom — don't zoom out to fit the whole route
+    _mapController.move(LatLng(pos.latitude, pos.longitude), 15.0);
   }
 
   Future<void> _fetchRouteOverview(RouteWithProgress route) async {
@@ -712,12 +821,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         _osrmUrl(_navMode, waypoints), // respects current walk/drive mode
         queryParameters: {'overview': 'full', 'geometries': 'geojson'},
       );
-      final coords = res.data['routes'][0]['geometry']['coordinates'] as List;
+      final osrmRoute = res.data['routes'][0];
+      final coords = osrmRoute['geometry']['coordinates'] as List;
+      final duration = (osrmRoute['duration'] as num).toInt();
       if (mounted) {
         setState(() {
           _overviewPolyline = coords
               .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
               .toList();
+          _routeDurationSec = duration;
         });
       }
     } catch (_) {
@@ -869,6 +981,18 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     ).then((_) {
       if (mounted) setState(() => _pickedLocation = null);
     });
+  }
+
+  void _showCreateRouteSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CreateRouteSheet(
+        allLandmarks: ref.read(mapProvider).allLandmarks,
+        onCreated: () => ref.read(mapProvider.notifier).fetchGlobalRoutes(),
+      ),
+    );
   }
 
   void _showCommunityReview() {
@@ -1310,6 +1434,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
             ]),
             const SizedBox(height: 12),
             Text(l.description, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            if (l.openingHours != null && l.openingHours!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(children: [
+                Icon(Icons.access_time, size: 14, color: theme.colorScheme.primary),
+                const SizedBox(width: 6),
+                Text(l.openingHours!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
+              ]),
+            ],
             if (l.stories.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text('${l.stories.length == 1 ? "Story" : "Stories"} (${l.stories.length})',
@@ -1729,6 +1861,9 @@ class _BottomPanel extends ConsumerStatefulWidget {
   final String navMode;
   final void Function(String) onNavModeChanged;
   final VoidCallback onStopNav;
+  final int? routeDurationSec;
+  final bool headingUp;
+  final VoidCallback onHeadingUpToggle;
 
   const _BottomPanel({
     required this.scrollController,
@@ -1739,6 +1874,9 @@ class _BottomPanel extends ConsumerStatefulWidget {
     required this.navMode,
     required this.onNavModeChanged,
     required this.onStopNav,
+    this.routeDurationSec,
+    required this.headingUp,
+    required this.onHeadingUpToggle,
   });
 
   @override
@@ -1822,6 +1960,9 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
                   navMode: widget.navMode,
                   onNavModeChanged: widget.onNavModeChanged,
                   onClose: () => ref.read(mapProvider.notifier).clearProgressRoute(),
+                  durationSec: widget.routeDurationSec,
+                  headingUp: widget.headingUp,
+                  onHeadingUpToggle: widget.onHeadingUpToggle,
                 ),
               ),
               const SliverToBoxAdapter(child: Divider(height: 1)),
@@ -1836,6 +1977,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
                         stop: route.stops[i],
                         index: i,
                         isNext: nextIdx == i,
+                        onTap: () => widget.onLandmarkTap(route.stops[i].landmark),
                       );
                     },
                     childCount: mapState.activeProgressRoute!.stops.length,
@@ -1851,6 +1993,10 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
                   child: _RouteHeader(
                     route: mapState.activeRoute!,
                     onClear: () => ref.read(mapProvider.notifier).clearRoute(),
+                    headingUp: widget.headingUp,
+                    onHeadingUpToggle: widget.onHeadingUpToggle,
+                    navMode: widget.navMode,
+                    onNavModeChanged: widget.onNavModeChanged,
                   ),
                 ),
               ),
@@ -2222,7 +2368,7 @@ class _RouteCard extends ConsumerWidget {
               const SizedBox(width: 12),
               Icon(Icons.timer_outlined, size: 14, color: theme.colorScheme.onSurfaceVariant),
               const SizedBox(width: 4),
-              Text('${route.totalDurationMinutes} min', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Text('${route.stops.fold<int>(0, (s, stop) => s + stop.dwellMinutes)} min at stops', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
               const SizedBox(width: 12),
               Icon(Icons.straighten_outlined, size: 14, color: theme.colorScheme.onSurfaceVariant),
               const SizedBox(width: 4),
@@ -2260,17 +2406,6 @@ class _RouteCard extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 ),
               ),
-              const SizedBox(width: 10),
-              if (!isComplete)
-                FilledButton.icon(
-                  onPressed: () => ref.read(mapProvider.notifier).resumeRoute(route),
-                  icon: const Icon(Icons.navigation_outlined, size: 16),
-                  label: const Text('Resume'),
-                  style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  ),
-                ),
             ]),
           ],
         ),
@@ -2286,17 +2421,30 @@ class _ProgressRouteHeader extends StatelessWidget {
   final VoidCallback onClose;
   final String navMode;
   final void Function(String) onNavModeChanged;
+  final int? durationSec;
+  final bool headingUp;
+  final VoidCallback onHeadingUpToggle;
 
   const _ProgressRouteHeader({
     required this.route,
     required this.onClose,
     required this.navMode,
     required this.onNavModeChanged,
+    this.durationSec,
+    required this.headingUp,
+    required this.onHeadingUpToggle,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dwellTotal = route.stops.fold<int>(0, (s, stop) => s + stop.dwellMinutes);
+    final travelLabel = durationSec != null
+        ? '~${(durationSec! / 60).ceil()} min ${navMode == "driving" ? "drive" : "walk"} · '
+        : '';
+    final kmLabel = route.totalDistanceM > 0
+        ? '${(route.totalDistanceM / 1000).toStringAsFixed(1)} km · '
+        : '';
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 12, 4),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -2304,10 +2452,26 @@ class _ProgressRouteHeader extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(route.name ?? 'Route', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-              Text('${route.visitedCount}/${route.stops.length} stops visited',
+              Text('$travelLabel${kmLabel}$dwellTotal min at stops · ${route.visitedCount}/${route.stops.length} visited',
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ]),
           ),
+          // Heading-up toggle
+          GestureDetector(
+            onTap: onHeadingUpToggle,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: headingUp ? theme.colorScheme.primaryContainer : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: theme.colorScheme.outline.withOpacity(0.4)),
+              ),
+              child: Icon(Icons.explore,
+                  size: 18,
+                  color: headingUp ? theme.colorScheme.primary : theme.colorScheme.outline),
+            ),
+          ),
+          const SizedBox(width: 4),
           IconButton(icon: const Icon(Icons.close), onPressed: onClose),
         ]),
         const SizedBox(height: 6),
@@ -2327,17 +2491,22 @@ class _ProgressStopTile extends StatelessWidget {
   final RouteStopWithProgress stop;
   final int index;
   final bool isNext;
+  final VoidCallback? onTap;
   const _ProgressStopTile({
     super.key,
     required this.stop,
     required this.index,
     required this.isNext,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tile = Padding(
+    final tile = InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(children: [
         Container(
@@ -2372,13 +2541,22 @@ class _ProgressStopTile extends StatelessWidget {
                   child: Text('Next', style: TextStyle(fontSize: 10, color: theme.colorScheme.primary, fontWeight: FontWeight.w600)),
                 ),
             ]),
-            Text(stop.landmark.type, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            Row(children: [
+              Text(stop.landmark.type, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const SizedBox(width: 8),
+              Icon(Icons.schedule, size: 11, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 2),
+              Text('${stop.dwellMinutes} min', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ]),
           ]),
         ),
         const SizedBox(width: 8),
         if (stop.visited) Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
+        if (onTap != null)
+          const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.chevron_right, size: 16)),
       ]),
-    );
+      ),  // closes Padding
+    );   // closes InkWell
     return tile;
   }
 }
@@ -2388,22 +2566,61 @@ class _ProgressStopTile extends StatelessWidget {
 class _RouteHeader extends StatelessWidget {
   final RouteModel route;
   final VoidCallback onClear;
+  final bool headingUp;
+  final VoidCallback onHeadingUpToggle;
+  final String navMode;
+  final void Function(String) onNavModeChanged;
 
-  const _RouteHeader({required this.route, required this.onClear});
+  const _RouteHeader({
+    required this.route,
+    required this.onClear,
+    required this.headingUp,
+    required this.onHeadingUpToggle,
+    required this.navMode,
+    required this.onNavModeChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Your Route', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-            Text('${route.stops.length} stops · ${route.totalDurationMinutes} min · ${(route.totalDistanceM / 1000).toStringAsFixed(1)} km',
+        Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Your Route', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                '${route.stops.length} stops · '
+                '${route.totalDurationMinutes} min · '
+                '${(route.totalDistanceM / 1000).toStringAsFixed(1)} km',
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          ]),
-        ),
-        TextButton(onPressed: onClear, child: const Text('Clear')),
+            ]),
+          ),
+          GestureDetector(
+            onTap: onHeadingUpToggle,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: headingUp ? theme.colorScheme.primaryContainer : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: theme.colorScheme.outline.withOpacity(0.4)),
+              ),
+              child: Icon(Icons.explore, size: 18,
+                  color: headingUp ? theme.colorScheme.primary : theme.colorScheme.outline),
+            ),
+          ),
+          const SizedBox(width: 4),
+          TextButton(onPressed: onClear, child: const Text('Clear')),
+        ]),
+        const SizedBox(height: 6),
+        Row(children: [
+          _ModeChip(label: 'Walk', icon: Icons.directions_walk,
+              selected: navMode == 'walking', onTap: () => onNavModeChanged('walking')),
+          const SizedBox(width: 8),
+          _ModeChip(label: 'Drive', icon: Icons.directions_car,
+              selected: navMode == 'driving', onTap: () => onNavModeChanged('driving')),
+        ]),
       ],
     );
   }
@@ -2471,6 +2688,211 @@ class _LandmarkTile extends StatelessWidget {
 // ── Admin: pending submissions ─────────────────────────────────────────────────
 
 // ── Community review sheet ─────────────────────────────────────────────────────
+
+// ── Admin: create global route ─────────────────────────────────────────────────
+
+class _CreateRouteSheet extends ConsumerStatefulWidget {
+  final List<LandmarkModel> allLandmarks;
+  final VoidCallback onCreated;
+  const _CreateRouteSheet({required this.allLandmarks, required this.onCreated});
+  @override
+  ConsumerState<_CreateRouteSheet> createState() => _CreateRouteSheetState();
+}
+
+class _CreateRouteSheetState extends ConsumerState<_CreateRouteSheet> {
+  final _nameCtrl = TextEditingController();
+  final _searchCtrl = TextEditingController();
+  String _search = '';
+  final List<LandmarkModel> _stops = [];
+  final Map<String, int> _dwellMinutes = {}; // landmarkId → minutes
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<LandmarkModel> get _filtered {
+    final q = _search.toLowerCase();
+    return q.isEmpty
+        ? widget.allLandmarks
+        : widget.allLandmarks.where((l) =>
+            l.name.toLowerCase().contains(q) || l.type.toLowerCase().contains(q)).toList();
+  }
+
+  Future<void> _save() async {
+    if (_nameCtrl.text.trim().isEmpty || _stops.length < 2) return;
+    setState(() => _saving = true);
+    try {
+      await ref.read(apiServiceProvider).post('/routes/admin', data: {
+        'name': _nameCtrl.text.trim(),
+        'stop_ids': _stops.map((l) => l.id).toList(),
+        'dwell_minutes': _stops.map((l) => _dwellMinutes[l.id] ?? 25).toList(),
+      });
+      widget.onCreated();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        final msg = e is DioException ? (e.response?.data['detail'] ?? 'Failed') : 'Failed';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg.toString()), backgroundColor: Theme.of(context).colorScheme.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (_, sc) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: Material(
+          color: theme.colorScheme.surface,
+          child: Column(children: [
+            const SizedBox(height: 10),
+            Center(child: Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(children: [
+                const Icon(Icons.add_road, size: 20),
+                const SizedBox(width: 8),
+                Text('Create Global Route', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                TextField(controller: _nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Route name', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                // Selected stops
+                if (_stops.isNotEmpty) ...[
+                  Text('Stops (${_stops.length}/10)', style: theme.textTheme.labelLarge?.copyWith(
+                      color: _stops.length >= 10 ? theme.colorScheme.error : theme.colorScheme.primary)),
+                  const SizedBox(height: 6),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 240),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: List.generate(_stops.length, (i) {
+                    final l = _stops[i];
+                    final dwell = _dwellMinutes[l.id] ?? 30;
+                    return ListTile(
+                      key: ValueKey(l.id),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      minVerticalPadding: 0,
+                      leading: Container(
+                        width: 22, height: 22,
+                        decoration: BoxDecoration(color: theme.colorScheme.primary, shape: BoxShape.circle),
+                        child: Center(child: Text('${i+1}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
+                      ),
+                      title: Text(l.name, style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        GestureDetector(
+                          onTap: dwell > 5 ? () => setState(() => _dwellMinutes[l.id] = dwell - 5) : null,
+                          child: const Icon(Icons.remove_circle_outline, size: 16),
+                        ),
+                        const SizedBox(width: 2),
+                        SizedBox(width: 30, child: Text('${dwell}m', textAlign: TextAlign.center,
+                            style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600))),
+                        const SizedBox(width: 2),
+                        GestureDetector(
+                          onTap: dwell < 180 ? () => setState(() => _dwellMinutes[l.id] = dwell + 5) : null,
+                          child: const Icon(Icons.add_circle_outline, size: 16),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () => setState(() { _stops.removeAt(i); _dwellMinutes.remove(l.id); }),
+                          child: const Icon(Icons.close, size: 14),
+                        ),
+                      ]),
+                    );
+                  }),    // closes List.generate itemBuilder
+                      ),   // closes Column
+                    ),     // closes SingleChildScrollView
+                  ),       // closes ConstrainedBox
+                  const SizedBox(height: 8),
+                ],
+                // Search bar
+                TextField(
+                  controller: _searchCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Search landmarks to add…',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    suffixIcon: _search.isNotEmpty
+                        ? IconButton(icon: const Icon(Icons.clear, size: 16),
+                            onPressed: () { _searchCtrl.clear(); setState(() => _search = ''); })
+                        : null,
+                    isDense: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  onChanged: (v) => setState(() => _search = v.trim()),
+                ),
+              ]),
+            ),
+            const Divider(height: 8),
+            Expanded(
+              child: ListView.builder(
+                controller: sc,
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                itemCount: _filtered.length,
+                itemBuilder: (ctx, i) {
+                  final l = _filtered[i];
+                  final added = _stops.any((s) => s.id == l.id);
+                  return ListTile(
+                    dense: true,
+                    leading: Icon(Icons.place_outlined,
+                        color: added ? theme.colorScheme.primary : theme.colorScheme.outline, size: 20),
+                    title: Text(l.name, style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: added ? theme.colorScheme.primary : null)),
+                    subtitle: Text(l.type, style: theme.textTheme.bodySmall),
+                    trailing: added
+                        ? Icon(Icons.check_circle, color: theme.colorScheme.primary, size: 20)
+                        : const Icon(Icons.add_circle_outline, size: 20),
+                    onTap: () {
+                      if (!added && _stops.length < 10) setState(() {
+                        _stops.add(l);
+                        _dwellMinutes[l.id] = 25;
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(20, 8, 20, MediaQuery.of(context).padding.bottom + 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: (_stops.length >= 2 && _nameCtrl.text.isNotEmpty && !_saving)
+                      ? _save : null,
+                  child: _saving
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Text('Save route (${_stops.length} stops)'),
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
 
 class _CommunityReviewSheet extends ConsumerStatefulWidget {
   const _CommunityReviewSheet();

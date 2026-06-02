@@ -26,6 +26,7 @@ class RouteResponse(BaseModel):
 class RouteStopWithProgress(BaseModel):
     landmark: LandmarkResponse
     visited: bool = False
+    dwell_minutes: int = 25  # time to spend at this stop (excluding travel), matches _VISIT_MINUTES
 
 
 class RouteWithProgress(BaseModel):
@@ -41,3 +42,9 @@ class RouteWithProgress(BaseModel):
 
 class ReorderPayload(BaseModel):
     stop_ids: list[str]
+
+
+class AdminRouteCreate(BaseModel):
+    name: str
+    stop_ids: list[str]
+    dwell_minutes: list[int] = []  # per-stop dwell time; defaults to 30 min each if omitted

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../auth/providers/auth_provider.dart';
 
 const _categories = [
@@ -20,6 +21,7 @@ class InterestsScreen extends ConsumerStatefulWidget {
 
 class _InterestsScreenState extends ConsumerState<InterestsScreen> {
   late final Set<String> _selected;
+  bool _submitting = false;
 
   @override
   void initState() {
@@ -29,21 +31,26 @@ class _InterestsScreenState extends ConsumerState<InterestsScreen> {
   }
 
   Future<void> _submit() async {
-    if (_selected.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one interest')),
-      );
-      return;
-    }
-    await ref.read(authProvider.notifier).updateInterests(_selected.toList());
-    if (mounted) {
-      final error = ref.read(authProvider).error;
-      if (error != null) {
+    if (_submitting || _selected.isEmpty) {
+      if (_selected.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error), backgroundColor: Theme.of(context).colorScheme.error),
+          const SnackBar(content: Text('Select at least one interest')),
         );
       }
+      return;
     }
+    setState(() => _submitting = true);
+    await ref.read(authProvider.notifier).updateInterests(_selected.toList());
+    if (!mounted) return;
+    // Keep _submitting = true until navigating away so no second save fires.
+    // Clear any queued snackbars, then show exactly one.
+    final m = ScaffoldMessenger.of(context);
+    m.clearSnackBars();
+    m.showSnackBar(const SnackBar(
+      content: Text('Interests saved!'),
+      duration: Duration(seconds: 2),
+    ));
+    setState(() => _submitting = false);
   }
 
   @override
@@ -85,14 +92,25 @@ class _InterestsScreenState extends ConsumerState<InterestsScreen> {
               ),
               const SizedBox(height: 16),
               FilledButton(
-                onPressed: isLoading ? null : _submit,
+                onPressed: (isLoading || _submitting) ? null : _submit,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(double.infinity, 52),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
-                child: isLoading
+                child: isLoading || _submitting
                     ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Start Exploring', style: TextStyle(fontSize: 16)),
+                    : const Text('Save', style: TextStyle(fontSize: 16)),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () {
+                  if (context.canPop()) context.pop(); else context.go('/');
+                },
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 52),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Go Back', style: TextStyle(fontSize: 16)),
               ),
               const SizedBox(height: 24),
             ],

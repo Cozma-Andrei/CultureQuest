@@ -562,6 +562,85 @@ LANDMARK_WEBSITES = {
     "Cișmigiu Garden":           "https://www.cismigiu.ro",
 }
 
+LANDMARK_HOURS = {
+    # Museums (closed Monday)
+    "Romanian Athenaeum":           "Tue–Sun 10:00–18:00",
+    "National History Museum":      "Tue–Sun 10:00–18:00",
+    "National Museum of Art":       "Tue–Sun 11:00–19:00",
+    "Village Museum":               "Tue–Sun 09:00–17:00",
+    "Natural History Museum":       "Tue–Sun 10:00–18:00",
+    "National Museum of Contemporary Art": "Wed–Mon 10:00–18:00",
+    "Theodor Pallady Museum":       "Tue–Sun 10:00–18:00",
+    "Museum of Jewish History":     "Mon–Fri 09:00–17:00, Sun 10:00–14:00",
+    "Museum of Romanian Literature":"Tue–Sun 10:00–18:00",
+    "Storck Museum":                "Tue–Sun 10:00–18:00",
+    "Frederic Storck Museum":       "Tue–Sun 10:00–18:00",
+    "Zambaccian Museum":            "Tue–Sun 10:00–18:00",
+    "George Enescu Museum":         "Tue–Sun 10:00–17:00",
+    "Curtea Veche":                 "Daily 10:00–18:00",
+    "National Military Museum":     "Tue–Sun 10:00–18:00",
+    "Communist Era Museum":         "Daily 10:00–18:00",
+    # Palaces & historic buildings
+    "Cotroceni Palace":             "Tue–Sun 09:30–17:30",
+    "Cantacuzino Palace":           "Tue–Sun 10:00–18:00",
+    "CEC Palace":                   "Mon–Fri 09:00–17:00 (exterior: 24/7)",
+    "Suțu Palace":                  "Tue–Sun 10:00–18:00",
+    "Parliament Palace":            "Daily 09:00–17:00 (guided tours)",
+    # Churches & monasteries
+    "Stavropoleos Monastery":       "Daily 08:00–20:00",
+    "Patriarchal Cathedral":        "Daily 06:00–21:00",
+    "Antim Monastery":              "Daily 07:00–20:00",
+    "Radu Vodă Monastery":          "Daily 07:00–19:00",
+    "Crețulescu Church":            "Daily 08:00–18:00",
+    "Băneasa Church":               "Daily 07:00–19:00",
+    "Domița Bălașa Church":         "Daily 07:00–19:00",
+    # Parks & gardens (most open dawn–dusk or 24/7)
+    "Herăstrău Park":               "Open 24/7",
+    "Cișmigiu Garden":              "Open 24/7",
+    "Floreasca Park":               "Open 24/7",
+    "Tineretului Park":             "Open 24/7",
+    "Parcul Carol":                 "Daily 06:00–22:00",
+    "Parcul Izvor":                 "Open 24/7",
+    "Botanical Garden":             "Tue–Sun 09:00–19:00 (summer); 09:00–17:00 (winter)",
+    # Squares & boulevards
+    "Old Town Square":              "Open 24/7",
+    "Unirii Boulevard":             "Open 24/7",
+    "Piața Unirii Fountain":        "Open 24/7",
+    "Piața Revoluției":             "Open 24/7",
+    "Piața Romană":                 "Open 24/7",
+    "Arcul de Triumf":              "Open 24/7 (interior: summer weekends 10:00–18:00)",
+    "Piața Victoriei":              "Open 24/7",
+    # Opera & theatres
+    "National Opera":               "Performances Tue–Sun (box office 10:00–19:00)",
+    "National Theatre":             "Performances daily (box office 11:00–19:00)",
+    "Odeon Theatre":                "Performances Tue–Sun (box office 12:00–19:00)",
+    # Libraries
+    "Biblioteca Națională":         "Mon–Fri 09:00–20:00, Sat 09:00–16:00",
+    "Central University Library":   "Mon–Fri 09:00–21:00, Sat 10:00–18:00",
+    # Restaurants & cafés
+    "Caru' cu Bere":                "Mon–Thu 08:00–00:00, Fri–Sat 08:00–02:00, Sun 09:00–23:00",
+    "Lacrimi și Sfinți":            "Mon–Sun 13:00–00:00",
+    "Vatra":                        "Daily 12:00–23:00",
+    "Salon Roz":                    "Daily 12:00–23:00",
+    # Galleries
+    "Galateea Gallery":             "Tue–Fri 11:00–19:00, Sat 11:00–16:00",
+    "Mobius Gallery":               "Tue–Sat 11:00–19:00",
+    # Sports & entertainment
+    "Sala Palatului":               "Event days only (check programme)",
+    "Arena Națională":              "Event days only (check programme)",
+}
+
+# Default hours by landmark type
+_TYPE_DEFAULT_HOURS = {
+    "museum":     "Tue–Sun 10:00–18:00",
+    "park":       "Open 24/7",
+    "square":     "Open 24/7",
+    "restaurant": "Daily 12:00–23:00",
+    "gallery":    "Tue–Sat 11:00–19:00",
+    "monument":   "Open 24/7",
+    "building":   "Mon–Fri 09:00–17:00",
+}
+
 print("📍 Inserting 100 Bucharest landmarks …")
 landmark_docs = []
 for name, ltype, lat, lng, desc, cats, stories in RAW_LANDMARKS:
@@ -570,6 +649,7 @@ for name, ltype, lat, lng, desc, cats, stories in RAW_LANDMARKS:
         location={"type":"Point","coordinates":[lng, lat]},
         description=desc, categories=cats, stories=stories[:5],  # max 5 stories
         website=LANDMARK_WEBSITES.get(name),
+        opening_hours=LANDMARK_HOURS.get(name, _TYPE_DEFAULT_HOURS.get(ltype, "Open 24/7")),
         rating=0.0, visit_count=0,
         has_active_quest=True,
         submitted_by=admin_id,   # all Bucharest landmarks attributed to admin
@@ -714,6 +794,7 @@ for route_def in NAMED_ROUTES:
         is_global=True,            # visible to all users
         name=route_def["name"],
         stop_ids=stop_ids,
+        dwell_minutes=[25] * len(stop_ids),  # 25 min per stop, matching _VISIT_MINUTES
         interests=route_def["interests"],
         total_distance_m=round(total_dist),
         total_duration_minutes=total_min,

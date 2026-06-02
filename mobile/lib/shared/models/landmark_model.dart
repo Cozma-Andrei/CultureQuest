@@ -20,6 +20,7 @@ class LandmarkModel {
   final bool hasActiveQuest;
   final String? submittedBy;
   final String? website;
+  final String? openingHours;
   // These are computed locally — not from the server
   final bool visitedByMe;
   final double? myRating;
@@ -37,6 +38,7 @@ class LandmarkModel {
     this.hasActiveQuest = false,
     this.submittedBy,
     this.website,
+    this.openingHours,
     this.visitedByMe = false,
     this.myRating,
   });
@@ -44,7 +46,7 @@ class LandmarkModel {
   LandmarkModel withLocal({bool? visitedByMe, double? myRating}) => LandmarkModel(
     id: id, name: name, type: type, location: location, description: description,
     categories: categories, stories: stories, rating: rating, visitCount: visitCount,
-    hasActiveQuest: hasActiveQuest, submittedBy: submittedBy, website: website,
+    hasActiveQuest: hasActiveQuest, submittedBy: submittedBy, website: website, openingHours: openingHours,
     visitedByMe: visitedByMe ?? this.visitedByMe,
     myRating: myRating ?? this.myRating,
   );
@@ -62,5 +64,6 @@ class LandmarkModel {
         hasActiveQuest: json['has_active_quest'] ?? false,
         submittedBy: json['submitted_by'] as String?,
         website: json['website'] as String?,
+        openingHours: json['opening_hours'] as String?,
       );
 }

@@ -26,6 +26,7 @@ class LandmarkCreate(BaseModel):
     categories: list[str] = []
     stories: list[str] = []
     website: str | None = None
+    opening_hours: str | None = None
 
 
 class LandmarkStatus(str, Enum):
@@ -58,6 +59,7 @@ class LandmarkEdit(BaseModel):
     description: str | None = None
     categories: list[str] | None = None
     website: str | None = None
+    opening_hours: str | None = None
 
 
 class StorySubmit(BaseModel):

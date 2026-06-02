@@ -11,7 +11,18 @@ from app.services.landmark_service import get_nearby_landmarks, get_landmark_by_
 from app.services.auth_service import get_user_by_id
 
 _WALKING_M_PER_MIN = 83   # ~5 km/h
-_VISIT_MINUTES = 25
+_VISIT_MINUTES = 25       # default
+
+# Realistic dwell time by landmark type
+_VISIT_MINUTES_BY_TYPE: dict[str, int] = {
+    "museum":     70,
+    "gallery":    45,
+    "restaurant": 50,
+    "park":       35,
+    "building":   25,
+    "monument":   20,
+    "square":     15,
+}
 
 
 def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -34,34 +45,37 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
     user = await get_user_by_id(db, user_id)
     user_interests = [i.value for i in user.interests]
 
-    nearby = await get_nearby_landmarks(db, request.start_location.lat, request.start_location.lng, 2000)
+    nearby = await get_nearby_landmarks(db, request.start_location.lat, request.start_location.lng, 10000)
     if not nearby:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No landmarks found nearby. Try seeding sample data first.")
 
     scored = sorted(nearby, key=lambda l: _score(l, user_interests, request.start_location.lat, request.start_location.lng, 2000), reverse=True)
     candidates = scored[:request.max_landmarks * 2]
 
-    # Greedy nearest-neighbour route building within time budget
+    # Greedy nearest-neighbour route building.
+    # Budget only counts time AT landmarks (visit time); walking time is informational.
     stops: list[tuple[LandmarkResponse, int, float]] = []
     cur_lat, cur_lng = request.start_location.lat, request.start_location.lng
     remaining = list(candidates)
-    total_minutes = 0
+    total_visit_minutes = 0
 
     while remaining and len(stops) < request.max_landmarks:
         nearest = min(remaining, key=lambda l: _haversine(cur_lat, cur_lng, l.location.lat, l.location.lng))
         remaining.remove(nearest)
         walk = _haversine(cur_lat, cur_lng, nearest.location.lat, nearest.location.lng) / _WALKING_M_PER_MIN
-        stop_total = int(walk + _VISIT_MINUTES)
-        if total_minutes + stop_total > request.available_minutes:
+        visit = _VISIT_MINUTES_BY_TYPE.get(nearest.type, _VISIT_MINUTES)
+        if total_visit_minutes + visit > request.available_minutes:
             break
+        stop_total = int(walk + visit)  # walking + visit, shown per stop
         stops.append((nearest, stop_total, round(_score(nearest, user_interests, request.start_location.lat, request.start_location.lng, 2000), 2)))
-        total_minutes += stop_total
+        total_visit_minutes += visit
         cur_lat, cur_lng = nearest.location.lat, nearest.location.lng
 
     if not stops and candidates:
         l = candidates[0]
-        stops = [(l, _VISIT_MINUTES, round(_score(l, user_interests, request.start_location.lat, request.start_location.lng, 2000), 2))]
-        total_minutes = _VISIT_MINUTES
+        visit = _VISIT_MINUTES_BY_TYPE.get(l.type, _VISIT_MINUTES)
+        stops = [(l, visit, round(_score(l, user_interests, request.start_location.lat, request.start_location.lng, 2000), 2))]
+        total_visit_minutes = visit
 
     total_dist = 0.0
     prev_lat, prev_lng = request.start_location.lat, request.start_location.lng
@@ -76,7 +90,7 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
         id=str(uuid.uuid4()),
         stops=[RouteStop(landmark=l, estimated_duration_minutes=d, relevance_score=s) for l, d, s in stops],
         total_distance_m=round(total_dist),
-        total_duration_minutes=total_minutes,
+        total_duration_minutes=sum(d for _, d, _ in stops),  # sum of (walk+visit) per stop
         generated_at=generated_at,
     )
 
@@ -92,11 +106,13 @@ async def get_global_routes(db: AsyncIOMotorDatabase) -> list[RouteWithProgress]
     routes: list[RouteWithProgress] = []
     for doc in docs:
         stop_ids = doc.get("stop_ids", [])
+        dwell_list = doc.get("dwell_minutes", [])
         stops: list[RouteStopWithProgress] = []
-        for lid in stop_ids:
+        for i, lid in enumerate(stop_ids):
             landmark = await get_landmark_by_id(db, lid)
             if landmark:
-                stops.append(RouteStopWithProgress(landmark=landmark, visited=False))
+                dwell = dwell_list[i] if i < len(dwell_list) else 25
+                stops.append(RouteStopWithProgress(landmark=landmark, visited=False, dwell_minutes=dwell))
         routes.append(RouteWithProgress(
             id=str(doc["_id"]),
             name=doc.get("name"),

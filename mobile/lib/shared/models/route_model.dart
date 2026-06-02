@@ -42,13 +42,19 @@ class RouteModel {
 class RouteStopWithProgress {
   final LandmarkModel landmark;
   final bool visited;
+  final int dwellMinutes;
 
-  const RouteStopWithProgress({required this.landmark, required this.visited});
+  const RouteStopWithProgress({
+    required this.landmark,
+    required this.visited,
+    this.dwellMinutes = 30,
+  });
 
   factory RouteStopWithProgress.fromJson(Map<String, dynamic> json) =>
       RouteStopWithProgress(
         landmark: LandmarkModel.fromJson(json['landmark']),
         visited: json['visited'] as bool? ?? false,
+        dwellMinutes: json['dwell_minutes'] as int? ?? 30,
       );
 }
 

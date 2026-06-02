@@ -18,7 +18,6 @@ class MapState {
   final List<RouteWithProgress> myRoutes;
   final List<RouteWithProgress> globalRoutes;
   final RouteWithProgress? activeProgressRoute;
-  final LandmarkModel? resumeTarget;
   final bool isLocating;
   final bool isLoadingLandmarks;
   final bool isGeneratingRoute;
@@ -33,7 +32,6 @@ class MapState {
     this.myRoutes = const [],
     this.globalRoutes = const [],
     this.activeProgressRoute,
-    this.resumeTarget,
     this.isLocating = false,
     this.isLoadingLandmarks = false,
     this.isGeneratingRoute = false,
@@ -49,7 +47,6 @@ class MapState {
     List<RouteWithProgress>? myRoutes,
     List<RouteWithProgress>? globalRoutes,
     RouteWithProgress? activeProgressRoute,
-    LandmarkModel? resumeTarget,
     bool? isLocating,
     bool? isLoadingLandmarks,
     bool? isGeneratingRoute,
@@ -57,7 +54,6 @@ class MapState {
     String? error,
     bool clearRoute = false,
     bool clearProgressRoute = false,
-    bool clearResumeTarget = false,
     bool clearError = false,
   }) =>
       MapState(
@@ -68,7 +64,6 @@ class MapState {
         myRoutes: myRoutes ?? this.myRoutes,
         globalRoutes: globalRoutes ?? this.globalRoutes,
         activeProgressRoute: clearProgressRoute ? null : activeProgressRoute ?? this.activeProgressRoute,
-        resumeTarget: clearResumeTarget ? null : resumeTarget ?? this.resumeTarget,
         isLocating: isLocating ?? this.isLocating,
         isLoadingLandmarks: isLoadingLandmarks ?? this.isLoadingLandmarks,
         isGeneratingRoute: isGeneratingRoute ?? this.isGeneratingRoute,
@@ -81,7 +76,7 @@ class MapNotifier extends StateNotifier<MapState> {
   final ApiService _api;
   final LocalDataService _local;
   StreamSubscription<Position>? _positionSub;
-  final Set<String> _autoVisited = {};
+  bool _disposed = false;
 
   MapNotifier(this._api, this._local) : super(const MapState(isLocating: true)) {
     _initLocation();
@@ -121,64 +116,10 @@ class MapNotifier extends StateNotifier<MapState> {
   }
 
   void _onPosition(Position pos) {
+    if (_disposed) return;
     state = state.copyWith(position: pos);
-    _checkRouteProximity(pos);
-  }
-
-  void _checkRouteProximity(Position pos) {
-    final route = state.activeProgressRoute;
-    if (route == null) return;
-    final nextStop = route.stops.firstWhere(
-      (s) => !s.visited && !_autoVisited.contains(s.landmark.id),
-      orElse: () => const RouteStopWithProgress(landmark: _dummy, visited: true),
-    );
-    if (nextStop.visited) return; // all done or nothing left
-
-    final dist = Geolocator.distanceBetween(
-      pos.latitude, pos.longitude,
-      nextStop.landmark.location.lat, nextStop.landmark.location.lng,
-    );
-    if (dist <= _proximityMeters) {
-      _autoVisited.add(nextStop.landmark.id);
-      _arriveAtStop(nextStop.landmark, route);
-    }
-  }
-
-  Future<void> _arriveAtStop(LandmarkModel landmark, RouteWithProgress route) async {
-    // Mark visited locally; only increment server counter on first visit
-    final isFirstVisit = !_local.isVisited(landmark.id);
-    await _local.markVisited(landmark.id);
-    _applyVisit(landmark.id);
-    if (isFirstVisit) _api.post('/landmarks/${landmark.id}/visit').ignore();
-    // Set resumeTarget so map screen fetches navigation to the NEXT stop
-    final updated = state.activeProgressRoute;
-    if (updated == null) return;
-    final nextUnvisited = updated.stops.firstWhere(
-      (s) => !s.visited,
-      orElse: () => const RouteStopWithProgress(landmark: _dummy, visited: true),
-    );
-    if (!nextUnvisited.visited) {
-      state = state.copyWith(resumeTarget: nextUnvisited.landmark);
-    }
-  }
-
-  void _applyVisit(String landmarkId) {
-    final route = state.activeProgressRoute;
-    if (route == null) return;
-    final newStops = route.stops.map((s) =>
-      s.landmark.id == landmarkId
-          ? RouteStopWithProgress(landmark: s.landmark, visited: true)
-          : s,
-    ).toList();
-    final updated = RouteWithProgress(
-      id: route.id, name: route.name, stops: newStops,
-      totalDistanceM: route.totalDistanceM, totalDurationMinutes: route.totalDurationMinutes,
-      generatedAt: route.generatedAt, visitedCount: newStops.where((s) => s.visited).length,
-    );
-    final newRoutes = state.myRoutes.map((r) => r.id == route.id ? updated : r).toList();
-    state = state.copyWith(activeProgressRoute: updated, myRoutes: newRoutes);
-    // Persist progress locally
-    _local.updateRoute(_routeToJson(updated));
+    // Note: auto-proximity check removed — visits are only recorded via explicit user action
+    // (tapping "View Quests" when nearby, completing a quest, etc.)
   }
 
   /// Annotate a list of raw landmarks with local visited/rating data.
@@ -251,19 +192,11 @@ class MapNotifier extends StateNotifier<MapState> {
   }
 
   void viewRouteOnMap(RouteWithProgress route) {
-    state = state.copyWith(activeProgressRoute: route, clearRoute: true, clearResumeTarget: true);
+    state = state.copyWith(activeProgressRoute: route, clearRoute: true);
   }
-
-  void resumeRoute(RouteWithProgress route) {
-    final next = route.stops.firstWhere((s) => !s.visited, orElse: () => route.stops.first);
-    state = state.copyWith(activeProgressRoute: route, resumeTarget: next.landmark, clearRoute: true);
-  }
-
-  void consumeResumeTarget() => state = state.copyWith(clearResumeTarget: true);
 
   void clearProgressRoute() {
-    _autoVisited.clear();
-    state = state.copyWith(clearProgressRoute: true, clearResumeTarget: true);
+    state = state.copyWith(clearProgressRoute: true);
   }
 
 
@@ -278,6 +211,7 @@ class MapNotifier extends StateNotifier<MapState> {
         'visit_count': s.landmark.visitCount, 'has_active_quest': s.landmark.hasActiveQuest,
       },
       'visited': s.visited,
+      'dwell_minutes': s.dwellMinutes,
     }).toList(),
     'total_distance_m': r.totalDistanceM,
     'total_duration_minutes': r.totalDurationMinutes,
@@ -285,7 +219,7 @@ class MapNotifier extends StateNotifier<MapState> {
     'visited_count': r.visitedCount,
   };
 
-  Future<void> generateRoute({int availableMinutes = 90}) async {
+  Future<void> generateRoute({int availableMinutes = 300}) async {
     final pos = state.position;
     if (pos == null) return;
     state = state.copyWith(isGeneratingRoute: true, clearError: true, clearProgressRoute: true);
@@ -300,31 +234,17 @@ class MapNotifier extends StateNotifier<MapState> {
       // Convert to RouteWithProgress (no stops visited yet) and save locally
       final withProgress = RouteWithProgress(
         id: route.id,
-        stops: route.stops.map((s) => RouteStopWithProgress(landmark: s.landmark, visited: false)).toList(),
+        stops: route.stops.map((s) => RouteStopWithProgress(
+          landmark: s.landmark, visited: false,
+          dwellMinutes: s.estimatedDurationMinutes,  // preserves type-based time from backend
+        )).toList(),
         totalDistanceM: route.totalDistanceM,
         totalDurationMinutes: route.totalDurationMinutes,
         generatedAt: res.data['generated_at'] ?? '',
         visitedCount: 0,
       );
-      await _local.saveRoute(jsonDecode(jsonEncode({
-        'id': withProgress.id,
-        'name': withProgress.name,
-        'stops': withProgress.stops.map((s) => {
-          'landmark': {
-            'id': s.landmark.id, 'name': s.landmark.name, 'type': s.landmark.type,
-            'location': {'lat': s.landmark.location.lat, 'lng': s.landmark.location.lng},
-            'description': s.landmark.description,
-            'categories': s.landmark.categories, 'stories': s.landmark.stories,
-            'rating': s.landmark.rating, 'visit_count': s.landmark.visitCount,
-            'has_active_quest': s.landmark.hasActiveQuest,
-          },
-          'visited': s.visited,
-        }).toList(),
-        'total_distance_m': withProgress.totalDistanceM,
-        'total_duration_minutes': withProgress.totalDurationMinutes,
-        'generated_at': withProgress.generatedAt,
-        'visited_count': 0,
-      })));
+      // Use _routeToJson so dwell_minutes is persisted correctly
+      await _local.saveRoute(_routeToJson(withProgress));
       _loadLocalRoutes();
       state = state.copyWith(activeRoute: route, isGeneratingRoute: false);
     } catch (_) {
@@ -348,6 +268,7 @@ class MapNotifier extends StateNotifier<MapState> {
 
   @override
   void dispose() {
+    _disposed = true;
     _positionSub?.cancel();
     super.dispose();
   }

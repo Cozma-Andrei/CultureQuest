@@ -20,6 +20,7 @@ def _doc_to_landmark(doc: dict) -> LandmarkResponse:
         categories=doc.get("categories", []),
         stories=doc.get("stories", []),
         website=doc.get("website"),
+        opening_hours=doc.get("opening_hours"),
         rating=doc.get("rating", 0.0),
         visit_count=doc.get("visit_count", 0),
         has_active_quest=doc.get("has_active_quest", False),
@@ -249,6 +250,7 @@ async def edit_landmark(db: AsyncIOMotorDatabase, landmark_id: str, payload: Lan
         "description": payload.description,
         "categories": payload.categories,
         "website": payload.website,
+        "opening_hours": payload.opening_hours,
     }.items() if v is not None}
     if not updates:
         return await get_landmark_by_id(db, landmark_id)
