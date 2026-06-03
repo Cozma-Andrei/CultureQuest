@@ -76,6 +76,7 @@ class MapNotifier extends StateNotifier<MapState> {
   final ApiService _api;
   final LocalDataService _local;
   StreamSubscription<Position>? _positionSub;
+  StreamSubscription<Position>? _headingSub; // high-frequency, for arrow updates
   bool _disposed = false;
 
   MapNotifier(this._api, this._local) : super(const MapState(isLocating: true)) {
@@ -95,21 +96,45 @@ class MapNotifier extends StateNotifier<MapState> {
         return;
       }
 
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      state = state.copyWith(position: position, isLocating: false);
-      await Future.wait([
-        fetchLandmarks(position.latitude, position.longitude),
-        fetchAllLandmarks(),
-      ]);
+      // Don't use getCurrentPosition (can return stale cached fix).
+      // The position stream will provide the first accurate fix via _onPosition.
+      state = state.copyWith(isLocating: false);
 
+      // Main position stream — triggers map dot movement (8m filter reduces jitter)
       _positionSub = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
-          distanceFilter: 8,           // only update after 8m real movement
+          distanceFilter: 8,
           accuracy: LocationAccuracy.high,
         ),
       ).listen(_onPosition);
+
+      // High-frequency heading stream — only updates the heading for the arrow overlay
+      _headingSub = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          distanceFilter: 0,
+          accuracy: LocationAccuracy.bestForNavigation,
+        ),
+      ).listen((pos) {
+        if (_disposed) return;
+        // Only update heading; keep existing lat/lng to avoid jitter on the dot
+        final cur = state.position;
+        if (cur != null && pos.heading != cur.heading) {
+          state = state.copyWith(
+            position: Position(
+              latitude: cur.latitude,
+              longitude: cur.longitude,
+              accuracy: cur.accuracy,
+              altitude: cur.altitude,
+              altitudeAccuracy: cur.altitudeAccuracy,
+              heading: pos.heading,
+              headingAccuracy: pos.headingAccuracy,
+              speed: pos.speed,
+              speedAccuracy: pos.speedAccuracy,
+              timestamp: cur.timestamp,
+            ),
+          );
+        }
+      });
     } catch (_) {
       state = state.copyWith(isLocating: false, error: 'Could not get location');
     }
@@ -117,9 +142,15 @@ class MapNotifier extends StateNotifier<MapState> {
 
   void _onPosition(Position pos) {
     if (_disposed) return;
+    // Skip the initial fix if accuracy is worse than 100 m to avoid the "jump" artefact.
+    final isFirstFix = state.position == null;
+    if (isFirstFix && pos.accuracy > 100) return;
     state = state.copyWith(position: pos);
-    // Note: auto-proximity check removed — visits are only recorded via explicit user action
-    // (tapping "View Quests" when nearby, completing a quest, etc.)
+    // Fetch landmarks on the first accepted fix
+    if (isFirstFix) {
+      fetchLandmarks(pos.latitude, pos.longitude);
+      fetchAllLandmarks();
+    }
   }
 
   /// Annotate a list of raw landmarks with local visited/rating data.
@@ -270,6 +301,7 @@ class MapNotifier extends StateNotifier<MapState> {
   void dispose() {
     _disposed = true;
     _positionSub?.cancel();
+    _headingSub?.cancel();
     super.dispose();
   }
 }

@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -37,10 +39,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   List<LatLng> _overviewPolyline = const []; // purple dashed: all route stops via streets
   List<LatLng> _navPolyline = const [];      // teal: standalone landmark navigation
   LandmarkModel? _navTarget;
-  String _navMode = 'walking'; // 'walking' | 'driving'
+  String _navMode = 'walking'; // 'walking' | 'driving' | 'transit'
   int? _navDurationSec;        // seconds from OSRM for current nav
   int? _routeDurationSec;      // seconds from OSRM for route overview
-  bool _headingUp = false;     // rotate map to travel direction when navigating
+  bool _headingUp = false;
+  StreamSubscription<CompassEvent>? _compassSub;
+  double _lastCompassHeading = 0;
   // Location picker state
   bool _pickingLocation = false;
   LatLng? _pickedLocation;
@@ -50,10 +54,23 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _sheetController.addListener(() => setState(() {}));
+    // Magnetometer compass — rotates map even when stationary
+    _compassSub = FlutterCompass.events?.listen((event) {
+      if (!mounted || !_headingUp) return;
+      final heading = event.heading;
+      if (heading == null) return;
+      // Only rotate if heading changed by more than 2° to suppress sensor noise
+      double diff = (heading - _lastCompassHeading).abs();
+      if (diff > 180) diff = 360 - diff;
+      if (diff < 2.0) return;
+      _lastCompassHeading = heading;
+      _mapController.rotate(-heading);
+    });
   }
 
   @override
   void dispose() {
+    _compassSub?.cancel();
     _tabController.dispose();
     _sheetController.dispose();
     super.dispose();
@@ -87,18 +104,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         setState(() { _streetPolyline = const []; _overviewPolyline = const []; _routeDurationSec = null; _headingUp = false; });
         _mapController.rotate(0);
       }
-      // Heading-up: rotate map to follow path direction in real time
+      // Heading-up: rotate map to GPS heading (cardinal direction of travel)
       if (_headingUp &&
           (_navTarget != null || next.activeProgressRoute != null || next.activeRoute != null) &&
           next.position != null) {
-        final lookahead = _lookaheadOnPath(next.position!);
-        if (lookahead != null) {
-          final bearing = _bearingTo(
-            LatLng(next.position!.latitude, next.position!.longitude),
-            lookahead,
-          );
-          _mapController.rotate(-bearing);
-        }
+        _mapController.rotate(-(next.position!.heading));
       }
     });
 
@@ -224,11 +234,20 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       ),
       body: Stack(
         children: [
-          FlutterMap(
+          // Perspective tilt when heading-up — map recedes toward horizon (navigation mode)
+          Transform(
+            alignment: Alignment.bottomCenter,
+            transform: _headingUp
+                ? (Matrix4.identity()
+                    ..setEntry(3, 2, 0.0012) // perspective depth
+                    ..rotateX(0.32))         // ~18° tilt backward
+                : Matrix4.identity(),
+            child: FlutterMap(
             mapController: _mapController,
             options: MapOptions(
               initialCenter: initialCenter,
               initialZoom: 15,
+              maxZoom: 17,
               interactionOptions: InteractionOptions(
                 flags: _headingUp
                     ? InteractiveFlag.all  // allow rotation when heading-up so map follows bearing
@@ -246,7 +265,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 tileProvider: _CachedTileProvider(),
                 panBuffer: 1,
                 keepBuffer: 4,
-                maxZoom: 19,
+                maxZoom: 17,
               ),
               // Generated route polyline
               if (mapState.activeRoute != null && progressRoute == null)
@@ -299,9 +318,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   ),
                 ]),
             ],
-          ),
+          ),  // closes FlutterMap
+          ),  // closes Transform
 
-          // Location picker instruction banner
           // Picker instruction banner — at the very bottom when picking
           if (_pickingLocation)
             Positioned(
@@ -412,11 +431,19 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                           Text('To: ${_navTarget!.name}',
                               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                               overflow: TextOverflow.ellipsis),
-                          if (_navDurationSec != null)
+                          if (_navMode == 'transit')
+                            const Text('🚌 Tap "Open in Google Maps" for routes',
+                                style: TextStyle(color: Colors.white70, fontSize: 11))
+                          else if (_navDurationSec != null) ...[
                             Text(
                               '~${(_navDurationSec! / 60).ceil()} min ${_navMode == "driving" ? "drive" : "walk"}',
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
+                            Text(
+                              'Arriving ~${DateFormat('HH:mm').format(DateTime.now().add(Duration(seconds: _navDurationSec!)))}',
+                              style: const TextStyle(color: Colors.white60, fontSize: 11),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -439,9 +466,16 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                     const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () {
+                        final stoppedTarget = _navTarget;
                         setState(() { _navTarget = null; _navPolyline = const []; _navMode = 'walking'; _headingUp = false; });
                         _mapController.rotate(0);
                         _restoreSheet();
+                        // Reopen the landmark popup so context isn't lost
+                        if (stoppedTarget != null) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) _showLandmarkSheet(stoppedTarget);
+                          });
+                        }
                       },
                       child: const Icon(Icons.close, color: Colors.white, size: 18),
                     ),
@@ -530,8 +564,18 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   final ar = ref.read(mapProvider).activeRoute;
                   if (ar != null) _fetchStreetRoute(ar.stops, ref.read(mapProvider).position);
                 },
-                onStopNav: () => setState(() { _navTarget = null; _navPolyline = const []; }),
+                onStopNav: () {
+                  final stoppedTarget = _navTarget;
+                  setState(() { _navTarget = null; _navPolyline = const []; _headingUp = false; });
+                  _mapController.rotate(0);
+                  if (stoppedTarget != null) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _showLandmarkSheet(stoppedTarget);
+                    });
+                  }
+                },
                 routeDurationSec: _routeDurationSec,
+                openInMaps: _openGoogleMaps,
                 headingUp: _headingUp,
                 onHeadingUpToggle: () {
                   setState(() => _headingUp = !_headingUp);
@@ -567,14 +611,13 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   }
 
   /// Finds a lookahead point ~80 m ahead of the user on the active polyline.
-  /// Apply heading-up rotation immediately using the current position.
+  /// Apply heading-up rotation immediately.
+  /// Compass events will keep it updated; this just triggers the initial zoom.
   void _applyHeadingNow() {
     final pos = ref.read(mapProvider).position;
     if (pos == null) return;
-    final lookahead = _lookaheadOnPath(pos);
-    if (lookahead != null) {
-      _mapController.rotate(-_bearingTo(LatLng(pos.latitude, pos.longitude), lookahead));
-    }
+    // Compass subscription handles rotation; just zoom to current position
+    _mapController.move(LatLng(pos.latitude, pos.longitude), 16);
   }
 
   LatLng? _lookaheadOnPath(Position pos) {
@@ -747,7 +790,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   }
 
   Future<void> _fetchStreetRoute(List<RouteStop> stops, dynamic origin) async {
-    if (origin == null || stops.isEmpty) return;
+    if (origin == null || stops.isEmpty || _navMode == 'transit') return;
     try {
       final waypoints = [
         '${origin.longitude},${origin.latitude}',
@@ -768,7 +811,26 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     } catch (_) {}
   }
 
+  /// Open Google Maps with the given travel mode (used for transit).
+  Future<void> _openGoogleMaps(double destLat, double destLng, String mode) async {
+    final pos = ref.read(mapProvider).position;
+    final origin = pos != null ? '${pos.latitude},${pos.longitude}' : '';
+    final gmMode = mode == 'transit' ? 'transit' : mode == 'driving' ? 'driving' : 'walking';
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1'
+      '${origin.isNotEmpty ? "&origin=$origin" : ""}'
+      '&destination=$destLat,$destLng'
+      '&travelmode=$gmMode',
+    );
+    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   Future<void> _fetchNavPolylineOnly(LandmarkModel landmark, String mode) async {
+    if (mode == 'transit') {
+      // Transit: clear any existing polyline — direction is handled via Google Maps
+      setState(() { _navPolyline = const []; _navDurationSec = null; });
+      return;
+    }
     final pos = ref.read(mapProvider).position;
     if (pos == null) return;
     try {
@@ -807,7 +869,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   }
 
   Future<void> _fetchRouteOverview(RouteWithProgress route) async {
-    if (route.stops.isEmpty) return;
+    if (route.stops.isEmpty || _navMode == 'transit') return;
     final pos = ref.read(mapProvider).position;
     try {
       final stopPoints = route.stops
@@ -1439,7 +1501,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               Row(children: [
                 Icon(Icons.access_time, size: 14, color: theme.colorScheme.primary),
                 const SizedBox(width: 6),
-                Text(l.openingHours!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
+                Expanded(child: Text(l.openingHours!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary))),
               ]),
             ],
             if (l.stories.isNotEmpty) ...[
@@ -1564,21 +1626,35 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               ]),
             ],
             const SizedBox(height: 16),
-            // Walk / Drive navigation row
+            // Walk / Drive / Transit navigation row
             Row(children: [
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () { Navigator.pop(context); _navigateToLandmark(l, mode: 'walking'); },
-                  icon: const Icon(Icons.directions_walk, size: 18),
+                  icon: const Icon(Icons.directions_walk, size: 16),
                   label: const Text('Walk'),
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () { Navigator.pop(context); _navigateToLandmark(l, mode: 'driving'); },
-                  icon: const Icon(Icons.directions_car, size: 18),
+                  icon: const Icon(Icons.directions_car, size: 16),
                   label: const Text('Drive'),
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _openGoogleMaps(l.location.lat, l.location.lng, 'transit');
+                  },
+                  icon: const Icon(Icons.directions_bus_outlined, size: 16),
+                  label: const Text('Transit'),
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
                 ),
               ),
             ]),
@@ -1746,33 +1822,28 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               ),
             ]),
             const SizedBox(height: 16),
-            // Walk / Drive
+            // Walk / Drive / Transit
             Row(children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    ref.read(proximityProvider.notifier).dismiss();
-                    _navigateToLandmark(l, mode: 'walking');
-                  },
-                  icon: const Icon(Icons.directions_walk, size: 16),
-                  label: const Text('Walk'),
-                  style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    ref.read(proximityProvider.notifier).dismiss();
-                    _navigateToLandmark(l, mode: 'driving');
-                  },
-                  icon: const Icon(Icons.directions_car, size: 16),
-                  label: const Text('Drive'),
-                  style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-                ),
-              ),
+              Expanded(child: OutlinedButton.icon(
+                onPressed: () { Navigator.pop(context); ref.read(proximityProvider.notifier).dismiss(); _navigateToLandmark(l, mode: 'walking'); },
+                icon: const Icon(Icons.directions_walk, size: 14),
+                label: const Text('Walk'),
+                style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 4)),
+              )),
+              const SizedBox(width: 4),
+              Expanded(child: OutlinedButton.icon(
+                onPressed: () { Navigator.pop(context); ref.read(proximityProvider.notifier).dismiss(); _navigateToLandmark(l, mode: 'driving'); },
+                icon: const Icon(Icons.directions_car, size: 14),
+                label: const Text('Drive'),
+                style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 4)),
+              )),
+              const SizedBox(width: 4),
+              Expanded(child: OutlinedButton.icon(
+                onPressed: () { Navigator.pop(context); ref.read(proximityProvider.notifier).dismiss(); _openGoogleMaps(l.location.lat, l.location.lng, 'transit'); },
+                icon: const Icon(Icons.directions_bus_outlined, size: 14),
+                label: const Text('Transit'),
+                style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 4)),
+              )),
             ]),
             const SizedBox(height: 8),
             Row(children: [
@@ -1862,6 +1933,7 @@ class _BottomPanel extends ConsumerStatefulWidget {
   final void Function(String) onNavModeChanged;
   final VoidCallback onStopNav;
   final int? routeDurationSec;
+  final Future<void> Function(double lat, double lng, String mode) openInMaps;
   final bool headingUp;
   final VoidCallback onHeadingUpToggle;
 
@@ -1875,6 +1947,7 @@ class _BottomPanel extends ConsumerStatefulWidget {
     required this.onNavModeChanged,
     required this.onStopNav,
     this.routeDurationSec,
+    required this.openInMaps,
     required this.headingUp,
     required this.onHeadingUpToggle,
   });
@@ -2069,19 +2142,14 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
           child: Row(children: [
-            _ModeChip(
-              label: 'Walk',
-              icon: Icons.directions_walk,
-              selected: widget.navMode == 'walking',
-              onTap: () => widget.onNavModeChanged('walking'),
-            ),
+            _ModeChip(label: 'Walk', icon: Icons.directions_walk,
+                selected: widget.navMode == 'walking', onTap: () => widget.onNavModeChanged('walking')),
             const SizedBox(width: 8),
-            _ModeChip(
-              label: 'Drive',
-              icon: Icons.directions_car,
-              selected: widget.navMode == 'driving',
-              onTap: () => widget.onNavModeChanged('driving'),
-            ),
+            _ModeChip(label: 'Drive', icon: Icons.directions_car,
+                selected: widget.navMode == 'driving', onTap: () => widget.onNavModeChanged('driving')),
+            const SizedBox(width: 8),
+            _ModeChip(label: 'Transit', icon: Icons.directions_bus_outlined,
+                selected: widget.navMode == 'transit', onTap: () => widget.onNavModeChanged('transit')),
           ]),
         ),
       ),
@@ -2159,6 +2227,17 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
                 label: const Text('View Quests'),
               ),
             ),
+            if (widget.navMode == 'transit') ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => widget.openInMaps(l.location.lat, l.location.lng, 'transit'),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('Open in Google Maps'),
+                ),
+              ),
+            ],
           ]),
         ),
       ),
@@ -3763,7 +3842,7 @@ class _NearbyEventsSheetState extends ConsumerState<_NearbyEventsSheet> {
     try {
       final res = await ref.read(apiServiceProvider).get(
         '/events/nearby',
-        params: {'lat': pos.latitude, 'lng': pos.longitude, 'radius_m': 1500},
+        params: {'lat': pos.latitude, 'lng': pos.longitude, 'radius_m': 3000},
       );
       setState(() {
         _events = (res.data as List).map((j) => EventModel.fromJson(j as Map<String, dynamic>)).toList();
@@ -3806,7 +3885,7 @@ class _NearbyEventsSheetState extends ConsumerState<_NearbyEventsSheet> {
                       ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                           Icon(Icons.event_busy_outlined, size: 48, color: theme.colorScheme.outline),
                           const SizedBox(height: 8),
-                          Text('No events within 1.5 km', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
+                          Text('No events within 3 km', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
                         ]))
                       : ListView.separated(
                           controller: sc,
