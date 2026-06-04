@@ -18,7 +18,7 @@ class LocalDataService {
 
   LocalDataService(this._prefs, [this._userId = 'guest']);
 
-  // Key helper — every key is namespaced to this user
+  // Key helper - every key is namespaced to this user
   String _k(String suffix) => 'cq_${_userId}_$suffix';
 
   // ── Visits ────────────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('Override in ProviderScope');
 });
 
-// Automatically scoped to the current user — changes when user logs in/out
+// Automatically scoped to the current user - changes when user logs in/out
 final localDataProvider = Provider<LocalDataService>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
   final userId = ref.watch(authProvider.select((s) => s.user?.id ?? 'guest'));

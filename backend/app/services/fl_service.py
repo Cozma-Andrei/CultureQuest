@@ -40,6 +40,14 @@ async def submit_client_update(
     return {"round": new_round, "aggregated": True, "num_samples": num_samples}
 
 
+async def initialize_model(redis: Redis, weights: list[list[float]]) -> None:
+    """Replace global model with pre-trained weights. Resets all FL history."""
+    await redis.set(FL_WEIGHTS_KEY, json.dumps(weights))
+    await redis.set(FL_ROUND_KEY, '0')
+    await redis.delete(FL_CLIENTS_KEY)
+    await redis.set(FL_SAMPLES_KEY, '0')
+
+
 async def get_fl_status(redis: Redis) -> dict:
     round_num     = int(await redis.get(FL_ROUND_KEY)    or 0)
     num_clients   = int(await redis.scard(FL_CLIENTS_KEY) or 0)

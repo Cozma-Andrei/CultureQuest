@@ -56,7 +56,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         }
       }
     } catch (_) {
-      // storage timed out or failed — proceed as logged out
+      // storage timed out or failed - proceed as logged out
     }
     state = state.copyWith(isInitialized: true);
   }

@@ -100,7 +100,7 @@ class MapNotifier extends StateNotifier<MapState> {
       // The position stream will provide the first accurate fix via _onPosition.
       state = state.copyWith(isLocating: false);
 
-      // Main position stream — triggers map dot movement (8m filter reduces jitter)
+      // Main position stream - triggers map dot movement (8m filter reduces jitter)
       _positionSub = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           distanceFilter: 8,
@@ -108,7 +108,7 @@ class MapNotifier extends StateNotifier<MapState> {
         ),
       ).listen(_onPosition);
 
-      // High-frequency heading stream — only updates the heading for the arrow overlay
+      // High-frequency heading stream - only updates the heading for the arrow overlay
       _headingSub = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           distanceFilter: 0,
@@ -306,7 +306,7 @@ class MapNotifier extends StateNotifier<MapState> {
   }
 }
 
-// Sentinel used in firstWhere orElse — never actually shown in UI
+// Sentinel used in firstWhere orElse - never actually shown in UI
 const _dummy = LandmarkModel(
   id: '', name: '', type: '', location: GeoPoint(lat: 0, lng: 0),
   description: '',

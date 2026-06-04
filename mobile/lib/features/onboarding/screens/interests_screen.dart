@@ -68,7 +68,7 @@ class _InterestsScreenState extends ConsumerState<InterestsScreen> {
               const SizedBox(height: 48),
               Text('What interests you?', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text('Select all that apply — your route will be personalised accordingly.',
+              Text('Select all that apply - your route will be personalised accordingly.',
                   style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
               const SizedBox(height: 32),
               Expanded(

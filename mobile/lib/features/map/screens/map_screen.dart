@@ -58,7 +58,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _sheetController.addListener(() => setState(() {}));
-    // Magnetometer compass — rotates map even when stationary
+    // Magnetometer compass - rotates map even when stationary
     _compassSub = FlutterCompass.events?.listen((event) {
       if (!mounted || !_headingUp) return;
       final heading = event.heading;
@@ -238,7 +238,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       ),
       body: Stack(
         children: [
-          // Perspective tilt when heading-up — map recedes toward horizon (navigation mode)
+          // Perspective tilt when heading-up - map recedes toward horizon (navigation mode)
           Transform(
             alignment: Alignment.bottomCenter,
             transform: _headingUp
@@ -271,15 +271,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 keepBuffer: 4,
                 maxZoom: 17,
               ),
-              // Generated route polyline
-              if (mapState.activeRoute != null && progressRoute == null)
+              // Generated route polyline — hidden while navigation is active
+              if (mapState.activeRoute != null && progressRoute == null && _navTarget == null)
                 PolylineLayer(polylines: [
                   _streetPolyline.isNotEmpty
                       ? Polyline(points: _streetPolyline, strokeWidth: 4, color: Colors.deepPurple)
                       : _buildRoutePolyline(mapState.activeRoute!.stops.map((s) => s.landmark).toList(), mapState.position),
                 ]),
-              // Progress route: solid deep purple (same style as generated route)
-              if (progressRoute != null && _overviewPolyline.isNotEmpty)
+              // Progress route overview polyline — hidden while navigation is active
+              if (progressRoute != null && _overviewPolyline.isNotEmpty && _navTarget == null)
                 PolylineLayer(polylines: [
                   Polyline(
                     points: _overviewPolyline,
@@ -287,10 +287,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                     color: Colors.deepPurple,
                   ),
                 ]),
-              // Standalone navigation polyline
-              if (_navTarget != null && progressRoute == null && mapState.activeRoute == null && _navPolyline.isNotEmpty)
-                PolylineLayer(polylines: [Polyline(points: _navPolyline, strokeWidth: 4, color: Colors.teal)]),
-              // Landmark markers — numbered for generated route stops, normal otherwise
+              // Navigation polyline — on top, shown whenever nav is active (including over routes)
+              if (_navTarget != null && _navPolyline.isNotEmpty)
+                PolylineLayer(polylines: [Polyline(points: _navPolyline, strokeWidth: 5, color: Colors.teal)]),
+              // Landmark markers - numbered for generated route stops, normal otherwise
               if (progressRoute == null && mapLandmarks.isNotEmpty)
                 MarkerLayer(
                   markers: mapState.activeRoute != null
@@ -325,7 +325,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
           ),  // closes FlutterMap
           ),  // closes Transform
 
-          // Picker instruction banner — at the very bottom when picking
+          // Picker instruction banner - at the very bottom when picking
           if (_pickingLocation)
             Positioned(
               left: 16, right: 80,
@@ -343,7 +343,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                       child: Text(
                         _pickedLocation == null
                             ? 'Tap on the map to place the pin'
-                            : 'Pin placed — tap again to move it',
+                            : 'Pin placed - tap again to move it',
                         style: TextStyle(
                             color: theme.colorScheme.onInverseSurface,
                             fontWeight: FontWeight.w500),
@@ -411,8 +411,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               ),
             ),
 
-          // Navigation banner — full width, FABs sit above it via their own bottom offset
-          if (_navTarget != null && progressRoute == null && mapState.activeRoute == null)
+          // Navigation banner - takes priority over route display when active
+          if (_navTarget != null)
             Positioned(
               left: 16, right: 16,
               bottom: MediaQuery.of(context).size.height *
@@ -436,7 +436,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                               overflow: TextOverflow.ellipsis),
                           if (_navMode == 'transit')
-                            const Text('🚌 Tap "Open in Google Maps" for routes',
+                            const Text('Tap "Open in Google Maps" for routes',
                                 style: TextStyle(color: Colors.white70, fontSize: 11))
                           else if (_navDurationSec != null) ...[
                             Text(
@@ -471,11 +471,13 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                     GestureDetector(
                       onTap: () {
                         final stoppedTarget = _navTarget;
+                        final hadRoute = mapState.activeRoute != null || progressRoute != null;
                         setState(() { _navTarget = null; _navPolyline = const []; _navMode = 'walking'; _headingUp = false; });
                         _mapController.rotate(0);
                         _restoreSheet();
-                        // Reopen the landmark popup so context isn't lost
-                        if (stoppedTarget != null) {
+                        // Only reopen landmark sheet if there was no route — if there was
+                        // a route, closing nav simply returns to route display.
+                        if (stoppedTarget != null && !hadRoute) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             if (mounted) _showLandmarkSheet(stoppedTarget);
                           });
@@ -488,12 +490,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               ),
             ),
 
-          // FABs — above the nav banner when navigating, aligned with sheet otherwise
+          // FABs - above the nav banner when navigating, aligned with sheet otherwise
           Positioned(
             right: 16,
             bottom: _pickingLocation
                 ? MediaQuery.of(context).padding.bottom + 16
-                : (_navTarget != null && progressRoute == null && mapState.activeRoute == null)
+                : (_navTarget != null)
                     // Nav banner is ~90px tall; raise FABs above it
                     ? MediaQuery.of(context).size.height *
                           (_sheetController.isAttached ? _sheetController.size : 0.28) +
@@ -569,14 +571,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   if (ar != null) _fetchStreetRoute(ar.stops, ref.read(mapProvider).position);
                 },
                 onStopNav: () {
-                  final stoppedTarget = _navTarget;
+                  // Closing nav inside a route returns to route — no landmark sheet
                   setState(() { _navTarget = null; _navPolyline = const []; _headingUp = false; });
                   _mapController.rotate(0);
-                  if (stoppedTarget != null) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) _showLandmarkSheet(stoppedTarget);
-                    });
-                  }
                 },
                 routeDurationSec: _routeDurationSec,
                 openInMaps: _openGoogleMaps,
@@ -840,7 +837,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
 
   Future<void> _fetchNavPolylineOnly(LandmarkModel landmark, String mode) async {
     if (mode == 'transit') {
-      // Transit: clear any existing polyline — direction is handled via Google Maps
+      // Transit: clear any existing polyline - direction is handled via Google Maps
       setState(() { _navPolyline = const []; _navDurationSec = null; });
       return;
     }
@@ -868,6 +865,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   Future<void> _navigateToLandmark(LandmarkModel landmark, {String? mode}) async {
     final navMode = mode ?? _navMode;
     setState(() { _navTarget = landmark; _navPolyline = const []; _navMode = navMode; });
+    ref.read(flProvider.notifier).recordEngagement(landmark, flLabelNavigationStarted);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_sheetController.isAttached) {
         _sheetController.animateTo(0.42, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
@@ -877,7 +875,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     if (pos == null) return;
     await _fetchNavPolylineOnly(landmark, navMode);
     if (!mounted) return;
-    // Keep map focused on user's location at a comfortable zoom — don't zoom out to fit the whole route
+    // Keep map focused on user's location at a comfortable zoom - don't zoom out to fit the whole route
     _mapController.move(LatLng(pos.latitude, pos.longitude), 15.0);
   }
 
@@ -1121,7 +1119,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
-          title: Text('Add Event — $landmarkName'),
+          title: Text('Add Event - $landmarkName'),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Event title', border: OutlineInputBorder())),
@@ -1282,6 +1280,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   if (mounted) {
                     final approved = (res.data as Map)['status'] == 'approved';
                     ref.read(authProvider.notifier).refreshUser();
+                    final lm = ref.read(mapProvider).allLandmarks.where((x) => x.id == landmarkId).firstOrNull;
+                    if (lm != null) ref.read(flProvider.notifier).recordEngagement(lm, flLabelQuestSuggested);
                     final m = ScaffoldMessenger.of(context);
                     m.clearSnackBars();
                     m.showSnackBar(SnackBar(
@@ -1395,6 +1395,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   final approved = (res.data as Map)['status'] == 'approved';
                   if (approved) ref.read(mapProvider.notifier).fetchAllLandmarks();
                   ref.read(authProvider.notifier).refreshUser();
+                  // Story submission is strong engagement signal
+                  final lm = ref.read(mapProvider).allLandmarks.where((x) => x.id == landmarkId).firstOrNull;
+                  if (lm != null) ref.read(flProvider.notifier).recordEngagement(lm, flLabelStorySubmitted);
                   final m = ScaffoldMessenger.of(context);
                   m.clearSnackBars();
                   m.showSnackBar(SnackBar(
@@ -1576,7 +1579,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   );
                   final lm = ref.read(mapProvider).allLandmarks
                       .where((x) => x.id == landmarkId).firstOrNull;
-                  if (lm != null) ref.read(flProvider.notifier).recordInteraction(lm, stars / 5.0);
+                  if (lm != null) ref.read(flProvider.notifier).recordRating(lm, stars); // review stars override engagement
                   await local.setMyRating(landmarkId, stars.toDouble());
                   ref.read(mapProvider.notifier).fetchAllLandmarks();
                   if (mounted) Navigator.pop(context); // close sheet after ID is saved
@@ -1609,6 +1612,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     final l = all.where((x) => x.id == stale.id).firstOrNull ?? stale;
     final theme = Theme.of(context);
     setState(() => _selectedLandmarkId = l.id);
+    // Weakest positive signal — user was curious enough to open the sheet
+    ref.read(flProvider.notifier).recordEngagement(l, flLabelSheetOpened);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1773,7 +1778,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               onAdd: () => _showAddCommentDialog(l.id, l.name),
               hasReview: ref.read(localDataProvider).getMyCommentId(l.id) != null,
             ),
-            // Any authenticated user can suggest — submissions go to review
+            // Any authenticated user can suggest - submissions go to review
             if (ref.read(authProvider).user != null) ...[
               const SizedBox(height: 10),
               Row(children: [
@@ -1842,9 +1847,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                               l.location.lat, l.location.lng,
                             ) <=
                             100.0;
-                    // Don't close sheet — quest route slides on top; sheet resurfaces on pop
+                    // Don't close sheet - quest route slides on top; sheet resurfaces on pop
                     await context.push('/quests/${l.id}',
-                        extra: {'name': l.name, 'type': l.type, 'isNearby': isNearby});
+                        extra: {'name': l.name, 'type': l.type, 'categories': l.categories, 'isNearby': isNearby});
                     // Refresh so visitedByMe updates in the sheet that's still open
                     if (mounted) await ref.read(mapProvider.notifier).fetchAllLandmarks();
                   },
@@ -1961,7 +1966,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               myRating: l.myRating,
               canRate: true,
               onRate: (stars) async {
-                ref.read(flProvider.notifier).recordInteraction(l, stars / 5.0);
+                ref.read(flProvider.notifier).recordRating(l, stars);
                 final prev = ref.read(localDataProvider).getMyRating(l.id);
                 try {
                   await ref.read(apiServiceProvider).post(
@@ -1974,7 +1979,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               },
             ),
             const SizedBox(height: 16),
-            // Contribute — always visible in proximity sheet (user is physically here)
+            // Contribute - always visible in proximity sheet (user is physically here)
             Row(children: [
               Expanded(
                 child: OutlinedButton.icon(
@@ -2023,7 +2028,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               Expanded(
                 child: OutlinedButton(
                   onPressed: () {
-                    ref.read(flProvider.notifier).recordInteraction(l, 0.0);
                     Navigator.pop(context);
                     ref.read(proximityProvider.notifier).dismiss();
                   },
@@ -2034,7 +2038,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               Expanded(
                 child: FilledButton.icon(
                   onPressed: () async {
-                    ref.read(flProvider.notifier).recordInteraction(l, 0.5);
                     await context.push('/quests/${l.id}',
                         extra: {'name': l.name, 'type': l.type, 'isNearby': true});
                     if (mounted) await ref.read(mapProvider.notifier).fetchAllLandmarks();
@@ -2313,7 +2316,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
   List<Widget> _buildNavTargetSlivers(
       BuildContext context, LandmarkModel l, ThemeData theme, double bottomInset) {
     return [
-      // Panel header — mode chips here too for when panel is expanded
+      // Panel header - mode chips here too for when panel is expanded
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
@@ -2383,7 +2386,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
               myRating: l.myRating,
               canRate: l.visitedByMe,
               onRate: l.visitedByMe ? (stars) async {
-                ref.read(flProvider.notifier).recordInteraction(l, stars / 5.0);
+                ref.read(flProvider.notifier).recordRating(l, stars);
                 final prev = ref.read(localDataProvider).getMyRating(l.id);
                 try {
                   await ref.read(apiServiceProvider).post('/landmarks/${l.id}/rate',
@@ -2510,7 +2513,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
     if (mapState.myRoutes.isEmpty) {
       items.add(Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text('No generated routes yet — use Explore to generate one.',
+        child: Text('No generated routes yet - use Explore to generate one.',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
       ));
     } else {
@@ -3120,10 +3123,13 @@ class _CreateRouteSheetState extends ConsumerState<_CreateRouteSheet> {
                         ? Icon(Icons.check_circle, color: theme.colorScheme.primary, size: 20)
                         : const Icon(Icons.add_circle_outline, size: 20),
                     onTap: () {
-                      if (!added && _stops.length < 10) setState(() {
-                        _stops.add(l);
-                        _dwellMinutes[l.id] = 25;
-                      });
+                      if (!added && _stops.length < 10) {
+                        setState(() {
+                          _stops.add(l);
+                          _dwellMinutes[l.id] = 25;
+                        });
+                        ref.read(flProvider.notifier).recordEngagement(l, flLabelAddedToRoute);
+                      }
                     },
                   );
                 },
@@ -3212,7 +3218,7 @@ class _CommunityReviewSheetState extends ConsumerState<_CommunityReviewSheet>
       if (!mounted) return;
       final detail = (e.response?.data as Map?)?['detail'] as String? ?? 'Vote failed';
       final msg = detail == 'You cannot validate your own submission'
-          ? 'This is your own submission — others must validate it.'
+          ? 'This is your own submission - others must validate it.'
           : detail;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
@@ -3335,7 +3341,7 @@ class _CommunityReviewSheetState extends ConsumerState<_CommunityReviewSheet>
           ]),
           const SizedBox(height: 8),
           if (isOwn)
-            Text('You submitted this — others must validate it',
+            Text('You submitted this - others must validate it',
                 style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline))
           else if (!hasVisited)
             Text('Complete a quest at this location to validate',
@@ -3604,7 +3610,7 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
             (p['description'] as String? ?? '').toLowerCase().contains(query)).toList();
 
     return Column(children: [
-      // Persistent search bar — outside ListView so it doesn't scroll away
+      // Persistent search bar - outside ListView so it doesn't scroll away
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
         child: TextField(
@@ -4017,7 +4023,7 @@ class _CommentsSectionState extends ConsumerState<_CommentsSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // ref.watch re-evaluates on every build — catches re-activation after offstage
+    // ref.watch re-evaluates on every build - catches re-activation after offstage
     final canAdd = ref.watch(visitedProvider).contains(widget.landmarkId);
     final label = widget.hasReview ? 'Edit' : 'Add';
     return FutureBuilder<List<CommentModel>>(
@@ -4142,7 +4148,7 @@ class _EventsSectionState extends ConsumerState<_EventsSection> {
         if (!snap.hasData && snap.connectionState == ConnectionState.waiting) {
           return const SizedBox(height: 4);
         }
-        // Always visible — non-admins see events list (or "No upcoming events")
+        // Always visible - non-admins see events list (or "No upcoming events")
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Icon(Icons.event_outlined, size: 16, color: theme.colorScheme.primary),
@@ -4449,7 +4455,7 @@ class _StarRatingRowState extends State<_StarRatingRow> {
           )),
           const SizedBox(width: 6),
           Text(
-            widget.averageRating > 0 ? widget.averageRating.toStringAsFixed(1) : '—',
+            widget.averageRating > 0 ? widget.averageRating.toStringAsFixed(1) : '-',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ]),

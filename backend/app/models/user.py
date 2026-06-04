@@ -55,3 +55,6 @@ class ModelUpdate(BaseModel):
     round: int
     weights: list[list[float]]
     num_samples: int
+
+class InitializePayload(BaseModel):
+    weights: list[list[float]]

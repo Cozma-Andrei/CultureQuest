@@ -40,7 +40,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         duration: const Duration(seconds: 3),
       ));
     } else {
-      // Logged in successfully — dismiss any lingering error message
+      // Logged in successfully - dismiss any lingering error message
       messenger.clearSnackBars();
     }
   }

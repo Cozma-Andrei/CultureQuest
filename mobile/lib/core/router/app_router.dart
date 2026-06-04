@@ -8,6 +8,7 @@ import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/onboarding/screens/interests_screen.dart';
 import '../../features/map/screens/map_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
+import '../../features/profile/screens/privacy_screen.dart';
 import '../../features/quest/screens/quest_screen.dart';
 
 class _AuthListenable extends ChangeNotifier {
@@ -47,6 +48,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/interests', builder: (_, __) => const InterestsScreen()),
       GoRoute(path: '/', builder: (_, __) => const MapScreen()),
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+      GoRoute(path: '/privacy', builder: (_, __) => const PrivacyScreen()),
       GoRoute(
         path: '/quests/:landmarkId',
         builder: (_, state) {
@@ -55,6 +57,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             landmarkId: state.pathParameters['landmarkId']!,
             landmarkName: extra['name'] as String? ?? '',
             landmarkType: extra['type'] as String? ?? '',
+            landmarkCategories: (extra['categories'] as List?)?.cast<String>() ?? [],
             isNearby: extra['isNearby'] as bool? ?? false,
           );
         },

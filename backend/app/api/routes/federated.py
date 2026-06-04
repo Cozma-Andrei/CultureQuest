@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
-from app.api.deps import get_current_user, get_redis
-from app.models.user import ModelUpdate
-from app.services.fl_service import get_global_weights, submit_client_update, get_fl_status
+from app.api.deps import get_current_user, get_admin_user, get_redis
+from app.models.user import ModelUpdate, InitializePayload
+from app.services.fl_service import get_global_weights, submit_client_update, get_fl_status, initialize_model
 
 router = APIRouter()
 
@@ -22,6 +22,17 @@ async def receive_model_update(
     """Accept local weight updates from a device and run FedAvg aggregation."""
     result = await submit_client_update(redis, payload.weights, payload.num_samples, user_id=user_id)
     return result
+
+
+@router.post("/admin/initialize")
+async def initialize_global_model(
+    payload: InitializePayload,
+    _=Depends(get_admin_user),
+    redis=Depends(get_redis),
+):
+    """Load pre-trained weights as the new global model. Resets round and FL history."""
+    await initialize_model(redis, payload.weights)
+    return {"status": "initialized", "layers": len(payload.weights), "round": 0}
 
 
 @router.get("/model/status")

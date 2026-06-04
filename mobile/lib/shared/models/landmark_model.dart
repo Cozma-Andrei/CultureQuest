@@ -23,7 +23,7 @@ class LandmarkModel {
   final String? openingHours;
   final double? ticketPrice;   // null = free entry
   final String? discountInfo;  // e.g. "15% off for 200 pts or 5 quests"
-  // These are computed locally — not from the server
+  // These are computed locally - not from the server
   final bool visitedByMe;
   final double? myRating;
 

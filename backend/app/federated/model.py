@@ -1,8 +1,18 @@
 import numpy as np
 
-# Architecture: 16 → 32 → 16 → 1
-# Input: 6 user interests (one-hot) + 8 landmark types (one-hot) + hour/24 + distance/1500
-INPUT_DIM = 16
+# Architecture: 22 -> 32 -> 16 -> 1
+# Input (22 dims):
+#  [0-5]  user interests one-hot     (art, architecture, history, gastronomy, nature, music)
+#  [6-13] landmark type one-hot      (museum, monument, park, gallery, restaurant, square, building, other)
+#  [14]   isOpen                     binary
+#  [15]   isWeekend                  binary
+#  [16]   hour / 24.0                float
+#  [17]   relativeDistanceRank       float [0=closest, 1=farthest]
+#  [18]   interestMatchScore         float [0,1]
+#  [19]   isPartOfRoute              binary
+#  [20]   routeStopNormalized        float [0,1]
+#  [21]   routeLengthNormalized      float [0,1]
+INPUT_DIM = 22
 HIDDEN_DIMS = [32, 16]
 OUTPUT_DIM = 1
 

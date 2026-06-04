@@ -72,7 +72,7 @@ class QuestNotifier extends StateNotifier<QuestState> {
       final res = await _api.post('/quests/$questId/complete', data: body);
       final result = Map<String, dynamic>.from(res.data as Map);
 
-      // Always mark visited when a quest is submitted — correct or not, user is there
+      // Always mark visited when a quest is submitted - correct or not, user is there
       // Using visitedProvider so _CommentsSection rebuilds immediately
       await _ref.read(visitedProvider.notifier).markVisited(landmarkId);
 

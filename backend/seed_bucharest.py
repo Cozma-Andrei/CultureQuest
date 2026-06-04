@@ -169,7 +169,7 @@ RAW_LANDMARKS = [
      "A leafy park in northern Bucharest, popular for jogging and outdoor cafés.",
      ["nature","gastronomy"], []),
     ("Văcărești Nature Park",          "park",       44.3995, 26.1050,
-     "An unexpected urban delta — a wetland that formed naturally in an abandoned reservoir.",
+     "An unexpected urban delta - a wetland that formed naturally in an abandoned reservoir.",
      ["nature"], ["Ceaușescu began a massive reservoir here in 1986 but abandoned it after the revolution. Nature reclaimed it.", "It is now officially Romania's first urban natural park and hosts over 130 bird species."]),
     ("Plumbuita Monastery Lake",       "park",       44.4750, 26.1380,
      "A tranquil lake and forest area in northeastern Bucharest surrounding a historic monastery.",
@@ -236,7 +236,7 @@ RAW_LANDMARKS = [
      ["history","architecture"], ["The cathedral holds the relics of Saint Dimitrie the New, patron of Bucharest."]),
     ("Mihai Vodă Monastery",           "building",   44.4278, 26.0912,
      "One of the oldest standing buildings in Bucharest, moved 285 metres on rails in 1985 to preserve it.",
-     ["history","architecture"], ["Ceaușescu ordered it moved rather than demolished—one of the few historic buildings to survive his urban renewal."]),
+     ["history","architecture"], ["Ceaușescu ordered it moved rather than demolished-one of the few historic buildings to survive his urban renewal."]),
     ("Dâmbovița Riverfront",           "square",     44.4240, 26.0900,
      "A revitalized linear park along the Dâmbovița River, once heavily industrialized.",
      ["nature","architecture"], []),
@@ -736,7 +736,7 @@ print("🚶 Simulating user activity …")
 # How many landmarks each user visits (realistic spread)
 visits_per_user = [28, 22, 18, 20, 14, 32, 12, 10]
 
-# Per-landmark counters (anonymous — no user_id stored)
+# Per-landmark counters (anonymous - no user_id stored)
 visit_counts  = {lid: 0 for lid in landmark_ids}   # total visit count
 rating_sums   = {lid: 0 for lid in landmark_ids}   # sum of ratings
 rating_counts = {lid: 0 for lid in landmark_ids}   # number of raters
@@ -749,7 +749,7 @@ user_completed_quest_ids = [[] for _ in user_ids]
 total_visits = 0
 total_ratings = 0
 
-# Landmarks referenced in community review pending items — every user must visit at least one
+# Landmarks referenced in community review pending items - every user must visit at least one
 COMMUNITY_REVIEW_NAMES = [
     "Romanian Athenaeum", "Stavropoleos Monastery", "Curtea Veche",
     "Herăstrău Park", "National Village Museum", "National History Museum",
@@ -810,7 +810,7 @@ for ui, uid in enumerate(user_ids):
     db.users.update_one({"_id": OID(uid)}, {"$set": {
         "points": user_points[ui],
         "completed_quests": user_completed_quests[ui],
-        # completed_quest_ids not stored server-side — tracked locally on device
+        # completed_quest_ids not stored server-side - tracked locally on device
     }})
 
 # ── Insert routes ──────────────────────────────────────────────────────────────
@@ -900,7 +900,7 @@ EVENTS_DATA = [
      "Hands-on workshop: pottery, weaving and embroidery with master craftsmen.",
      future(2, 10), future(2, 17)),
     ("Arcul de Triumf",           "National Day Parade Rehearsal",
-     "Watch the parade rehearsal from the public viewing area — free entry.",
+     "Watch the parade rehearsal from the public viewing area - free entry.",
      future(14, 9), future(14, 13)),
     ("Floreasca Park",            "Outdoor Yoga & Wellness Morning",
      "Free community yoga session followed by a guided meditation walk.",
@@ -915,7 +915,7 @@ EVENTS_DATA = [
      "An intimate recital of Chopin's nocturnes and ballades.",
      future(6, 19), future(6, 21, 30)),
     ("Herăstrău Park",            "Rowing Regatta",
-     "Annual amateur rowing competition on Herăstrău lake — spectators welcome.",
+     "Annual amateur rowing competition on Herăstrău lake - spectators welcome.",
      future(12, 9), future(12, 17)),
     ("Curtea Veche",              "Medieval Bucharest Re-enactment",
      "Costumed actors recreate life in 15th-century Bucharest.",
@@ -923,7 +923,7 @@ EVENTS_DATA = [
     ("National Village Museum",            "Photography Exhibition: Rural Romania",
      "Outdoor photo exhibition documenting disappearing village traditions.",
      future(15, 10), future(30, 19)),
-    ("National Opera",            "La Traviata — Opening Night",
+    ("National Opera",            "La Traviata - Opening Night",
      "Verdi's masterpiece performed by the Romanian National Opera.",
      future(11, 19), future(11, 22, 30)),
     ("Floreasca Park",            "Food Truck Rally",
@@ -936,7 +936,7 @@ EVENTS_DATA = [
      "Publishers and authors gather for the annual Bucharest book fair.",
      future(7, 10), future(9, 19)),
     ("Piața Romană",              "Open-Air Cinema Night",
-     "Classic Romanian films screened outdoors — bring a blanket.",
+     "Classic Romanian films screened outdoors - bring a blanket.",
      future(4, 21), future(4, 23, 30)),
 ]
 
@@ -963,7 +963,7 @@ COMMENT_DATA = [
     # (landmark_name, rating, text, pre_flagged)
     ("Romanian Athenaeum", 5, "One of the most beautiful concert halls I have ever visited. The acoustics are incredible!", False),
     ("Romanian Athenaeum", 4, "Stunning architecture inside and out. Guided tours are very informative.", False),
-    ("Romanian Athenaeum", 5, "Came for a Sunday concert — magical experience. The ceiling murals alone are worth the trip.", False),
+    ("Romanian Athenaeum", 5, "Came for a Sunday concert - magical experience. The ceiling murals alone are worth the trip.", False),
     ("National History Museum", 5, "The Dacian gold exhibition alone is worth the visit. Fascinating history of Romania.", False),
     ("National History Museum", 3, "Good collection but some exhibits need better lighting and English labels.", False),
     ("National History Museum", 4, "The Trajan's Column replica is incredibly detailed. A must for history lovers.", False),
@@ -984,9 +984,9 @@ COMMENT_DATA = [
     ("Arcul de Triumf", 4, "Smaller than Paris but equally impressive. The view from the top is great.", False),
     ("Arcul de Triumf", 5, "Well maintained and free to visit from outside. Nice area for a walk.", False),
     ("National Museum of Art", 5, "Outstanding collection of Romanian and European art. Do not miss the medieval section.", False),
-    ("National Museum of Art", 4, "The Romanian art wing is underrated. Great photography allowed — very visitor-friendly.", False),
+    ("National Museum of Art", 4, "The Romanian art wing is underrated. Great photography allowed - very visitor-friendly.", False),
     ("Cotroceni Palace", 5, "The guided tour is excellent. Beautifully restored royal rooms and gardens.", False),
-    ("Cotroceni Palace", 4, "Book tickets in advance — very popular. The art nouveau furniture is incredible.", False),
+    ("Cotroceni Palace", 4, "Book tickets in advance - very popular. The art nouveau furniture is incredible.", False),
     ("Parcul Carol", 4, "Great park with the Mausoleum and lovely paths. Very peaceful on weekday mornings.", False),
     ("Parcul Carol", 5, "Hidden gem of Bucharest. The fountain and rose garden are beautiful in spring.", False),
     ("Old Town Square", 3, "Lively atmosphere but very touristy and a bit pricey. Worth a quick visit.", False),
@@ -1016,10 +1016,10 @@ print(f"   ✓ {len(comment_docs)} comments created")
 # ── Pending community items (stories + quests awaiting peer review) ────────────
 print("⏳ Inserting pending community items …")
 pending_stories = [
-    ("Romanian Athenaeum",   "I once heard a pianist rehearsing alone at midnight — the sound echoed through the empty hall like a ghost performance."),
+    ("Romanian Athenaeum",   "I once heard a pianist rehearsing alone at midnight - the sound echoed through the empty hall like a ghost performance."),
     ("Stavropoleos Monastery","The monks still hand-copy manuscripts in the library. I watched one work for an hour without looking up once."),
     ("Curtea Veche",          "Legend says the ghost of Vlad the Impaler walks the ruins on foggy nights. A guard told me he heard footsteps with no source."),
-    ("Herăstrău Park",        "Every Sunday a group of elderly men play chess under the same oak tree — they've been meeting there for forty years."),
+    ("Herăstrău Park",        "Every Sunday a group of elderly men play chess under the same oak tree - they've been meeting there for forty years."),
     ("National Village Museum","A craftsman showed me a loom that belonged to his great-grandmother. He still uses it to weave the same pattern she did."),
 ]
 pending_quests_data = [
@@ -1075,7 +1075,7 @@ pending_landmark = {
     "name": "Hidden Garden of Văcărești",
     "type": "park",
     "location": {"type": "Point", "coordinates": [26.1050, 44.3850]},
-    "description": "An unofficial urban delta park that formed naturally in an abandoned reservoir — one of Europe's unexpected urban nature reserves.",
+    "description": "An unofficial urban delta park that formed naturally in an abandoned reservoir - one of Europe's unexpected urban nature reserves.",
     "categories": ["nature"], "stories": [], "rating": 0.0, "visit_count": 0,
     "has_active_quest": False, "submitted_by": admin_id,
     "status": "pending", "community_vote_count": 0,

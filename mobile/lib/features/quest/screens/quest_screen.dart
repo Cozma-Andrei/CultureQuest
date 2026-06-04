@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/quest_model.dart';
 import '../providers/quest_provider.dart';
-import '../../federated/providers/fl_provider.dart';
+import '../../federated/providers/fl_provider.dart'
+    show flProvider, flLabelQuestCompleted, flLabelQuestAttempted;
 
 class QuestScreen extends ConsumerStatefulWidget {
   final String landmarkId;
   final String landmarkName;
   final String landmarkType;
+  final List<String> landmarkCategories;
   final bool isNearby;
 
   const QuestScreen({
@@ -15,6 +17,7 @@ class QuestScreen extends ConsumerStatefulWidget {
     required this.landmarkId,
     required this.landmarkName,
     required this.landmarkType,
+    this.landmarkCategories = const [],
     required this.isNearby,
   });
 
@@ -57,15 +60,19 @@ class _QuestScreenState extends ConsumerState<QuestScreen> {
     final correct = result['correct'] as bool;
     final pointsEarned = result['points_earned'] as int;
 
-    if (correct && widget.landmarkType.isNotEmpty) {
-      ref.read(flProvider.notifier).recordInteractionForType(widget.landmarkType, 0.8);
-    }
+    // Quest attempt = 0.5 regardless of correctness; correct completion = 0.9
+    ref.read(flProvider.notifier).recordEngagementById(
+      widget.landmarkId,
+      widget.landmarkType,
+      widget.landmarkCategories,
+      correct ? flLabelQuestCompleted : flLabelQuestAttempted,
+    );
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(correct
             ? (pointsEarned > 0 ? '+$pointsEarned points earned!' : 'Quest completed!')
-            : 'Wrong answer — try again!'),
+            : 'Wrong answer - try again!'),
         backgroundColor: correct ? Colors.green.shade700 : Colors.red.shade700,
         duration: const Duration(seconds: 2),
       ),

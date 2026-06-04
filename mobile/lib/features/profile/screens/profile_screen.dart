@@ -169,7 +169,20 @@ class ProfileScreen extends ConsumerWidget {
             ]),
           ),
 
-          const SizedBox(height: 36),
+          const SizedBox(height: 16),
+
+          // Your Privacy
+          OutlinedButton.icon(
+            onPressed: () => context.push('/privacy'),
+            icon: const Icon(Icons.shield_outlined),
+            label: const Text('Your Privacy'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+
+          const SizedBox(height: 20),
 
           // Clear local data
           OutlinedButton.icon(
@@ -186,7 +199,7 @@ class ProfileScreen extends ConsumerWidget {
                     FilledButton(
                       onPressed: () async {
                         Navigator.pop(ctx);
-                        // 1. Clear all local storage only — server data is untouched
+                        // 1. Clear all local storage only - server data is untouched
                         await ref.read(localDataProvider).clearAll();
                         // 2. Clear pending FL interactions
                         ref.read(flProvider.notifier).clearBuffer();
