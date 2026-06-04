@@ -19,7 +19,9 @@ import '../../../shared/models/route_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../proximity/providers/proximity_provider.dart';
 import '../../../shared/models/event_model.dart';
+import '../../../shared/models/comment_model.dart';
 import '../../../core/services/local_data_service.dart';
+import '../../../core/providers/visited_provider.dart';
 import '../../federated/providers/fl_provider.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -48,6 +50,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   // Location picker state
   bool _pickingLocation = false;
   LatLng? _pickedLocation;
+  // Selected marker (highlighted when popup is open)
+  String? _selectedLandmarkId;
 
   @override
   void initState() {
@@ -532,7 +536,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                       _mapController.move(LatLng(mapState.position!.latitude, mapState.position!.longitude), 15);
                     }
                   },
-                  child: mapState.isLocating
+                  child: mapState.position == null
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.my_location),
                 ),
@@ -706,26 +710,35 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
 
   Marker _buildLandmarkMarker(LandmarkModel l) {
     final isNav = _navTarget?.id == l.id;
+    final isSelected = _selectedLandmarkId == l.id;
+    final size = isNav ? 44.0 : isSelected ? 46.0 : 36.0;
+    final color = isNav ? Colors.green.shade600 : _colorForType(l.type);
     return Marker(
       point: LatLng(l.location.lat, l.location.lng),
-      width: isNav ? 44 : 36,
-      height: isNav ? 44 : 36,
+      width: size,
+      height: size,
       child: GestureDetector(
         onTap: () => _showLandmarkSheet(l),
         child: Container(
           decoration: BoxDecoration(
-            color: isNav ? Colors.green.shade600 : _colorForType(l.type),
+            color: color,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: isNav ? 3 : 2),
+            border: Border.all(
+              color: isSelected ? Colors.white : Colors.white,
+              width: isSelected ? 3.5 : (isNav ? 3 : 2),
+            ),
             boxShadow: [
               BoxShadow(
-                color: isNav ? Colors.green.withOpacity(0.45) : Colors.black26,
-                blurRadius: isNav ? 10 : 4,
-                spreadRadius: isNav ? 3 : 0,
+                color: isSelected
+                    ? color.withOpacity(0.6)
+                    : isNav ? Colors.green.withOpacity(0.45) : Colors.black26,
+                blurRadius: isSelected ? 14 : (isNav ? 10 : 4),
+                spreadRadius: isSelected ? 4 : (isNav ? 3 : 0),
               ),
             ],
           ),
-          child: Icon(_iconForType(l.type), color: Colors.white, size: isNav ? 22 : 18),
+          child: Icon(_iconForType(l.type), color: Colors.white,
+              size: isNav ? 22 : isSelected ? 24 : 18),
         ),
       ),
     );
@@ -1071,7 +1084,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _AdminSubmissionsSheet(),
+      builder: (_) => _AdminSubmissionsSheet(
+        onOpenLandmark: _showLandmarkSheet,
+        onMoveMap: (lat, lng) => _mapController.move(LatLng(lat, lng), 16),
+      ),
     );
   }
 
@@ -1099,6 +1115,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     final descCtrl = TextEditingController();
     DateTime? startDate;
     DateTime? endDate;
+    bool allDay = false;
 
     showDialog(
       context: context,
@@ -1110,30 +1127,59 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Event title', border: OutlineInputBorder())),
               const SizedBox(height: 12),
               TextField(controller: descCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              ListTile(
+              const SizedBox(height: 4),
+              SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.calendar_today_outlined),
-                title: Text(startDate == null ? 'Pick start date & time' : DateFormat('dd MMM yyyy HH:mm').format(startDate!)),
-                onTap: () async {
-                  final d = await showDatePicker(context: ctx, initialDate: DateTime.now().add(const Duration(days: 1)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
-                  if (d == null) return;
-                  final t = await showTimePicker(context: ctx, initialTime: const TimeOfDay(hour: 18, minute: 0));
-                  if (t == null) return;
-                  setD(() => startDate = DateTime(d.year, d.month, d.day, t.hour, t.minute));
-                },
+                title: const Text('All day'),
+                value: allDay,
+                onChanged: (v) => setD(() { allDay = v; if (v && startDate != null) { endDate = null; } }),
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.calendar_today_outlined),
-                title: Text(endDate == null ? 'Pick end date & time (optional)' : DateFormat('dd MMM yyyy HH:mm').format(endDate!)),
+                title: Text(startDate == null
+                    ? 'Pick start date${allDay ? '' : ' & time'}'
+                    : allDay
+                        ? DateFormat('dd MMM yyyy').format(startDate!)
+                        : DateFormat('dd MMM yyyy HH:mm').format(startDate!)),
                 onTap: () async {
-                  final d = await showDatePicker(context: ctx, initialDate: startDate ?? DateTime.now().add(const Duration(days: 1)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
+                  final d = await showDatePicker(context: ctx, initialDate: DateTime.now().add(const Duration(days: 1)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
                   if (d == null) return;
-                  final t = await showTimePicker(context: ctx, initialTime: const TimeOfDay(hour: 20, minute: 0));
-                  if (t == null) return;
-                  setD(() => endDate = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+                  if (allDay) {
+                    setD(() { startDate = DateTime(d.year, d.month, d.day, 0, 0); endDate = DateTime(d.year, d.month, d.day, 23, 59); });
+                  } else {
+                    final t = await showTimePicker(context: ctx, initialTime: const TimeOfDay(hour: 18, minute: 0));
+                    if (t == null) return;
+                    setD(() => startDate = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+                  }
                 },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.event_outlined),
+                title: Text(endDate == null
+                    ? 'Pick end date (optional)'
+                    : allDay
+                        ? DateFormat('dd MMM yyyy').format(endDate!)
+                        : DateFormat('dd MMM yyyy HH:mm').format(endDate!)),
+                onTap: () async {
+                  final d = await showDatePicker(
+                      context: ctx,
+                      initialDate: startDate ?? DateTime.now().add(const Duration(days: 1)),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)));
+                  if (d == null) return;
+                  if (allDay) {
+                    setD(() => endDate = DateTime(d.year, d.month, d.day, 23, 59));
+                  } else {
+                    final t = await showTimePicker(context: ctx, initialTime: const TimeOfDay(hour: 20, minute: 0));
+                    if (t == null) return;
+                    setD(() => endDate = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+                  }
+                },
+                trailing: endDate != null
+                    ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () => setD(() => endDate = null))
+                    : null,
               ),
             ]),
           ),
@@ -1196,6 +1242,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               TextField(
                 controller: titleCtrl,
+                onChanged: (_) => setD(() {}),
                 decoration: const InputDecoration(labelText: 'Quest title', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 12),
@@ -1210,6 +1257,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 controller: descCtrl,
                 maxLines: 4,
                 maxLength: 600,
+                onChanged: (_) => setD(() {}),
                 decoration: const InputDecoration(labelText: 'Description / challenge text', border: OutlineInputBorder()),
               ),
             ]),
@@ -1217,8 +1265,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () async {
-                if (titleCtrl.text.trim().isEmpty) return;
+              onPressed: titleCtrl.text.trim().isEmpty || descCtrl.text.trim().isEmpty ? null : () async {
                 Navigator.pop(ctx);
                 if (mounted) Navigator.pop(context); // close landmark sheet
                 try {
@@ -1234,6 +1281,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   );
                   if (mounted) {
                     final approved = (res.data as Map)['status'] == 'approved';
+                    ref.read(authProvider.notifier).refreshUser();
                     final m = ScaffoldMessenger.of(context);
                     m.clearSnackBars();
                     m.showSnackBar(SnackBar(
@@ -1319,12 +1367,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     final ctrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
         title: Text('Story for $landmarkName'),
         content: TextField(
           controller: ctrl,
           maxLines: 5,
           maxLength: 500,
+          onChanged: (_) => setD(() {}),
           decoration: const InputDecoration(
             hintText: 'Share something memorable about this place…',
             border: OutlineInputBorder(),
@@ -1333,8 +1383,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
-              if (ctrl.text.trim().isEmpty) return;
+            onPressed: ctrl.text.trim().isEmpty ? null : () async {
               Navigator.pop(ctx);
               if (mounted) Navigator.pop(context); // close landmark sheet
               try {
@@ -1345,6 +1394,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 if (mounted) {
                   final approved = (res.data as Map)['status'] == 'approved';
                   if (approved) ref.read(mapProvider.notifier).fetchAllLandmarks();
+                  ref.read(authProvider.notifier).refreshUser();
                   final m = ScaffoldMessenger.of(context);
                   m.clearSnackBars();
                   m.showSnackBar(SnackBar(
@@ -1368,6 +1418,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
             child: const Text('Submit'),
           ),
         ],
+      ),
       ),
     );
   }
@@ -1459,11 +1510,105 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     );
   }
 
+  Future<List<CommentModel>> _fetchComments(String landmarkId) async {
+    try {
+      final res = await ref.read(apiServiceProvider).get('/comments/$landmarkId');
+      return (res.data as List).map((j) => CommentModel.fromJson(j as Map<String, dynamic>)).toList();
+    } catch (_) { return []; }
+  }
+
+  void _showAddCommentDialog(String landmarkId, String landmarkName) {
+    final textCtrl = TextEditingController();
+    int stars = 0;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text('Review $landmarkName'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(children: [
+                Text('Rating:', style: Theme.of(ctx).textTheme.bodySmall),
+                const SizedBox(width: 8),
+                ...List.generate(5, (i) => GestureDetector(
+                  onTap: () => setD(() => stars = i + 1),
+                  child: Icon(
+                    i < stars ? Icons.star_rounded : Icons.star_outline_rounded,
+                    color: i < stars ? Colors.amber.shade600 : Colors.grey,
+                    size: 28,
+                  ),
+                )),
+              ]),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textCtrl,
+                maxLines: 4,
+                maxLength: 500,
+                decoration: const InputDecoration(
+                  hintText: 'Share your experience…',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: stars == 0 ? null : () async {
+                Navigator.pop(ctx); // close dialog; sheet stays open until API returns
+                try {
+                  final local = ref.read(localDataProvider);
+                  final existingCommentId = local.getMyCommentId(landmarkId);
+                  final payload = {'text': textCtrl.text.trim(), 'rating': stars};
+                  final raw = existingCommentId != null
+                      ? await ref.read(apiServiceProvider).patch('/comments/$existingCommentId', data: payload)
+                      : await ref.read(apiServiceProvider).post('/comments/$landmarkId', data: payload);
+                  final resp = raw.data as Map<String, dynamic>;
+                  final commentId = resp['id'] as String?;
+                  final flagged = resp['flagged'] as bool? ?? false;
+                  // Save comment ID BEFORE closing the sheet so it's available when sheet reopens
+                  if (commentId != null) await local.setMyCommentId(landmarkId, commentId);
+                  // Rating always updated when reviewing
+                  final prev = local.getMyRating(landmarkId);
+                  await ref.read(apiServiceProvider).post(
+                    '/landmarks/$landmarkId/rate',
+                    data: {'rating': stars, 'previous_rating': prev?.round()},
+                  );
+                  final lm = ref.read(mapProvider).allLandmarks
+                      .where((x) => x.id == landmarkId).firstOrNull;
+                  if (lm != null) ref.read(flProvider.notifier).recordInteraction(lm, stars / 5.0);
+                  await local.setMyRating(landmarkId, stars.toDouble());
+                  ref.read(mapProvider.notifier).fetchAllLandmarks();
+                  if (mounted) Navigator.pop(context); // close sheet after ID is saved
+                  if (mounted) {
+                    final flagSource = resp['flag_source'] as String?;
+                    final flagMsg = flagSource == 'openai'
+                        ? 'Your review was flagged by AI moderation and won\'t be visible until an admin approves it.'
+                        : 'Your review was flagged by our content filter and won\'t be visible until an admin approves it.';
+                    final m = ScaffoldMessenger.of(context);
+                    m.clearSnackBars();
+                    m.showSnackBar(SnackBar(
+                      content: Text(flagged ? flagMsg : 'Review submitted!'),
+                      behavior: SnackBarBehavior.floating,
+                      margin: EdgeInsets.only(left: 16, right: 16,
+                          bottom: MediaQuery.of(context).size.height * 0.32),
+                    ));
+                  }
+                } catch (_) {}
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showLandmarkSheet(LandmarkModel stale) {
-    // Always resolve to freshest copy so map marker and list taps show identical data
     final all = ref.read(mapProvider).allLandmarks;
     final l = all.where((x) => x.id == stale.id).firstOrNull ?? stale;
     final theme = Theme.of(context);
+    setState(() => _selectedLandmarkId = l.id);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1503,6 +1648,36 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 const SizedBox(width: 6),
                 Expanded(child: Text(l.openingHours!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary))),
               ]),
+            ],
+            // Ticket price
+            const SizedBox(height: 8),
+            Row(children: [
+              Icon(Icons.confirmation_number_outlined, size: 14, color: theme.colorScheme.secondary),
+              const SizedBox(width: 6),
+              Text(
+                l.ticketPrice == null ? 'Free entry' : 'Ticket: ${l.ticketPrice!.toStringAsFixed(l.ticketPrice! % 1 == 0 ? 0 : 2)} RON',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: l.ticketPrice == null ? Colors.green.shade700 : theme.colorScheme.secondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ]),
+            // Discount info
+            if (l.discountInfo != null && l.discountInfo!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                ),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Icon(Icons.local_offer_outlined, size: 14, color: Colors.amber),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(l.discountInfo!, style: theme.textTheme.bodySmall?.copyWith(height: 1.4))),
+                ]),
+              ),
             ],
             if (l.stories.isNotEmpty) ...[
               const SizedBox(height: 12),
@@ -1579,28 +1754,24 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
             const SizedBox(height: 16),
             _EventsSection(
               landmarkId: l.id,
-              canAdd: l.submittedBy == ref.read(authProvider).user?.id ||
-                  (ref.read(authProvider).user?.isAdmin ?? false),
+              submittedBy: l.submittedBy,
               onAdd: () => _showAddEventDialog(l.id, l.name),
               fetchEvents: () => _fetchEvents(l.id),
             ),
             const SizedBox(height: 16),
+            // Overall rating always visible (read-only); review button gated by quest completion
             _StarRatingRow(
               averageRating: l.rating,
               myRating: l.myRating,
-              canRate: l.visitedByMe,
-              onRate: l.visitedByMe ? (stars) async {
-                ref.read(flProvider.notifier).recordInteraction(l, stars / 5.0);
-                final prev = ref.read(localDataProvider).getMyRating(l.id);
-                try {
-                  await ref.read(apiServiceProvider).post(
-                    '/landmarks/${l.id}/rate',
-                    data: {'rating': stars, 'previous_rating': prev?.round()},
-                  );
-                  await ref.read(localDataProvider).setMyRating(l.id, stars.toDouble());
-                  ref.read(mapProvider.notifier).fetchAllLandmarks();
-                } catch (_) {}
-              } : null,
+              canRate: false,
+              onRate: null,
+            ),
+            const SizedBox(height: 16),
+            _CommentsSection(
+              landmarkId: l.id,
+              fetchComments: () => _fetchComments(l.id),
+              onAdd: () => _showAddCommentDialog(l.id, l.name),
+              hasReview: ref.read(localDataProvider).getMyCommentId(l.id) != null,
             ),
             // Any authenticated user can suggest — submissions go to review
             if (ref.read(authProvider).user != null) ...[
@@ -1663,7 +1834,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               // Quests button (full width here)
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     final pos = ref.read(mapProvider).position;
                     final isNearby = pos != null &&
                         Geolocator.distanceBetween(
@@ -1671,9 +1842,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                               l.location.lat, l.location.lng,
                             ) <=
                             100.0;
-                    Navigator.pop(context);
-                    context.push('/quests/${l.id}',
+                    // Don't close sheet — quest route slides on top; sheet resurfaces on pop
+                    await context.push('/quests/${l.id}',
                         extra: {'name': l.name, 'type': l.type, 'isNearby': isNearby});
+                    // Refresh so visitedByMe updates in the sheet that's still open
+                    if (mounted) await ref.read(mapProvider.notifier).fetchAllLandmarks();
                   },
                   icon: const Icon(Icons.task_alt_outlined, size: 18),
                   label: const Text('Quests'),
@@ -1778,7 +1951,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
             const SizedBox(height: 16),
             _EventsSection(
               landmarkId: l.id,
-              canAdd: (ref.read(authProvider).user?.isAdmin ?? false),
+              submittedBy: l.submittedBy,
               onAdd: () => _showAddEventDialog(l.id, l.name),
               fetchEvents: () => _fetchEvents(l.id),
             ),
@@ -1860,11 +2033,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     ref.read(flProvider.notifier).recordInteraction(l, 0.5);
-                    Navigator.pop(context);
-                    context.push('/quests/${l.id}',
+                    await context.push('/quests/${l.id}',
                         extra: {'name': l.name, 'type': l.type, 'isNearby': true});
+                    if (mounted) await ref.read(mapProvider.notifier).fetchAllLandmarks();
                   },
                   icon: const Icon(Icons.task_alt_outlined, size: 18),
                   label: const Text('Start Quests'),
@@ -1874,7 +2047,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
           ],
         ),
       ),
-    ).then((_) => ref.read(proximityProvider.notifier).dismiss());
+    ).whenComplete(() {
+      if (mounted) setState(() => _selectedLandmarkId = null);
+      ref.read(proximityProvider.notifier).dismiss();
+    });
   }
 
   Color _colorForType(String type) => switch (type) {
@@ -3006,34 +3182,42 @@ class _CommunityReviewSheetState extends ConsumerState<_CommunityReviewSheet>
     } catch (_) { setState(() => _loading = false); }
   }
 
-  void _vote(String type, String id) {
+  Future<void> _vote(String type, String id) async {
     final key = type == 'story' ? 'stories' : '${type}s';
     final list = (_data[key] as List?) ?? [];
     final idx = list.indexWhere((x) => x['id'] == id);
     if (idx < 0) return;
 
+    final snapshot = Map.from(list[idx] as Map); // keep for rollback
     final currentVotes = (list[idx]['votes'] as int? ?? 0);
     final newVotes = currentVotes + 1;
     final needed = (list[idx]['needed'] as int? ?? 5);
     final approved = newVotes >= needed;
 
-    // Optimistic update — no waiting, instant feedback
+    // Optimistic update
     ref.read(localDataProvider).markVoted(id);
     setState(() {
-      if (approved) {
-        list.removeAt(idx);
-      } else {
-        list[idx] = Map.from(list[idx] as Map)..['votes'] = newVotes;
-      }
+      if (approved) list.removeAt(idx);
+      else list[idx] = Map.from(list[idx] as Map)..['votes'] = newVotes;
     });
 
-    // Fire-and-forget API call in background
-    ref.read(apiServiceProvider).post('/community/vote/$type/$id').then((res) {
+    try {
+      final res = await ref.read(apiServiceProvider).post('/community/vote/$type/$id');
       if ((res.data as Map)['approved'] == true) {
-        // Refresh map so approved content appears — non-blocking
         ref.read(mapProvider.notifier).fetchAllLandmarks();
       }
-    }).catchError((_) {});  // silent on failure
+    } on DioException catch (e) {
+      // Rollback optimistic update on error
+      setState(() => list.insert(idx, snapshot));
+      if (!mounted) return;
+      final detail = (e.response?.data as Map?)?['detail'] as String? ?? 'Vote failed';
+      final msg = detail == 'You cannot validate your own submission'
+          ? 'This is your own submission — others must validate it.'
+          : detail;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating));
+    }
   }
 
   @override
@@ -3175,7 +3359,9 @@ class _CommunityReviewSheetState extends ConsumerState<_CommunityReviewSheet>
 }
 
 class _AdminSubmissionsSheet extends ConsumerStatefulWidget {
-  const _AdminSubmissionsSheet();
+  final void Function(LandmarkModel) onOpenLandmark;
+  final void Function(double lat, double lng) onMoveMap;
+  const _AdminSubmissionsSheet({required this.onOpenLandmark, required this.onMoveMap});
 
   @override
   ConsumerState<_AdminSubmissionsSheet> createState() => _AdminSubmissionsSheetState();
@@ -3187,6 +3373,7 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
   List<Map<String, dynamic>> _all = [];
   List<Map<String, dynamic>> _stories = [];
   List<Map<String, dynamic>> _quests = [];
+  List<Map<String, dynamic>> _flaggedComments = [];
   bool _loading = true;
   final _locationSearchCtrl = TextEditingController();
   String _locationSearch = '';
@@ -3194,7 +3381,7 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 4, vsync: this);
+    _tab = TabController(length: 5, vsync: this);
     _load();
   }
 
@@ -3222,8 +3409,13 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
         final r = await ref.read(apiServiceProvider).get('/quests/admin/pending');
         quests = List<Map<String, dynamic>>.from(r.data as List);
       } catch (_) {}
+      List<Map<String, dynamic>> flagged = [];
+      try {
+        final r = await ref.read(apiServiceProvider).get('/comments/admin/flagged');
+        flagged = List<Map<String, dynamic>>.from(r.data as List);
+      } catch (_) {}
       setState(() {
-        _all = all; _stories = stories; _quests = quests;
+        _all = all; _stories = stories; _quests = quests; _flaggedComments = flagged;
         _loading = false;
       });
     } catch (_) {
@@ -3374,9 +3566,10 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
                   Tab(text: _pending.isEmpty
                       ? 'Pending Locations'
                       : 'Pending Locations (${_pending.length})'),
-                  const Tab(text: 'All Locations'),
+                  Tab(text: _reviewed.isEmpty ? 'Existing Locations' : 'Existing Locations (${_reviewed.length})'),
                   Tab(text: _stories.isEmpty ? 'Stories' : 'Stories (${_stories.length})'),
                   Tab(text: _quests.isEmpty ? 'Quests' : 'Quests (${_quests.length})'),
+                  Tab(text: _flaggedComments.isEmpty ? 'Flagged Reviews' : 'Flagged Reviews (${_flaggedComments.length})'),
                 ],
               ),
               Expanded(
@@ -3389,6 +3582,7 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
                           _buildLocationList(sc, _all, isPending: false, theme: theme),
                           _buildStoriesList(sc, theme),
                           _buildQuestsList(sc, theme),
+                          _buildFlaggedCommentsList(sc, theme),
                         ],
                       ),
               ),
@@ -3454,7 +3648,16 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
   Widget _buildLocationItem(Map<String, dynamic> p, ThemeData theme) {
     final st = p['status'] as String? ?? 'pending';
     final statusColor = st == 'approved' ? Colors.green : st == 'rejected' ? Colors.red : Colors.orange;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    final lmId = p['id'] as String?;
+    final lm = lmId != null
+        ? ref.read(mapProvider).allLandmarks.where((l) => l.id == lmId).firstOrNull
+        : null;
+    return InkWell(
+      onTap: st == 'approved' && lm != null
+          ? () { Navigator.pop(context); widget.onMoveMap(lm.location.lat, lm.location.lng); widget.onOpenLandmark(lm); }
+          : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Expanded(child: Text(p['name'] ?? '',
             style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold))),
@@ -3476,6 +3679,13 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
         const SizedBox(height: 4),
         Text(p['description'], style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             maxLines: 2, overflow: TextOverflow.ellipsis),
+      ],
+      if (p['location'] != null) ...[
+        const SizedBox(height: 4),
+        Text(
+          '${(p['location']['lat'] as num?)?.toStringAsFixed(5) ?? '?'}, ${(p['location']['lng'] as num?)?.toStringAsFixed(5) ?? '?'}',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline, fontFamily: 'monospace'),
+        ),
       ],
       const SizedBox(height: 10),
       Wrap(spacing: 8, runSpacing: 6, children: [
@@ -3517,7 +3727,8 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
         ),
       ]),
-    ]);
+      ]),
+    );
   }
 
   Widget _buildList(ScrollController sc, List<Map<String, dynamic>> items, {required bool isPending, required ThemeData theme}) {
@@ -3587,6 +3798,72 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
     );
   }
 
+  Widget _buildFlaggedCommentsList(ScrollController sc, ThemeData theme) {
+    if (_flaggedComments.isEmpty) {
+      return Center(child: Text('No flagged reviews', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)));
+    }
+    return ListView.separated(
+      controller: sc,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      itemCount: _flaggedComments.length,
+      separatorBuilder: (_, __) => const Divider(height: 16),
+      itemBuilder: (ctx, i) {
+        final c = _flaggedComments[i];
+        final lmId = c['landmark_id'] as String?;
+        final lm = lmId != null
+            ? ref.read(mapProvider).allLandmarks.where((l) => l.id == lmId).firstOrNull
+            : null;
+        return InkWell(
+          onTap: lm != null ? () { Navigator.pop(context); widget.onMoveMap(lm.location.lat, lm.location.lng); widget.onOpenLandmark(lm); } : null,
+          borderRadius: BorderRadius.circular(10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (lm != null) ...[
+            Text(lm.name, style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+          ],
+          Text(c['text'] ?? '', style: theme.textTheme.bodySmall?.copyWith(height: 1.4), maxLines: 4, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 8),
+          Row(children: [
+            ...List.generate(5, (j) => Icon(
+              j < (c['rating'] as int? ?? 0) ? Icons.star_rounded : Icons.star_outline_rounded,
+              color: Colors.amber.shade500, size: 14,
+            )),
+            const Spacer(),
+            OutlinedButton.icon(
+              onPressed: () async {
+                await ref.read(apiServiceProvider).post('/comments/admin/${c['id']}/approve');
+                setState(() => _flaggedComments.removeWhere((x) => x['id'] == c['id']));
+              },
+              icon: const Icon(Icons.check, size: 14),
+              label: const Text('Approve'),
+              style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.green.shade700,
+                  side: BorderSide(color: Colors.green.shade400),
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () async {
+                await ref.read(apiServiceProvider).delete('/comments/admin/${c['id']}');
+                setState(() => _flaggedComments.removeWhere((x) => x['id'] == c['id']));
+              },
+              icon: const Icon(Icons.delete_outline, size: 14),
+              label: const Text('Delete'),
+              style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error,
+                  side: BorderSide(color: theme.colorScheme.error),
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
+            ),
+          ]),
+        ]),
+        );
+      },
+    );
+  }
+
   Widget _buildQuestsList(ScrollController sc, ThemeData theme) {
     if (_quests.isEmpty) {
       return Center(child: Text('No pending quests',
@@ -3599,7 +3876,12 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
       separatorBuilder: (_, __) => const Divider(height: 16),
       itemBuilder: (ctx, i) {
         final q = _quests[i];
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        final lmId = q['landmark_id'] as String?;
+        final lm = lmId != null ? ref.read(mapProvider).allLandmarks.where((l) => l.id == lmId).firstOrNull : null;
+        return InkWell(
+          onTap: lm != null ? () { Navigator.pop(context); widget.onMoveMap(lm.location.lat, lm.location.lng); widget.onOpenLandmark(lm); } : null,
+          borderRadius: BorderRadius.circular(8),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(child: Text(q['title'] ?? '', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold))),
             Container(
@@ -3639,7 +3921,8 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
             ),
           ]),
-        ]);
+        ]),
+        );
       },
     );
   }
@@ -3657,7 +3940,12 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
       separatorBuilder: (_, __) => const Divider(height: 16),
       itemBuilder: (ctx, i) {
         final s = _stories[i];
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        final lmId = s['landmark_id'] as String?;
+        final lm = lmId != null ? ref.read(mapProvider).allLandmarks.where((l) => l.id == lmId).firstOrNull : null;
+        return InkWell(
+          onTap: lm != null ? () { Navigator.pop(context); widget.onMoveMap(lm.location.lat, lm.location.lng); widget.onOpenLandmark(lm); } : null,
+          borderRadius: BorderRadius.circular(8),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(s['landmark_name'] ?? 'Unknown landmark',
               style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
           const SizedBox(height: 6),
@@ -3693,6 +3981,121 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
             ),
           ]),
+        ]),
+        );
+      },
+    );
+  }
+}
+
+// ── Comments section ───────────────────────────────────────────────────────────
+
+class _CommentsSection extends ConsumerStatefulWidget {
+  final String landmarkId;
+  final Future<List<CommentModel>> Function() fetchComments;
+  final VoidCallback onAdd;
+  final bool hasReview;
+  const _CommentsSection({
+    required this.landmarkId,
+    required this.fetchComments,
+    required this.onAdd,
+    required this.hasReview,
+  });
+  @override
+  ConsumerState<_CommentsSection> createState() => _CommentsSectionState();
+}
+
+class _CommentsSectionState extends ConsumerState<_CommentsSection> {
+  late Future<List<CommentModel>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.fetchComments();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // ref.watch re-evaluates on every build — catches re-activation after offstage
+    final canAdd = ref.watch(visitedProvider).contains(widget.landmarkId);
+    final label = widget.hasReview ? 'Edit' : 'Add';
+    return FutureBuilder<List<CommentModel>>(
+      future: _future,
+      builder: (ctx, snap) {
+        // Filter out star-only reviews with no text
+        final comments = (snap.data ?? []).where((c) => c.text.trim().isNotEmpty).toList();
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(Icons.reviews_outlined, size: 16, color: theme.colorScheme.primary),
+            const SizedBox(width: 6),
+            Text('Reviews${comments.isNotEmpty ? " (${comments.length})" : ""}',
+                style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            if (canAdd)
+              TextButton.icon(
+                onPressed: () { widget.onAdd(); setState(() { _future = widget.fetchComments(); }); },
+                icon: Icon(widget.hasReview ? Icons.edit_outlined : Icons.add, size: 16),
+                label: Text(label),
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+              ),
+          ]),
+          if (!canAdd)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 2),
+              child: Text('Complete a quest here to leave a review',
+                  style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline)),
+            ),
+          if (comments.isEmpty && snap.connectionState == ConnectionState.done)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('No reviews yet', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+            )
+          else
+            ...comments.take(3).map((c) {
+              final myCommentId = ref.read(localDataProvider).getMyCommentId(widget.landmarkId);
+              final isOwn = myCommentId != null && myCommentId == c.id;
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isOwn
+                        ? theme.colorScheme.primaryContainer.withOpacity(0.3)
+                        : theme.colorScheme.surfaceVariant.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(10),
+                    border: isOwn
+                        ? Border.all(color: theme.colorScheme.primary.withOpacity(0.3))
+                        : null,
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      ...List.generate(5, (i) => Icon(
+                        i < c.rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                        color: i < c.rating ? Colors.amber.shade500 : theme.colorScheme.outline,
+                        size: 14,
+                      )),
+                      if (isOwn) ...[
+                        const Spacer(),
+                        Text('Your review',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            )),
+                      ],
+                    ]),
+                    const SizedBox(height: 4),
+                    Text(c.text, style: theme.textTheme.bodySmall?.copyWith(height: 1.4)),
+                  ]),
+                ),
+              );
+            }),
+          if (comments.length > 3)
+            TextButton(
+              onPressed: () { /* TODO: show all */ },
+              child: Text('See all ${comments.length} reviews'),
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+            ),
         ]);
       },
     );
@@ -3701,24 +4104,24 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
 
 // ── Events section ─────────────────────────────────────────────────────────────
 
-class _EventsSection extends StatefulWidget {
+class _EventsSection extends ConsumerStatefulWidget {
   final String landmarkId;
-  final bool canAdd;
+  final String? submittedBy;
   final VoidCallback onAdd;
   final Future<List<EventModel>> Function() fetchEvents;
 
   const _EventsSection({
     required this.landmarkId,
-    required this.canAdd,
+    required this.submittedBy,
     required this.onAdd,
     required this.fetchEvents,
   });
 
   @override
-  State<_EventsSection> createState() => _EventsSectionState();
+  ConsumerState<_EventsSection> createState() => _EventsSectionState();
 }
 
-class _EventsSectionState extends State<_EventsSection> {
+class _EventsSectionState extends ConsumerState<_EventsSection> {
   late Future<List<EventModel>> _future;
 
   @override
@@ -3730,6 +4133,8 @@ class _EventsSectionState extends State<_EventsSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final user = ref.watch(authProvider).user;
+    final canAdd = user?.isAdmin == true || user?.id == widget.submittedBy;
     return FutureBuilder<List<EventModel>>(
       future: _future,
       builder: (ctx, snap) {
@@ -3737,14 +4142,14 @@ class _EventsSectionState extends State<_EventsSection> {
         if (!snap.hasData && snap.connectionState == ConnectionState.waiting) {
           return const SizedBox(height: 4);
         }
-        if (events.isEmpty && !widget.canAdd) return const SizedBox.shrink();
+        // Always visible — non-admins see events list (or "No upcoming events")
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Icon(Icons.event_outlined, size: 16, color: theme.colorScheme.primary),
             const SizedBox(width: 6),
             Text('Events', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
             const Spacer(),
-            if (widget.canAdd)
+            if (canAdd)
               TextButton.icon(
                 onPressed: () {
                   widget.onAdd();
@@ -4093,10 +4498,6 @@ class _StarRatingRowState extends State<_StarRatingRow> {
                   child: CircularProgressIndicator(strokeWidth: 2)),
             ],
           ]),
-        ] else ...[
-          const SizedBox(height: 4),
-          Text('Complete a quest here to unlock rating',
-              style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline)),
         ],
       ],
     );

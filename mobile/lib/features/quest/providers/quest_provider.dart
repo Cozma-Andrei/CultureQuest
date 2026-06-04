@@ -3,6 +3,8 @@ import '../../../shared/models/quest_model.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/local_data_service.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../map/providers/map_provider.dart';
+import '../../../core/providers/visited_provider.dart';
 
 class QuestState {
   final List<QuestModel> quests;
@@ -42,9 +44,7 @@ class QuestNotifier extends StateNotifier<QuestState> {
     state = QuestState(isLoading: true, landmarkName: landmarkName);
     try {
       if (isNearby) {
-        final isFirst = !_ref.read(localDataProvider).isVisited(landmarkId);
-        await _ref.read(localDataProvider).markVisited(landmarkId);
-        if (isFirst) _api.post('/landmarks/$landmarkId/visit').ignore();
+        _api.post('/landmarks/$landmarkId/visit').ignore();
       }
       final res = await _api.get('/quests/', params: {'landmark_id': landmarkId});
       final completedIds = _ref.read(localDataProvider).getCompletedQuestIds();
@@ -60,6 +60,7 @@ class QuestNotifier extends StateNotifier<QuestState> {
 
   Future<Map<String, dynamic>?> completeQuest(
     String questId, {
+    required String landmarkId,
     int? answerIndex,
     String? noteText,
   }) async {
@@ -71,8 +72,11 @@ class QuestNotifier extends StateNotifier<QuestState> {
       final res = await _api.post('/quests/$questId/complete', data: body);
       final result = Map<String, dynamic>.from(res.data as Map);
 
+      // Always mark visited when a quest is submitted — correct or not, user is there
+      // Using visitedProvider so _CommentsSection rebuilds immediately
+      await _ref.read(visitedProvider.notifier).markVisited(landmarkId);
+
       if (result['correct'] == true) {
-        // Mark completed locally — server no longer tracks which quests each user finished
         await _ref.read(localDataProvider).markQuestCompleted(questId);
         state = state.copyWith(
           quests: state.quests
@@ -80,6 +84,9 @@ class QuestNotifier extends StateNotifier<QuestState> {
               .toList(),
         );
       }
+
+      // Refresh landmarks so visitedByMe updates in the landmark sheet
+      _ref.read(mapProvider.notifier).fetchAllLandmarks();
 
       await _ref.read(authProvider.notifier).refreshUser();
 

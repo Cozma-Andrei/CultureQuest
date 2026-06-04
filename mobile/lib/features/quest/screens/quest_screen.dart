@@ -38,6 +38,7 @@ class _QuestScreenState extends ConsumerState<QuestScreen> {
   Future<void> _submit(String questId, {int? answerIndex, String? noteText}) async {
     final result = await ref.read(questProvider.notifier).completeQuest(
           questId,
+          landmarkId: widget.landmarkId,
           answerIndex: answerIndex,
           noteText: noteText,
         );

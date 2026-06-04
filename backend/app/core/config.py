@@ -20,8 +20,11 @@ class Settings(BaseSettings):
     fl_min_clients: int = 2
     fl_rounds: int = 10
 
+    openai_api_key: str = ""
+
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 
 settings = Settings()

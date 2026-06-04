@@ -223,10 +223,13 @@ async def submit_quest(
     })
     if active_count >= _MAX_QUESTS:
         raise HTTPException(status_code=422, detail=f"Landmark already has {_MAX_QUESTS} quests (maximum)")
-    # Admins bypass review — quest goes live immediately
+    # Admins and the landmark's creator bypass review — quest goes live immediately
     user_doc = await db.users.find_one({"_id": ObjectId(user_id)})
     is_admin = user_doc.get("is_admin", False) if user_doc else False
-    final_status = "approved" if is_admin else "pending"
+    is_creator = lm.get("submitted_by") == user_id
+    final_status = "approved" if (is_admin or is_creator) else "pending"
+    # Award 5 points for submitting a quest regardless of outcome
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$inc": {"points": 5}})
     result = await db.quests.insert_one({
         "landmark_id": landmark_id,
         "submitted_by": user_id,

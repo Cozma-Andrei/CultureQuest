@@ -6,11 +6,12 @@ import '../../features/auth/providers/auth_provider.dart';
 /// Stores all individual user behaviour on-device only, namespaced per user.
 /// When a different user logs in they get a completely separate data set.
 class LocalDataService {
-  static const _visitedSuffix   = 'visited_landmarks';
-  static const _ratingsSuffix   = 'my_ratings';
-  static const _routesSuffix    = 'my_routes';
-  static const _completedSuffix = 'completed_quests';
-  static const _votedSuffix     = 'voted_items';
+  static const _visitedSuffix    = 'visited_landmarks';
+  static const _ratingsSuffix    = 'my_ratings';
+  static const _routesSuffix     = 'my_routes';
+  static const _completedSuffix  = 'completed_quests';
+  static const _votedSuffix      = 'voted_items';
+  static const _commentIdsSuffix = 'my_comment_ids'; // landmarkId → commentId
 
   final SharedPreferences _prefs;
   final String _userId; // 'guest' for unauthenticated
@@ -64,6 +65,21 @@ class LocalDataService {
     await _prefs.setStringList(_k(_completedSuffix), ids.toList());
   }
 
+  // ── Comment IDs (per-landmark, for re-review / replace) ──────────────────
+
+  Map<String, String> _getCommentIds() {
+    final raw = _prefs.getString(_k(_commentIdsSuffix));
+    if (raw == null) return {};
+    return Map<String, String>.from(jsonDecode(raw));
+  }
+
+  String? getMyCommentId(String landmarkId) => _getCommentIds()[landmarkId];
+
+  Future<void> setMyCommentId(String landmarkId, String commentId) async {
+    final ids = _getCommentIds()..[landmarkId] = commentId;
+    await _prefs.setString(_k(_commentIdsSuffix), jsonEncode(ids));
+  }
+
   // ── Routes ────────────────────────────────────────────────────────────────
 
   List<Map<String, dynamic>> getRoutes() {
@@ -113,6 +129,7 @@ class LocalDataService {
     await _prefs.remove(_k(_routesSuffix));
     await _prefs.remove(_k(_completedSuffix));
     await _prefs.remove(_k(_votedSuffix));
+    await _prefs.remove(_k(_commentIdsSuffix));
   }
 }
 
@@ -124,6 +141,6 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
 // Automatically scoped to the current user — changes when user logs in/out
 final localDataProvider = Provider<LocalDataService>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  final userId = ref.watch(authProvider).user?.id ?? 'guest';
+  final userId = ref.watch(authProvider.select((s) => s.user?.id ?? 'guest'));
   return LocalDataService(prefs, userId);
 });

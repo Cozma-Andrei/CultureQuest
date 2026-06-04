@@ -10,6 +10,9 @@ class AppTheme {
           seedColor: _primaryColor,
           secondary: _secondaryColor,
         ),
+        splashFactory: NoSplash.splashFactory,
+        highlightColor: Colors.transparent,
+        splashColor: Colors.transparent,
       );
 
   static ThemeData get dark => ThemeData(
@@ -19,5 +22,8 @@ class AppTheme {
           secondary: _secondaryColor,
           brightness: Brightness.dark,
         ),
+        splashFactory: NoSplash.splashFactory,
+        highlightColor: Colors.transparent,
+        splashColor: Colors.transparent,
       );
 }

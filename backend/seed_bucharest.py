@@ -516,7 +516,7 @@ NAMED_ROUTES = [
 #  SEED
 # ══════════════════════════════════════════════════════════════════════════════
 print("🗑  Clearing existing data …")
-for col in ["users","landmarks","quests","visits","ratings","routes","stories","events"]:
+for col in ["users","landmarks","quests","visits","ratings","routes","stories","events","comments"]:
     db[col].drop()
 
 # ── Create 2dsphere index ──────────────────────────────────────────────────────
@@ -554,7 +554,7 @@ LANDMARK_WEBSITES = {
     "National History Museum":   "https://www.mnir.ro",
     "Cotroceni Palace":          "https://www.muzeulcotroceni.ro",
     "National Museum of Art":    "https://www.mnar.arts.ro",
-    "Village Museum":            "https://muzeul-satului.ro",
+    "National Village Museum":            "https://muzeul-satului.ro",
     "Natural History Museum":    "https://www.grigore-antipa.ro",
     "National Opera":            "https://www.operanb.ro",
     "Biblioteca Națională":      "https://www.bibnat.ro",
@@ -567,7 +567,7 @@ LANDMARK_HOURS = {
     "Romanian Athenaeum":           "Tue–Sun 10:00–18:00",
     "National History Museum":      "Tue–Sun 10:00–18:00",
     "National Museum of Art":       "Tue–Sun 11:00–19:00",
-    "Village Museum":               "Tue–Sun 09:00–17:00",
+    "National Village Museum":               "Tue–Sun 09:00–17:00",
     "Natural History Museum":       "Tue–Sun 10:00–18:00",
     "National Museum of Contemporary Art": "Wed–Mon 10:00–18:00",
     "Theodor Pallady Museum":       "Tue–Sun 10:00–18:00",
@@ -641,15 +641,61 @@ _TYPE_DEFAULT_HOURS = {
     "building":   "Mon–Fri 09:00–17:00",
 }
 
+# Ticket prices in RON (None = free entry, not listed = free)
+LANDMARK_PRICES = {
+    "National History Museum":              35,
+    "National Museum of Art of Romania":    30,
+    "National Museum Cotroceni":            40,
+    "Cotroceni Palace":                     40,
+    "National Village Museum":              25,
+    "Grigore Antipa Natural History Museum":20,
+    "Curtea Veche":                         15,
+    "Romanian Opera House":                 80,
+    "National Theater of Bucharest":        60,
+    "Botanical Garden":                     10,
+    "Arc de Triomphe":                       5,
+    "Romanian Peasant Museum":              20,
+    "Military Museum":                      10,
+    "Dimitrie Gusti Museum":               25,
+    "Suțu Palace":                          15,
+    "George Enescu National Museum":        20,
+    "Museum of Jewish History":             10,
+}
+
+# Discount info: which landmarks offer discounts for points/quests
+LANDMARK_DISCOUNTS = {
+    "National History Museum":              "15% off for 150 pts or 5 completed quests",
+    "National Museum of Art of Romania":    "20% off for 200 pts or 7 completed quests",
+    "National Museum Cotroceni":            "10% off for 100 pts or 4 completed quests",
+    "Cotroceni Palace":                     "10% off for 100 pts or 4 completed quests",
+    "National Village Museum":              "15% off for 120 pts or 4 completed quests",
+    "Grigore Antipa Natural History Museum":"20% off for 100 pts or 3 completed quests",
+    "Curtea Veche":                         "Free entry for 100 pts or 3 completed quests",
+    "Romanian Opera House":                 "10% off for 300 pts or 10 completed quests",
+    "National Theater of Bucharest":        "15% off for 250 pts or 8 completed quests",
+    "Botanical Garden":                     "Free entry for 200 pts or 8 completed quests",
+    "Arc de Triomphe":                      "Free entry for 50 pts or 2 completed quests",
+    "Romanian Peasant Museum":              "20% off for 100 pts or 3 completed quests",
+    "Military Museum":                      "25% off for 80 pts or 3 completed quests",
+    "Dimitrie Gusti Museum":                "15% off for 120 pts or 4 completed quests",
+    "Suțu Palace":                          "15% off for 120 pts or 4 completed quests",
+    "George Enescu National Museum":        "10% off for 150 pts or 5 completed quests",
+    "Museum of Jewish History":             "20% off for 80 pts or 3 completed quests",
+}
+
 print("📍 Inserting 100 Bucharest landmarks …")
 landmark_docs = []
 for name, ltype, lat, lng, desc, cats, stories in RAW_LANDMARKS:
+    price_val = LANDMARK_PRICES.get(name)
+    ticket_price = None if (price_val is None or price_val == 0) else float(price_val)
     landmark_docs.append(dict(
         name=name, type=ltype,
         location={"type":"Point","coordinates":[lng, lat]},
         description=desc, categories=cats, stories=stories[:5],  # max 5 stories
         website=LANDMARK_WEBSITES.get(name),
         opening_hours=LANDMARK_HOURS.get(name, _TYPE_DEFAULT_HOURS.get(ltype, "Open 24/7")),
+        ticket_price=ticket_price,
+        discount_info=LANDMARK_DISCOUNTS.get(name),
         rating=0.0, visit_count=0,
         has_active_quest=True,
         submitted_by=admin_id,   # all Bucharest landmarks attributed to admin
@@ -706,7 +752,7 @@ total_ratings = 0
 # Landmarks referenced in community review pending items — every user must visit at least one
 COMMUNITY_REVIEW_NAMES = [
     "Romanian Athenaeum", "Stavropoleos Monastery", "Curtea Veche",
-    "Herăstrău Park", "Village Museum", "National History Museum",
+    "Herăstrău Park", "National Village Museum", "National History Museum",
     "Cotroceni Palace", "Old Town Square",
 ]
 community_review_ids = [name_to_id[n] for n in COMMUNITY_REVIEW_NAMES if n in name_to_id]
@@ -850,7 +896,7 @@ EVENTS_DATA = [
     ("Cișmigiu Garden",           "Outdoor Theatre: A Midsummer Night's Dream",
      "Shakespeare in the park performed by the National Theatre company.",
      future(10, 19, 30), future(10, 22)),
-    ("Village Museum",            "Traditional Crafts Workshop",
+    ("National Village Museum",            "Traditional Crafts Workshop",
      "Hands-on workshop: pottery, weaving and embroidery with master craftsmen.",
      future(2, 10), future(2, 17)),
     ("Arcul de Triumf",           "National Day Parade Rehearsal",
@@ -874,7 +920,7 @@ EVENTS_DATA = [
     ("Curtea Veche",              "Medieval Bucharest Re-enactment",
      "Costumed actors recreate life in 15th-century Bucharest.",
      future(9, 11), future(9, 18)),
-    ("Village Museum",            "Photography Exhibition: Rural Romania",
+    ("National Village Museum",            "Photography Exhibition: Rural Romania",
      "Outdoor photo exhibition documenting disappearing village traditions.",
      future(15, 10), future(30, 19)),
     ("National Opera",            "La Traviata — Opening Night",
@@ -911,6 +957,62 @@ if event_docs:
     db.events.insert_many(event_docs)
 print(f"   ✓ {len(event_docs)} events created")
 
+# ── Seed comments ──────────────────────────────────────────────────────────────
+print("💬 Inserting comments …")
+COMMENT_DATA = [
+    # (landmark_name, rating, text, pre_flagged)
+    ("Romanian Athenaeum", 5, "One of the most beautiful concert halls I have ever visited. The acoustics are incredible!", False),
+    ("Romanian Athenaeum", 4, "Stunning architecture inside and out. Guided tours are very informative.", False),
+    ("Romanian Athenaeum", 5, "Came for a Sunday concert — magical experience. The ceiling murals alone are worth the trip.", False),
+    ("National History Museum", 5, "The Dacian gold exhibition alone is worth the visit. Fascinating history of Romania.", False),
+    ("National History Museum", 3, "Good collection but some exhibits need better lighting and English labels.", False),
+    ("National History Museum", 4, "The Trajan's Column replica is incredibly detailed. A must for history lovers.", False),
+    ("Stavropoleos Monastery", 5, "A hidden gem in the middle of the Old Town. Incredibly peaceful atmosphere.", False),
+    ("Stavropoleos Monastery", 4, "Beautiful frescoes and a lovely courtyard garden. Free entry is a bonus.", False),
+    ("Curtea Veche", 4, "Love seeing the medieval ruins right in the city centre. History literally at your feet.", False),
+    ("Curtea Veche", 5, "Vlad the Impaler's residence! The archaeological site is well-preserved.", False),
+    ("Curtea Veche", 3, "Interesting but small. The explanatory panels could be more detailed.", False),
+    ("Herăstrău Park", 5, "Perfect spot for a morning run or a relaxing afternoon by the lake.", False),
+    ("Herăstrău Park", 4, "Beautiful park, great for families. Paddle boats on the lake are a fun activity.", False),
+    ("Herăstrău Park", 5, "Best park in Bucharest by far. The lake views at sunset are stunning.", False),
+    ("National Village Museum", 5, "Amazing open-air museum. Authentic Romanian village life from different regions.", False),
+    ("National Village Museum", 5, "Easily one of the best open-air museums in Europe. Allow at least 3 hours.", False),
+    ("National Village Museum", 4, "Lovely place to visit. The wooden churches from Transylvania are extraordinary.", False),
+    ("Cișmigiu Garden", 4, "A lovely central park. The rose garden in summer is breathtaking.", False),
+    ("Cișmigiu Garden", 3, "Can get very crowded on weekends, but still a nice place to relax.", False),
+    ("Cișmigiu Garden", 5, "Ice skating in winter is a real treat! Great atmosphere and very affordable.", False),
+    ("Arcul de Triumf", 4, "Smaller than Paris but equally impressive. The view from the top is great.", False),
+    ("Arcul de Triumf", 5, "Well maintained and free to visit from outside. Nice area for a walk.", False),
+    ("National Museum of Art", 5, "Outstanding collection of Romanian and European art. Do not miss the medieval section.", False),
+    ("National Museum of Art", 4, "The Romanian art wing is underrated. Great photography allowed — very visitor-friendly.", False),
+    ("Cotroceni Palace", 5, "The guided tour is excellent. Beautifully restored royal rooms and gardens.", False),
+    ("Cotroceni Palace", 4, "Book tickets in advance — very popular. The art nouveau furniture is incredible.", False),
+    ("Parcul Carol", 4, "Great park with the Mausoleum and lovely paths. Very peaceful on weekday mornings.", False),
+    ("Parcul Carol", 5, "Hidden gem of Bucharest. The fountain and rose garden are beautiful in spring.", False),
+    ("Old Town Square", 3, "Lively atmosphere but very touristy and a bit pricey. Worth a quick visit.", False),
+    ("Old Town Square", 4, "Great for people watching and exploring the historic streets around it.", False),
+    ("Old Town Square", 2, "Way too many bars and restaurants aimed at tourists. Has lost its charm.", False),
+    # Pre-flagged reviews (would normally be caught by AI moderation)
+    ("Romanian Athenaeum", 1, "I hate this place and everyone who works there. They are all complete idiots. Total garbage!", True),
+    ("Herăstrău Park", 1, "Absolute dump. The staff are morons and I want to see it demolished. Disgusting place.", True),
+]
+
+comment_docs = []
+for lname, rating, text, pre_flagged in COMMENT_DATA:
+    lid = name_to_id.get(lname)
+    if lid:
+        comment_docs.append({
+            "landmark_id": lid,
+            "text": text,
+            "rating": rating,
+            "created_at": (datetime.utcnow() - timedelta(days=random.randint(1, 60))).isoformat(),
+            "flagged": pre_flagged,
+        })
+
+if comment_docs:
+    db.comments.insert_many(comment_docs)
+print(f"   ✓ {len(comment_docs)} comments created")
+
 # ── Pending community items (stories + quests awaiting peer review) ────────────
 print("⏳ Inserting pending community items …")
 pending_stories = [
@@ -918,7 +1020,7 @@ pending_stories = [
     ("Stavropoleos Monastery","The monks still hand-copy manuscripts in the library. I watched one work for an hour without looking up once."),
     ("Curtea Veche",          "Legend says the ghost of Vlad the Impaler walks the ruins on foggy nights. A guard told me he heard footsteps with no source."),
     ("Herăstrău Park",        "Every Sunday a group of elderly men play chess under the same oak tree — they've been meeting there for forty years."),
-    ("Village Museum",        "A craftsman showed me a loom that belonged to his great-grandmother. He still uses it to weave the same pattern she did."),
+    ("National Village Museum","A craftsman showed me a loom that belonged to his great-grandmother. He still uses it to weave the same pattern she did."),
 ]
 pending_quests_data = [
     ("Romanian Athenaeum",   "educational", "Who composed the 'Romanian Rhapsodies'?",
@@ -939,24 +1041,32 @@ pending_quests_data = [
 ]
 
 pending_story_count = 0
-for lname, text in pending_stories:
+# Realistic vote counts: some items have gathered a few votes already
+story_votes  = [3, 1, 4, 0, 2, 0, 1]   # per story, in order
+quest_votes  = [2, 4, 0, 3]              # per quest, in order
+
+for idx, (lname, text) in enumerate(pending_stories):
     lid = name_to_id.get(lname)
     if lid:
-        # Random user as submitter for realism
         submitter = random.choice(user_ids)
-        db.stories.insert_one({"landmark_id": lid, "submitted_by": submitter, "text": text, "status": "pending", "community_vote_count": 0})
+        votes = story_votes[idx] if idx < len(story_votes) else 0
+        db.stories.insert_one({
+            "landmark_id": lid, "submitted_by": submitter,
+            "text": text, "status": "pending", "community_vote_count": votes,
+        })
         pending_story_count += 1
 
 pending_quest_count = 0
-for lname, qtype, title, desc, pts, opts, correct in pending_quests_data:
+for idx, (lname, qtype, title, desc, pts, opts, correct) in enumerate(pending_quests_data):
     lid = name_to_id.get(lname)
     if lid:
         submitter = random.choice(user_ids)
+        votes = quest_votes[idx] if idx < len(quest_votes) else 0
         db.quests.insert_one({
             "landmark_id": lid, "submitted_by": submitter,
             "type": qtype, "title": title, "description": desc,
             "points": pts, "options": opts, "correct_option_index": correct,
-            "status": "pending", "community_vote_count": 0,
+            "status": "pending", "community_vote_count": votes,
         })
         pending_quest_count += 1
 
@@ -967,7 +1077,7 @@ pending_landmark = {
     "location": {"type": "Point", "coordinates": [26.1050, 44.3850]},
     "description": "An unofficial urban delta park that formed naturally in an abandoned reservoir — one of Europe's unexpected urban nature reserves.",
     "categories": ["nature"], "stories": [], "rating": 0.0, "visit_count": 0,
-    "has_active_quest": False, "submitted_by": random.choice(user_ids),
+    "has_active_quest": False, "submitted_by": admin_id,
     "status": "pending", "community_vote_count": 0,
 }
 db.landmarks.insert_one(pending_landmark)
@@ -985,6 +1095,7 @@ print(f"   Visits:    {total_visits}  (anonymous counters on landmarks)")
 print(f"   Ratings:   {total_ratings}  (anonymous sum/count on landmarks)")
 print(f"   Routes:    {db.routes.count_documents({})}")
 print(f"   Events:    {db.events.count_documents({})}")
+print(f"   Comments:  {db.comments.count_documents({})}")
 print()
 for ui, uid in enumerate(user_ids):
     u = USERS_DATA[ui]

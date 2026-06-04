@@ -21,6 +21,8 @@ class LandmarkModel {
   final String? submittedBy;
   final String? website;
   final String? openingHours;
+  final double? ticketPrice;   // null = free entry
+  final String? discountInfo;  // e.g. "15% off for 200 pts or 5 quests"
   // These are computed locally — not from the server
   final bool visitedByMe;
   final double? myRating;
@@ -39,6 +41,8 @@ class LandmarkModel {
     this.submittedBy,
     this.website,
     this.openingHours,
+    this.ticketPrice,
+    this.discountInfo,
     this.visitedByMe = false,
     this.myRating,
   });
@@ -46,7 +50,8 @@ class LandmarkModel {
   LandmarkModel withLocal({bool? visitedByMe, double? myRating}) => LandmarkModel(
     id: id, name: name, type: type, location: location, description: description,
     categories: categories, stories: stories, rating: rating, visitCount: visitCount,
-    hasActiveQuest: hasActiveQuest, submittedBy: submittedBy, website: website, openingHours: openingHours,
+    hasActiveQuest: hasActiveQuest, submittedBy: submittedBy, website: website,
+    openingHours: openingHours, ticketPrice: ticketPrice, discountInfo: discountInfo,
     visitedByMe: visitedByMe ?? this.visitedByMe,
     myRating: myRating ?? this.myRating,
   );
@@ -65,5 +70,7 @@ class LandmarkModel {
         submittedBy: json['submitted_by'] as String?,
         website: json['website'] as String?,
         openingHours: json['opening_hours'] as String?,
+        ticketPrice: (json['ticket_price'] as num?)?.toDouble(),
+        discountInfo: json['discount_info'] as String?,
       );
 }

@@ -21,6 +21,8 @@ def _doc_to_landmark(doc: dict) -> LandmarkResponse:
         stories=doc.get("stories", []),
         website=doc.get("website"),
         opening_hours=doc.get("opening_hours"),
+        ticket_price=doc.get("ticket_price"),
+        discount_info=doc.get("discount_info"),
         rating=doc.get("rating", 0.0),
         visit_count=doc.get("visit_count", 0),
         has_active_quest=doc.get("has_active_quest", False),
@@ -268,10 +270,14 @@ async def submit_story(db: AsyncIOMotorDatabase, landmark_id: str, user_id: str,
         return None
     if len(lm.get("stories", [])) >= _MAX_STORIES:
         raise HTTPException(status_code=422, detail=f"Landmark already has {_MAX_STORIES} stories (maximum)")
-    # Admins bypass the review queue — story is added directly
+    # Admins and the landmark's own creator bypass the review queue
     user_doc = await db.users.find_one({"_id": ObjectId(user_id)})
     is_admin = user_doc.get("is_admin", False) if user_doc else False
-    if is_admin:
+    is_creator = lm.get("submitted_by") == user_id
+    # Award 5 points for submitting a story regardless of outcome
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$inc": {"points": 5}})
+
+    if is_admin or is_creator:
         await db.landmarks.update_one({"_id": oid}, {"$push": {"stories": text.strip()}})
         return StoryResponse(
             id="direct",
@@ -293,7 +299,6 @@ async def submit_story(db: AsyncIOMotorDatabase, landmark_id: str, user_id: str,
         landmark_name=lm.get("name"),
         text=text.strip(),
         status="pending",
-        submitted_by=user_id,
     )
 
 

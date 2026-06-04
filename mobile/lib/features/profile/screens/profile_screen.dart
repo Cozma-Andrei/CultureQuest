@@ -71,6 +71,28 @@ class ProfileScreen extends ConsumerWidget {
             Expanded(child: _StatCard(value: '${user.completedQuests}', label: 'Quests', icon: Icons.task_alt_rounded, color: theme.colorScheme.primary)),
           ]),
 
+          const SizedBox(height: 12),
+
+          // Reward hint
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.amber.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.amber.withOpacity(0.25)),
+            ),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.local_activity_outlined, color: Colors.amber, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Earn more points and complete quests to unlock entry-fee discounts at museums, galleries and other paid attractions across the city!',
+                  style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
+                ),
+              ),
+            ]),
+          ),
+
           const SizedBox(height: 28),
 
           // Interests
@@ -164,17 +186,11 @@ class ProfileScreen extends ConsumerWidget {
                     FilledButton(
                       onPressed: () async {
                         Navigator.pop(ctx);
-                        // 1. Clear all local storage
+                        // 1. Clear all local storage only — server data is untouched
                         await ref.read(localDataProvider).clearAll();
                         // 2. Clear pending FL interactions
                         ref.read(flProvider.notifier).clearBuffer();
-                        // 3. Reset server-side points and quest count (interests kept)
-                        try {
-                          await ref.read(apiServiceProvider).post('/users/me/reset-progress');
-                        } catch (_) {}
-                        // 4. Refresh auth so UI reflects updated points
-                        await ref.read(authProvider.notifier).refreshUser();
-                        // 5. Refresh map landmark annotations
+                        // 3. Refresh map landmark annotations
                         ref.read(mapProvider.notifier).fetchAllLandmarks();
                         ref.read(mapProvider.notifier).fetchMyRoutes();
                         if (context.mounted) {

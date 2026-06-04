@@ -27,6 +27,8 @@ class LandmarkCreate(BaseModel):
     stories: list[str] = []
     website: str | None = None
     opening_hours: str | None = None
+    ticket_price: float | None = None   # None = free entry
+    discount_info: str | None = None    # e.g. "15% off for 200 pts or 5 quests"
 
 
 class LandmarkStatus(str, Enum):
@@ -60,6 +62,8 @@ class LandmarkEdit(BaseModel):
     categories: list[str] | None = None
     website: str | None = None
     opening_hours: str | None = None
+    ticket_price: float | None = None
+    discount_info: str | None = None
 
 
 class StorySubmit(BaseModel):
@@ -78,3 +82,18 @@ class StoryResponse(BaseModel):
 class RatingPayload(BaseModel):
     rating: int           # 1–5 new value
     previous_rating: int | None = None  # user's previous rating from local storage
+
+
+class CommentCreate(BaseModel):
+    text: str = ""
+    rating: int  # 1–5
+
+
+class CommentResponse(BaseModel):
+    id: str
+    landmark_id: str
+    text: str
+    rating: int
+    created_at: str
+    flagged: bool = False
+    flag_source: str | None = None  # "openai" | "local" | None
