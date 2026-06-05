@@ -151,8 +151,9 @@ Output:
 
 ### Determinism
 
-`np.random.seed(42)` is set at the top of `finetune.py`. Every run with the same
-`pretrained_weights.json` and `train.npz` produces byte-for-byte identical weights.
+`np.random.seed(42)` and `random.seed(42)` are both set at the top of `finetune.py`
+(numpy and Python's built-in `random` module are separate states; both must be seeded).
+Every run with the same `pretrained_weights.json` and `train.npz` produces byte-for-byte identical weights.
 The output file is rewritten (timestamp changes) but the values do not change.
 To get different weights: change the seed, change the data, or change the architecture.
 

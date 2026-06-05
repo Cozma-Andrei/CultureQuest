@@ -46,6 +46,7 @@ H1, H2    = 32, 16
 TYPES     = ['museum', 'monument', 'park', 'gallery', 'restaurant', 'square', 'building', 'other']
 
 np.random.seed(42)
+random.seed(42)
 
 # ── Model (identical to pretrain.py) ─────────────────────────────────────────
 

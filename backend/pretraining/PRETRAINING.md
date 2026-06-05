@@ -330,7 +330,39 @@ rather than pretending Yelp reviewers always visit at noon.
 
 ---
 
-### Bias 3 — No closed landmarks in real data (corrected synthetically)
+### Bias 3 — Yelp negative sentiment pulls restaurant engagement scores down
+
+**Origin**: Yelp is the only dataset with explicit negative signal (1-3 star
+reviews → labels 0.20-0.60). Roughly 20-25% of Yelp reviews are 1-3 stars,
+and Yelp is ~65% restaurants. This means the training set contains a large
+volume of `gastronomy user + restaurant → low label` examples, mixed with the
+positive Foursquare check-ins (`gastronomy + restaurant → 0.70`). The model
+learns a muddled average for this combination.
+
+**Effect on the model**: A gastronomy-only user at a restaurant receives a
+lower predicted engagement score than intuition suggests — around 0.65-0.75
+rather than 0.85+. This is especially visible with mean reversion (see
+FINETUNING.md), where predictions collapse toward the dataset mean regardless
+of input.
+
+**Partial fixes applied**:
+- Finetuning oversamples low-label records (label ≤ 0.40) 3× to sharpen
+  the model's ability to discriminate — see FINETUNING.md.
+- The type-balancing cap reduces the overall volume of restaurant records,
+  limiting how heavily Yelp negative sentiment influences the restaurant
+  weight column.
+
+**What FL does**: FL rounds with real in-app engagement gradually correct
+this bias. If gastronomy users in the app consistently rate restaurants
+positively, those local SGD updates push the restaurant weights upward.
+However this correction is slow (many rounds, many users) and population-level
+(FedAvg dilutes individual signals). A personal head stored on-device would
+correct it per-user without waiting for population convergence — see the
+Future Improvements section.
+
+---
+
+### Bias 4 — No closed landmarks in real data (corrected synthetically)
 
 All real-world sources record only interactions where the place was open
 (you only check in to or review an open venue). Without intervention, `isOpen`
@@ -435,39 +467,144 @@ data starts flowing from the app.
 
 ---
 
-## FL Dwell Time Scaling (route generation)
+## Route Generation — Full FL Pipeline
 
-When a route is generated (`POST /api/routes/generate`) the backend loads the
-current global weights from Redis and runs inference for each selected stop.
-The predicted score scales the base dwell time from `_VISIT_MINUTES_BY_TYPE`:
+`POST /api/routes/generate` runs three FL-driven steps. All three share the
+same global weights loaded once from Redis at the start of the request.
+
+---
+
+### Step 1 — Candidate filtering
+
+All landmarks within 10 km are fetched from MongoDB. The top
+`max_landmarks × 2` (= 10) are kept, sorted descending by:
 
 ```
-multiplier = 0.75 + 0.5 * fl_score      # range [0.75x, 1.25x]
-scaled_dwell = max(5, round(base_dwell * multiplier))
+initial_score = fl_score * 0.8 + proximity * 0.2
 ```
 
-| FL score | Multiplier | Museum (base 70 min) | Monument (base 20 min) |
+- `fl_score` — FL inference with route-position dims (`routeStopNormalized`,
+  `routeLengthNormalized`) set to 0. Already encodes user interests (dims 0-5),
+  landmark type (dims 6-13), and interest-match fraction (dim 18), so it
+  naturally ranks relevant landmark types higher for the given user.
+- `proximity` = `1 - min(distance_from_start / 2000, 1.0)`
+
+Fallback when Redis has no weights:
+`interest_match * 0.8 + proximity * 0.2`
+where `interest_match = (categories ∩ user_interests) / len(categories)`.
+
+---
+
+### Step 2 — Greedy selection with FL tiebreaker
+
+Iterates up to `max_landmarks` (= 5) times. Each iteration picks the
+candidate with the lowest selection key (lower = preferred):
+
+```
+interest_match = (categories ∩ user_interests) / len(categories)   # [0, 1]
+selection_key  = distance_m - tiebreaker_m * interest_match
+```
+
+- `distance_m` — from the **last added stop** (start position for the first stop)
+- `interest_match` — fraction of the landmark's categories matching the user's declared interests
+
+Using interest match directly gives a clean 0→1 range regardless of whether
+FL weights are in Redis. A perfect-match landmark (e.g. a restaurant for a
+gastronomy-only user) always gets the full `tiebreaker_m` advantage over a
+zero-match landmark (e.g. a monument).
+
+`tiebreaker_m` is chosen by the user via a slider (0–1000 m) before generating
+the route. At 0 m the selection is pure nearest-neighbour; at 1000 m a
+perfectly matching landmark can overcome up to 1000 m of extra distance over a
+non-matching one.
+
+| tiebreaker_m | Effect |
+|-------------|--------|
+| 0 | Pure nearest-neighbour — interests have no influence on ordering |
+| 200 | Slight relevance boost within 200 m |
+| 1000 | Strong preference — interest match can override up to 1 km of extra distance |
+
+---
+
+### Step 3 — Dwell time scaling
+
+After all stops are chosen, FL runs a **second inference pass** per stop with
+the actual route-position dims filled in
+(`routeStopNormalized`, `routeLengthNormalized`):
+
+```
+dwell = max(5, round(base_dwell × (0.75 + 0.5 × fl_score)))
+```
+
+| fl_score | Multiplier | Museum (base 70 min) | Monument (base 20 min) |
 |----------|-----------|----------------------|------------------------|
-| 0.0 | 0.75x | 52 min | 15 min |
-| 0.5 | 1.00x | 70 min | 20 min |
-| 1.0 | 1.25x | 87 min | 25 min |
+| 0.0 | 0.75× | 52 min | 15 min |
+| 0.5 | 1.00× | 70 min | 20 min |
+| 1.0 | 1.25× | 87 min | 25 min |
 
-The feature vector used for inference is built server-side with:
-- User interests and landmark type from the database
-- `isOpen = 1.0` (assumed open during planning)
-- Current weekday and hour
-- `relativeDistanceRank` computed among route candidates
-- Route position (`routeStopNormalized`, `routeLengthNormalized`) using final stop count
+If Redis is unavailable all three steps fall back to unscaled type-based values.
 
-If Redis is unavailable, dwell times fall back to the unscaled type-based values.
-
-**Important**: `routeStopNormalized` (dim 20) and `routeLengthNormalized` (dim 21)
-are always `0.0` in pretraining data, so the model weights for those columns are
-effectively uninitialised from pretraining — FL rounds with real route data are the
-only source of signal for those dimensions.
+**Note**: `routeStopNormalized` (dim 20) and `routeLengthNormalized` (dim 21)
+are always `0.0` in pretraining data — FL rounds with real route interaction
+data are the only source of signal for those dimensions.
 
 ### routeLengthNormalized normalisation
 
 The route generator caps at `max_landmarks = 5` stops.
 The normalisation constant is `4` (= max_stops - 1), so a 5-stop route
 correctly reaches `(5-1)/4 = 1.0`.
+
+---
+
+## Limitations and Future Improvements
+
+### Vanilla FedAvg washes out individual preferences
+
+The current architecture uses standard FedAvg: every client uploads a weight
+delta, the server computes a weighted average across all deltas, and the result
+becomes the new global model. Each device then downloads this updated global.
+
+The problem: individual preferences are diluted by the population average.
+A user who only likes gastronomy and a user who only likes nature both pull
+the global model in opposite directions — the result is a compromise that
+serves neither of them well. The explicit interest declarations in the feature
+vector (dims 0-5) compensate for this at inference time, but the model's
+*learned weights* still reflect the average user, not the individual.
+
+### Recommended fix — local personal head
+
+Keep FedAvg for the global backbone (22→32→16 layers) which learns
+population-level patterns well: landmark type base scores, time-of-day
+effects, the isOpen penalty, weekend behaviour. Add a small **personal last
+layer** (16→1, 17 weights + 1 bias) that is fine-tuned locally on each
+device using only that user's own engagement history and is **never uploaded**.
+
+```
+Global backbone (shared, FedAvg):   22 -> 32 -> 16
+Personal head   (local, on-device):         16 -> 1
+```
+
+The global model provides a good prior; the personal head adjusts for
+individual behaviour without being diluted by other users.
+
+### Why this matters more as the type taxonomy grows
+
+Currently there are 8 landmark types (museum, monument, park, gallery,
+restaurant, square, building, other). Suppose "restaurant" is later split
+into finer subtypes — greek restaurant, chinese restaurant, romanian
+restaurant. Each would get its own one-hot dimension in the type block
+(dims 6-13 would expand), requiring a full retrain of the backbone.
+
+More importantly, two users who both declared "gastronomy" interest would
+have **identical feature vectors** for any restaurant subtype — the global
+model cannot distinguish a user who always picks greek restaurants from one
+who always picks romanian ones, because the shared backbone learns the
+population average across all gastronomy users.
+
+With a personal head, the 16 activations going into the last layer carry
+the backbone's representation of the landmark. The personal head learns
+which combinations of those activations correlate with *this user's*
+engagement — effectively learning a personal re-weighting of the backbone's
+features. If that user consistently rates greek restaurants higher, the
+personal head's weights shift accordingly, without any architecture change
+or retraining of the backbone.

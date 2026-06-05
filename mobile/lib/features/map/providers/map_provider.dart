@@ -142,9 +142,13 @@ class MapNotifier extends StateNotifier<MapState> {
 
   void _onPosition(Position pos) {
     if (_disposed) return;
-    // Skip the initial fix if accuracy is worse than 100 m to avoid the "jump" artefact.
     final isFirstFix = state.position == null;
-    if (isFirstFix && pos.accuracy > 100) return;
+    // Reject any fix worse than 50 m — network-location noise on bad-internet days
+    // can produce large accuracy spikes that make the dot jump erratically.
+    // The threshold is 100 m only for the very first fix (we need something to start with);
+    // after that we tighten to 50 m.
+    final threshold = isFirstFix ? 100.0 : 50.0;
+    if (pos.accuracy > threshold) return;
     state = state.copyWith(position: pos);
     // Fetch landmarks on the first accepted fix
     if (isFirstFix) {
@@ -273,7 +277,7 @@ class MapNotifier extends StateNotifier<MapState> {
     'visited_count': r.visitedCount,
   };
 
-  Future<void> generateRoute({int availableMinutes = 300}) async {
+  Future<void> generateRoute({int availableMinutes = 300, double flTiebreakerM = 200.0}) async {
     final pos = state.position;
     if (pos == null) return;
     state = state.copyWith(isGeneratingRoute: true, clearError: true, clearProgressRoute: true);
@@ -283,6 +287,7 @@ class MapNotifier extends StateNotifier<MapState> {
         'interests': [],
         'available_minutes': availableMinutes,
         'max_landmarks': 5,
+        'fl_tiebreaker_m': flTiebreakerM,
       });
       final route = RouteModel.fromJson(res.data);
       // Convert to RouteWithProgress (no stops visited yet) and save locally

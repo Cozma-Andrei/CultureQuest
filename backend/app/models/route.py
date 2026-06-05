@@ -7,6 +7,7 @@ class RouteRequest(BaseModel):
     interests: list[str]
     available_minutes: int
     max_landmarks: int = 5
+    fl_tiebreaker_m: float = 200.0
 
 
 class RouteStop(BaseModel):

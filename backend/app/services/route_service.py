@@ -79,43 +79,7 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
     if not nearby:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No landmarks found nearby. Try seeding sample data first.")
 
-    scored = sorted(nearby, key=lambda l: _score(l, user_interests, request.start_location.lat, request.start_location.lng, 2000), reverse=True)
-    candidates = scored[:request.max_landmarks * 2]
-
-    # Relative distance rank: 0 = closest among candidates, 1 = farthest
-    candidate_dists = {
-        l.id: _haversine(request.start_location.lat, request.start_location.lng, l.location.lat, l.location.lng)
-        for l in candidates
-    }
-    max_dist = max(candidate_dists.values()) if candidate_dists else 1.0
-
-    # Greedy nearest-neighbour route building.
-    stops: list[tuple[LandmarkResponse, int, float]] = []
-    cur_lat, cur_lng = request.start_location.lat, request.start_location.lng
-    remaining = list(candidates)
-    total_visit_minutes = 0
-    total_walk_minutes = 0.0
-
-    while remaining and len(stops) < request.max_landmarks:
-        nearest = min(remaining, key=lambda l: _haversine(cur_lat, cur_lng, l.location.lat, l.location.lng))
-        remaining.remove(nearest)
-        walk = _haversine(cur_lat, cur_lng, nearest.location.lat, nearest.location.lng) / _WALKING_M_PER_MIN
-        visit = _VISIT_MINUTES_BY_TYPE.get(nearest.type, _VISIT_MINUTES)
-        if total_visit_minutes + visit > request.available_minutes:
-            break
-        stops.append((nearest, visit, round(_score(nearest, user_interests, request.start_location.lat, request.start_location.lng, 2000), 2)))
-        total_visit_minutes += visit
-        total_walk_minutes += walk
-        cur_lat, cur_lng = nearest.location.lat, nearest.location.lng
-
-    if not stops and candidates:
-        l = candidates[0]
-        visit = _VISIT_MINUTES_BY_TYPE.get(l.type, _VISIT_MINUTES)
-        stops = [(l, visit, round(_score(l, user_interests, request.start_location.lat, request.start_location.lng, 2000), 2))]
-        total_visit_minutes = visit
-
-    # FL dwell scaling: load global weights and run inference per stop.
-    # Score in [0,1] maps to dwell multiplier [0.75, 1.25] — high interest = more time.
+    # Load FL weights first — needed for both candidate scoring and tiebreaking.
     fl_weights = None
     if redis is not None:
         try:
@@ -125,6 +89,82 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
         except Exception:
             fl_weights = None
 
+    # Distances from start for all nearby landmarks.
+    nearby_dists = {
+        l.id: _haversine(request.start_location.lat, request.start_location.lng, l.location.lat, l.location.lng)
+        for l in nearby
+    }
+    max_nearby_dist = max(nearby_dists.values()) if nearby_dists else 1.0
+
+    # Step 1 — score every nearby landmark to pick the best candidates.
+    # FL score (route dims = 0) replaces the hand-crafted interest match because it
+    # already encodes user interests, landmark type, and interest-match fraction via
+    # the feature vector. Fallback to hand-crafted _score if no FL weights.
+    all_fl_scores: dict[str, float] = {}
+    if fl_weights is not None:
+        for l in nearby:
+            dist_rank = nearby_dists[l.id] / max_nearby_dist
+            fv = _build_feature_vector(user_interests, l, 0, 0, dist_rank)
+            all_fl_scores[l.id] = fl_predict(fl_weights, fv)
+
+    def _initial_score(l: LandmarkResponse) -> float:
+        dist_score = 1.0 - min(nearby_dists[l.id] / 2000, 1.0)
+        if l.id in all_fl_scores:
+            return all_fl_scores[l.id] * 0.8 + dist_score * 0.2
+        interest_score = sum(1 for c in l.categories if c in user_interests) / max(len(l.categories), 1)
+        return interest_score * 0.8 + dist_score * 0.2
+
+    candidates = sorted(nearby, key=_initial_score, reverse=True)[:request.max_landmarks * 2]
+
+    candidate_dists = {l.id: nearby_dists[l.id] for l in candidates}
+    max_dist = max(candidate_dists.values()) if candidate_dists else 1.0
+
+    # Step 2 — tiebreaker: reuse FL scores from step 1, normalised so the full
+    # tiebreaker window is in play regardless of how compressed the raw scores are.
+    _TIEBREAKER_M = request.fl_tiebreaker_m
+    fl_scores = {l.id: all_fl_scores[l.id] for l in candidates if l.id in all_fl_scores}
+    fl_norm: dict[str, float] = {}
+    if fl_scores:
+        lo, hi = min(fl_scores.values()), max(fl_scores.values())
+        spread = hi - lo
+        for lid, s in fl_scores.items():
+            fl_norm[lid] = (s - lo) / spread if spread > 1e-6 else 0.5
+
+    def _interest_match(l: LandmarkResponse) -> float:
+        if not user_interests:
+            return 0.0
+        return sum(1 for c in l.categories if c in user_interests) / max(len(l.categories), 1)
+
+    def _selection_key(l: LandmarkResponse, cur_lat: float, cur_lng: float) -> float:
+        dist = _haversine(cur_lat, cur_lng, l.location.lat, l.location.lng)
+        return dist - _TIEBREAKER_M * _interest_match(l)
+
+    # Greedy nearest-neighbour route building with FL tiebreaker.
+    stops: list[tuple[LandmarkResponse, int, float]] = []
+    cur_lat, cur_lng = request.start_location.lat, request.start_location.lng
+    remaining = list(candidates)
+    total_visit_minutes = 0
+    total_walk_minutes = 0.0
+
+    while remaining and len(stops) < request.max_landmarks:
+        nearest = min(remaining, key=lambda l: _selection_key(l, cur_lat, cur_lng))
+        remaining.remove(nearest)
+        walk = _haversine(cur_lat, cur_lng, nearest.location.lat, nearest.location.lng) / _WALKING_M_PER_MIN
+        visit = _VISIT_MINUTES_BY_TYPE.get(nearest.type, _VISIT_MINUTES)
+        if total_visit_minutes + visit > request.available_minutes:
+            break
+        stops.append((nearest, visit, round(all_fl_scores.get(nearest.id, 0.0), 2)))
+        total_visit_minutes += visit
+        total_walk_minutes += walk
+        cur_lat, cur_lng = nearest.location.lat, nearest.location.lng
+
+    if not stops and candidates:
+        l = candidates[0]
+        visit = _VISIT_MINUTES_BY_TYPE.get(l.type, _VISIT_MINUTES)
+        stops = [(l, visit, round(all_fl_scores.get(l.id, 0.0), 2))]
+        total_visit_minutes = visit
+
+    # FL dwell scaling: score in [0,1] maps to multiplier [0.75, 1.25].
     total_stops = len(stops)
     scaled_stops: list[tuple[LandmarkResponse, int, float]] = []
     scaled_total_visit = 0

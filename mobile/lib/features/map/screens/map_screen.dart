@@ -43,6 +43,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   LandmarkModel? _navTarget;
   String _navMode = 'walking'; // 'walking' | 'driving' | 'transit'
   int? _navDurationSec;        // seconds from OSRM for current nav
+  int? _navDistanceM;          // metres from OSRM for current nav
   int? _routeDurationSec;      // seconds from OSRM for route overview
   int? _routeDistanceM;        // metres from OSRM for route overview
   bool _headingUp = false;
@@ -88,7 +89,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
 
     ref.listen<MapState>(mapProvider, (prev, next) {
       if (next.activeRoute != null && prev?.activeRoute != next.activeRoute) {
-        setState(() { _navTarget = null; _navPolyline = const []; });
+        setState(() { _navTarget = null; _navPolyline = const []; _navDurationSec = null; _navDistanceM = null; });
         _fetchStreetRoute(next.activeRoute!.stops, next.position);
         _fetchGeneratedRouteOverview(next.activeRoute!);
       }
@@ -97,7 +98,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         _mapController.rotate(0);
       }
       if (next.activeProgressRoute != null && prev?.activeProgressRoute != next.activeProgressRoute) {
-        setState(() { _streetPolyline = const []; _navTarget = null; _navPolyline = const []; });
+        setState(() { _streetPolyline = const []; _navTarget = null; _navPolyline = const []; _navDurationSec = null; _navDistanceM = null; });
         _fetchRouteOverview(next.activeProgressRoute!);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_sheetController.isAttached) {
@@ -442,7 +443,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                                 style: TextStyle(color: Colors.white70, fontSize: 11))
                           else if (_navDurationSec != null) ...[
                             Text(
-                              '~${(_navDurationSec! / 60).ceil()} min ${_navMode == "driving" ? "drive" : "walk"}',
+                              '~${(_navDurationSec! / 60).ceil()} min ${_navMode == "driving" ? "drive" : "walk"}'
+                              '${_navDistanceM != null ? " · ${(_navDistanceM! / 1000).toStringAsFixed(1)} km" : ""}',
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                             Text(
@@ -474,7 +476,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                       onTap: () {
                         final stoppedTarget = _navTarget;
                         final hadRoute = mapState.activeRoute != null || progressRoute != null;
-                        setState(() { _navTarget = null; _navPolyline = const []; _navMode = 'walking'; _headingUp = false; });
+                        setState(() { _navTarget = null; _navPolyline = const []; _navMode = 'walking'; _headingUp = false; _navDurationSec = null; _navDistanceM = null; });
                         _mapController.rotate(0);
                         _restoreSheet();
                         // Only reopen landmark sheet if there was no route — if there was
@@ -577,9 +579,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 },
                 onStopNav: () {
                   // Closing nav inside a route returns to route — no landmark sheet
-                  setState(() { _navTarget = null; _navPolyline = const []; _headingUp = false; });
+                  setState(() { _navTarget = null; _navPolyline = const []; _headingUp = false; _navDurationSec = null; _navDistanceM = null; });
                   _mapController.rotate(0);
                 },
+                onGenerateRoute: _showGenerateRouteSheet,
                 routeDurationSec: _routeDurationSec,
                 routeDistanceM: _routeDistanceM,
                 openInMaps: _openGoogleMaps,
@@ -844,7 +847,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   Future<void> _fetchNavPolylineOnly(LandmarkModel landmark, String mode) async {
     if (mode == 'transit') {
       // Transit: clear any existing polyline - direction is handled via Google Maps
-      setState(() { _navPolyline = const []; _navDurationSec = null; });
+      setState(() { _navPolyline = const []; _navDurationSec = null; _navDistanceM = null; });
       return;
     }
     final pos = ref.read(mapProvider).position;
@@ -858,12 +861,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       final route = res.data['routes'][0];
       final coords = route['geometry']['coordinates'] as List;
       final duration = (route['duration'] as num).toInt();
+      final distM = (route['distance'] as num).toInt();
       if (!mounted) return;
       setState(() {
         _navPolyline = coords
             .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
             .toList();
         _navDurationSec = duration;
+        _navDistanceM = distM;
       });
     } catch (_) {}
   }
@@ -1344,6 +1349,69 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     if (uri != null && await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+
+  void _showGenerateRouteSheet() {
+    double tiebreakerM = 200.0;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => Padding(
+          padding: EdgeInsets.fromLTRB(24, 20, 24, MediaQuery.of(ctx).padding.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              Text('Route Preferences', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              Text('Stop selection priority', style: Theme.of(ctx).textTheme.labelLarge),
+              const SizedBox(height: 4),
+              Row(children: [
+                const Text('Shortest path', style: TextStyle(fontSize: 12)),
+                Expanded(
+                  child: Slider(
+                    value: tiebreakerM,
+                    min: 0,
+                    max: 1000,
+                    divisions: 10,
+                    onChanged: (v) => setS(() => tiebreakerM = v),
+                  ),
+                ),
+                const Text('Most relevant', style: TextStyle(fontSize: 12)),
+              ]),
+              Center(
+                child: Text(
+                  tiebreakerM == 0
+                      ? 'Pure distance - always picks the nearest stop'
+                      : tiebreakerM <= 300
+                          ? 'Slight preference boost within ${tiebreakerM.toInt()} m'
+                          : tiebreakerM <= 600
+                              ? 'Moderate preference boost within ${tiebreakerM.toInt()} m'
+                              : 'Strong preference boost within ${tiebreakerM.toInt()} m',
+                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ref.read(mapProvider.notifier).generateRoute(flTiebreakerM: tiebreakerM);
+                  },
+                  child: const Text('Generate'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showSetWebsiteDialog(String landmarkId, String landmarkName, String? current) {
@@ -2273,6 +2341,7 @@ class _BottomPanel extends ConsumerStatefulWidget {
   final String navMode;
   final void Function(String) onNavModeChanged;
   final VoidCallback onStopNav;
+  final VoidCallback onGenerateRoute;
   final int? routeDurationSec;
   final int? routeDistanceM;
   final Future<void> Function(double lat, double lng, String mode) openInMaps;
@@ -2288,6 +2357,7 @@ class _BottomPanel extends ConsumerStatefulWidget {
     required this.navMode,
     required this.onNavModeChanged,
     required this.onStopNav,
+    required this.onGenerateRoute,
     this.routeDurationSec,
     this.routeDistanceM,
     required this.openInMaps,
@@ -2626,7 +2696,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
               FilledButton.icon(
                 onPressed: mapState.isGeneratingRoute || mapState.landmarks.isEmpty
                     ? null
-                    : () => ref.read(mapProvider.notifier).generateRoute(),
+                    : widget.onGenerateRoute,
                 icon: mapState.isGeneratingRoute
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.route, size: 18),
