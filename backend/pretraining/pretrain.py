@@ -69,34 +69,35 @@ def forward(W, x_batch):
     out = sigmoid(z3).squeeze(axis=-1)   # (B,)
     return out, (z1, a1, z2, a2, z3)
 
-def backward(W, x_batch, y_batch, cache, lr):
+def backward(W, x_batch, y_batch, cache, lr, max_norm: float = 1.0):
     z1, a1, z2, a2, z3 = cache
     B = len(y_batch)
     out = sigmoid(z3).squeeze(axis=-1)
 
-    # MSE loss gradient
-    dout = 2.0 * (out - y_batch) / B   # (B,)
-    dz3  = dout[:, None] * (out * (1 - out))[:, None]  # (B,1)
+    dout = 2.0 * (out - y_batch) / B
+    dz3  = dout[:, None] * (out * (1 - out))[:, None]
 
-    dW3 = dz3.T @ a2          # (1, H2)
-    db3 = dz3.sum(axis=0)
-    da2 = dz3 @ W['W3']       # (B, H2)
-
+    dW3 = dz3.T @ a2;  db3 = dz3.sum(axis=0)
+    da2 = dz3 @ W['W3']
     dz2 = da2 * relu_d(z2)
-    dW2 = dz2.T @ a1          # (H2, H1)
-    db2 = dz2.sum(axis=0)
-    da1 = dz2 @ W['W2']       # (B, H1)
-
+    dW2 = dz2.T @ a1;  db2 = dz2.sum(axis=0)
+    da1 = dz2 @ W['W2']
     dz1 = da1 * relu_d(z1)
-    dW1 = dz1.T @ x_batch     # (H1, 22)
-    db1 = dz1.sum(axis=0)
+    dW1 = dz1.T @ x_batch; db1 = dz1.sum(axis=0)
 
-    W['W1'] -= lr * dW1
-    W['b1'] -= lr * db1
-    W['W2'] -= lr * dW2
-    W['b2'] -= lr * db2
-    W['W3'] -= lr * dW3
-    W['b3'] -= lr * db3
+    # NaN guard: skip update if any gradient is corrupt
+    grads = [dW1, dW2, dW3]
+    if any(np.isnan(g).any() or np.isinf(g).any() for g in grads):
+        return
+
+    # Global gradient norm clipping
+    all_grads = np.concatenate([g.flatten() for g in [dW1, db1, dW2, db2, dW3, db3]])
+    norm = np.linalg.norm(all_grads)
+    scale = min(1.0, max_norm / norm) if norm > 0 else 1.0
+
+    W['W1'] -= lr * scale * dW1;  W['b1'] -= lr * scale * db1
+    W['W2'] -= lr * scale * dW2;  W['b2'] -= lr * scale * db2
+    W['W3'] -= lr * scale * dW3;  W['b3'] -= lr * scale * db3
 
 def mse_loss(W, X, y):
     out, _ = forward(W, X)

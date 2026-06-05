@@ -121,6 +121,17 @@ class LocalDataService {
     await _prefs.setStringList(_k(_votedSuffix), ids.toList());
   }
 
+  // ── Landmark cache (global, not user-scoped) ──────────────────────────────
+  // Landmarks are public data — stored under a fixed key, not namespaced per user.
+  // Refreshed on every successful fetch; used as fallback when backend is unreachable.
+
+  static const _landmarksCacheKey = 'cq_landmarks_all';
+
+  String? getLandmarksCache() => _prefs.getString(_landmarksCacheKey);
+
+  Future<void> saveLandmarksCache(String json) =>
+      _prefs.setString(_landmarksCacheKey, json);
+
   // ── Clear (this user's data only) ─────────────────────────────────────────
 
   Future<void> clearAll() async {

@@ -19,5 +19,4 @@ class AppConstants {
   static const defaultAvailableMinutes = 90;
 
   static const mlInputDim = 16;
-  static const tfliteModelPath = 'assets/models/recommendation.tflite';
 }

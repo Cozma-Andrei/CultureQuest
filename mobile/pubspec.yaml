@@ -27,7 +27,6 @@ dependencies:
   geolocator: ^11.1.0
 
   # ML on device (Federated Learning client)
-  tflite_flutter: ^0.10.4
 
   # Local storage
   flutter_secure_storage: ^9.0.0

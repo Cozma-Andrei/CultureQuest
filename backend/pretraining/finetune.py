@@ -76,7 +76,7 @@ def forward(W, x):
     z3 = a2 @ W['W3'].T + W['b3']
     return sigmoid(z3).squeeze(-1), (z1, a1, z2, a2)
 
-def backward(W, x, y, cache, lr):
+def backward(W, x, y, cache, lr, max_norm: float = 1.0):
     z1, a1, z2, a2 = cache
     out, _ = forward(W, x)
     B = len(y)
@@ -87,9 +87,19 @@ def backward(W, x, y, cache, lr):
     dz2 = da2 * relu_d(z2);  dW2 = dz2.T @ a1; db2 = dz2.sum(0)
     da1 = dz2 @ W['W2']
     dz1 = da1 * relu_d(z1);  dW1 = dz1.T @ x;  db1 = dz1.sum(0)
-    W['W1'] -= lr*dW1; W['b1'] -= lr*db1
-    W['W2'] -= lr*dW2; W['b2'] -= lr*db2
-    W['W3'] -= lr*dW3; W['b3'] -= lr*db3
+
+    # NaN guard
+    if any(np.isnan(g).any() or np.isinf(g).any() for g in [dW1, dW2, dW3]):
+        return
+
+    # Global gradient norm clipping
+    all_g = np.concatenate([g.flatten() for g in [dW1, db1, dW2, db2, dW3, db3]])
+    norm  = np.linalg.norm(all_g)
+    scale = min(1.0, max_norm / norm) if norm > 0 else 1.0
+
+    W['W1'] -= lr*scale*dW1; W['b1'] -= lr*scale*db1
+    W['W2'] -= lr*scale*dW2; W['b2'] -= lr*scale*db2
+    W['W3'] -= lr*scale*dW3; W['b3'] -= lr*scale*db3
 
 def mse(W, X, y):
     out, _ = forward(W, X)

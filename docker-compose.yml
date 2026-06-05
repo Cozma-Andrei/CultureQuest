@@ -34,18 +34,6 @@ services:
       - mongodb
       - redis
 
-  flower_server:
-    build: ./backend
-    container_name: culturequest_flower
-    restart: unless-stopped
-    ports:
-      - "9090:9090"
-    env_file:
-      - ./backend/.env
-    command: python -m app.federated.server
-    depends_on:
-      - mongodb
-      - redis
 
 volumes:
   mongo_data:

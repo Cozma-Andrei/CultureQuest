@@ -207,9 +207,22 @@ class FLClientService {
         final dW1  = _outerVec(dz1, x);
         final db1g = List<double>.from(dz1);
 
-        _applyGrad(w1, dW1, lr);  _applyGradVec(b1, db1g, lr);
-        _applyGrad(w2, dW2, lr);  _applyGradVec(b2, db2g, lr);
-        _applyGrad(w3, dW3, lr);  _applyGradVec(b3, db3,  lr);
+        // NaN guard: skip this sample if any gradient is corrupt
+        if (_hasNaN(db1g) || _hasNaN(db2g) || _hasNaN(db3)) continue;
+
+        // Global gradient norm clipping (max_norm = 1.0)
+        // Prevents exploding gradients from a single bad sample corrupting weights.
+        final allGrads = [
+          ...dW1.expand((r) => r), ...db1g,
+          ...dW2.expand((r) => r), ...db2g,
+          ...dW3.expand((r) => r), ...db3,
+        ];
+        final norm = math.sqrt(allGrads.fold(0.0, (s, v) => s + v * v));
+        final scale = (norm > 1.0) ? 1.0 / norm : 1.0;
+
+        _applyGrad(w1, dW1, lr * scale);  _applyGradVec(b1, db1g, lr * scale);
+        _applyGrad(w2, dW2, lr * scale);  _applyGradVec(b2, db2g, lr * scale);
+        _applyGrad(w3, dW3, lr * scale);  _applyGradVec(b3, db3,  lr * scale);
       }
     }
 
@@ -269,4 +282,5 @@ class FLClientService {
   double _relu(double x) => x > 0 ? x : 0;
   double _reluDeriv(double x) => x > 0 ? 1.0 : 0.0;
   double _sigmoid(double x) => 1.0 / (1.0 + math.exp(-x.clamp(-30, 30)));
+  bool _hasNaN(List<double> v) => v.any((x) => x.isNaN || x.isInfinite);
 }

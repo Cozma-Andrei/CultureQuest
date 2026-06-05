@@ -15,8 +15,6 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
-    flower_server_host: str = "0.0.0.0"
-    flower_server_port: int = 9090
     fl_min_clients: int = 2
     fl_rounds: int = 10
 

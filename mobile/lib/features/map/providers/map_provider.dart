@@ -170,7 +170,17 @@ class MapNotifier extends StateNotifier<MapState> {
       final raw = (res.data as List).map((j) => LandmarkModel.fromJson(j as Map<String, dynamic>)).toList();
       state = state.copyWith(landmarks: _annotate(raw), isLoadingLandmarks: false);
     } catch (_) {
-      state = state.copyWith(isLoadingLandmarks: false);
+      // Offline fallback: filter the cached allLandmarks by distance
+      final all = state.allLandmarks;
+      if (all.isNotEmpty) {
+        final nearby = all.where((l) {
+          final d = Geolocator.distanceBetween(lat, lng, l.location.lat, l.location.lng);
+          return d <= 1500;
+        }).toList();
+        state = state.copyWith(landmarks: nearby, isLoadingLandmarks: false);
+      } else {
+        state = state.copyWith(isLoadingLandmarks: false);
+      }
     }
   }
 
@@ -178,8 +188,21 @@ class MapNotifier extends StateNotifier<MapState> {
     try {
       final res = await _api.get('/landmarks/all');
       final raw = (res.data as List).map((j) => LandmarkModel.fromJson(j as Map<String, dynamic>)).toList();
+      // Persist to cache so the app works offline on next launch
+      _local.saveLandmarksCache(jsonEncode(res.data));
       state = state.copyWith(allLandmarks: _annotate(raw));
-    } catch (_) {}
+    } catch (_) {
+      // Offline fallback: load from SharedPreferences cache
+      final cached = _local.getLandmarksCache();
+      if (cached != null && state.allLandmarks.isEmpty) {
+        try {
+          final raw = (jsonDecode(cached) as List)
+              .map((j) => LandmarkModel.fromJson(j as Map<String, dynamic>))
+              .toList();
+          state = state.copyWith(allLandmarks: _annotate(raw));
+        } catch (_) {}
+      }
+    }
   }
 
   void _loadLocalRoutes() {
