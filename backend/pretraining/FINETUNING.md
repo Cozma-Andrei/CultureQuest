@@ -147,7 +147,14 @@ python backend/pretraining/finetune.py
 Output:
 - `output/finetuned_weights.json` — local backup of fine-tuned weights
 - `output/charts/finetune_results.png` — loss curves + analysis
-- Weights uploaded to Redis as round 0 (replaces pre-trained weights)
+- Weights uploaded to Redis as round 0 via `POST /api/federated/admin/initialize`, replacing whatever weights are currently stored
+
+### Determinism
+
+`np.random.seed(42)` is set at the top of `finetune.py`. Every run with the same
+`pretrained_weights.json` and `train.npz` produces byte-for-byte identical weights.
+The output file is rewritten (timestamp changes) but the values do not change.
+To get different weights: change the seed, change the data, or change the architecture.
 
 ---
 

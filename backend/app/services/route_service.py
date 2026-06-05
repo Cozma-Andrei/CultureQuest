@@ -13,6 +13,36 @@ from app.services.auth_service import get_user_by_id
 _WALKING_M_PER_MIN = 83   # ~5 km/h
 _VISIT_MINUTES = 25       # default
 
+_INTERESTS = ['art', 'architecture', 'history', 'gastronomy', 'nature', 'music']
+_TYPES     = ['museum', 'monument', 'park', 'gallery', 'restaurant', 'square', 'building', 'other']
+
+def _build_feature_vector(
+    user_interests: list[str],
+    landmark: LandmarkResponse,
+    stop_index: int,
+    total_stops: int,
+    relative_distance_rank: float,
+) -> list[float]:
+    now = datetime.now()
+    is_weekend = now.weekday() >= 5
+    v = [0.0] * 22
+    for i, interest in enumerate(_INTERESTS):
+        if interest in user_interests:
+            v[i] = 1.0
+    type_idx = _TYPES.index(landmark.type) if landmark.type in _TYPES else len(_TYPES) - 1
+    v[6 + type_idx] = 1.0
+    v[14] = 1.0  # assume open during planning
+    v[15] = 1.0 if is_weekend else 0.0
+    v[16] = now.hour / 24.0
+    v[17] = relative_distance_rank
+    if user_interests:
+        matches = sum(1 for c in landmark.categories if c in user_interests)
+        v[18] = matches / len(user_interests)
+    v[19] = 1.0  # is part of route
+    v[20] = (stop_index / (total_stops - 1)) if total_stops > 1 else 0.0
+    v[21] = ((total_stops - 1) / 4.0) if total_stops > 0 else 0.0
+    return v
+
 # Realistic dwell time by landmark type
 _VISIT_MINUTES_BY_TYPE: dict[str, int] = {
     "museum":     70,
@@ -41,7 +71,7 @@ def _score(landmark: LandmarkResponse, user_interests: list[str], origin_lat: fl
     return interest_score * 0.6 + dist_score * 0.4
 
 
-async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, request: RouteRequest) -> RouteResponse:
+async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, request: RouteRequest, redis=None) -> RouteResponse:
     user = await get_user_by_id(db, user_id)
     user_interests = [i.value for i in user.interests]
 
@@ -52,12 +82,19 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
     scored = sorted(nearby, key=lambda l: _score(l, user_interests, request.start_location.lat, request.start_location.lng, 2000), reverse=True)
     candidates = scored[:request.max_landmarks * 2]
 
+    # Relative distance rank: 0 = closest among candidates, 1 = farthest
+    candidate_dists = {
+        l.id: _haversine(request.start_location.lat, request.start_location.lng, l.location.lat, l.location.lng)
+        for l in candidates
+    }
+    max_dist = max(candidate_dists.values()) if candidate_dists else 1.0
+
     # Greedy nearest-neighbour route building.
-    # Budget only counts time AT landmarks (visit time); walking time is informational.
     stops: list[tuple[LandmarkResponse, int, float]] = []
     cur_lat, cur_lng = request.start_location.lat, request.start_location.lng
     remaining = list(candidates)
     total_visit_minutes = 0
+    total_walk_minutes = 0.0
 
     while remaining and len(stops) < request.max_landmarks:
         nearest = min(remaining, key=lambda l: _haversine(cur_lat, cur_lng, l.location.lat, l.location.lng))
@@ -66,9 +103,9 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
         visit = _VISIT_MINUTES_BY_TYPE.get(nearest.type, _VISIT_MINUTES)
         if total_visit_minutes + visit > request.available_minutes:
             break
-        stop_total = int(walk + visit)  # walking + visit, shown per stop
-        stops.append((nearest, stop_total, round(_score(nearest, user_interests, request.start_location.lat, request.start_location.lng, 2000), 2)))
+        stops.append((nearest, visit, round(_score(nearest, user_interests, request.start_location.lat, request.start_location.lng, 2000), 2)))
         total_visit_minutes += visit
+        total_walk_minutes += walk
         cur_lat, cur_lng = nearest.location.lat, nearest.location.lng
 
     if not stops and candidates:
@@ -77,21 +114,44 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
         stops = [(l, visit, round(_score(l, user_interests, request.start_location.lat, request.start_location.lng, 2000), 2))]
         total_visit_minutes = visit
 
+    # FL dwell scaling: load global weights and run inference per stop.
+    # Score in [0,1] maps to dwell multiplier [0.75, 1.25] — high interest = more time.
+    fl_weights = None
+    if redis is not None:
+        try:
+            from app.services.fl_service import get_global_weights
+            from app.federated.model import fl_predict
+            _, fl_weights = await get_global_weights(redis)
+        except Exception:
+            fl_weights = None
+
+    total_stops = len(stops)
+    scaled_stops: list[tuple[LandmarkResponse, int, float]] = []
+    scaled_total_visit = 0
+    for i, (landmark, base_visit, rel_score) in enumerate(stops):
+        if fl_weights is not None:
+            dist_rank = candidate_dists.get(landmark.id, 0.0) / max_dist
+            fv = _build_feature_vector(user_interests, landmark, i, total_stops, dist_rank)
+            fl_score = fl_predict(fl_weights, fv)
+            scaled_visit = max(5, round(base_visit * (0.75 + 0.5 * fl_score)))
+        else:
+            scaled_visit = base_visit
+        scaled_stops.append((landmark, scaled_visit, rel_score))
+        scaled_total_visit += scaled_visit
+
     total_dist = 0.0
     prev_lat, prev_lng = request.start_location.lat, request.start_location.lng
-    for landmark, _, _ in stops:
+    for landmark, _, _ in scaled_stops:
         total_dist += _haversine(prev_lat, prev_lng, landmark.location.lat, landmark.location.lng)
         prev_lat, prev_lng = landmark.location.lat, landmark.location.lng
 
-    generated_at = datetime.utcnow().isoformat()
-    # Route is returned to the client for local storage — not persisted server-side
     import uuid
     return RouteResponse(
         id=str(uuid.uuid4()),
-        stops=[RouteStop(landmark=l, estimated_duration_minutes=d, relevance_score=s) for l, d, s in stops],
+        stops=[RouteStop(landmark=l, estimated_duration_minutes=d, relevance_score=s) for l, d, s in scaled_stops],
         total_distance_m=round(total_dist),
-        total_duration_minutes=sum(d for _, d, _ in stops),  # sum of (walk+visit) per stop
-        generated_at=generated_at,
+        total_duration_minutes=scaled_total_visit + int(total_walk_minutes),
+        generated_at=datetime.utcnow().isoformat(),
     )
 
 

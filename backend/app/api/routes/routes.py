@@ -2,7 +2,7 @@ import math
 from datetime import datetime
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.api.deps import get_current_user, get_admin_user, get_db
+from app.api.deps import get_current_user, get_admin_user, get_db, get_redis
 from app.models.route import RouteRequest, RouteResponse, RouteWithProgress, ReorderPayload, AdminRouteCreate
 from app.services.route_service import generate_cultural_route, get_user_routes, get_global_routes, reorder_route_stops
 from app.services.landmark_service import get_landmark_by_id
@@ -73,7 +73,12 @@ async def create_admin_route(
 
 
 @router.post("/generate", response_model=RouteResponse)
-async def generate_route(payload: RouteRequest, user_id: str = Depends(get_current_user), db=Depends(get_db)):
-    return await generate_cultural_route(db, user_id, payload)
+async def generate_route(
+    payload: RouteRequest,
+    user_id: str = Depends(get_current_user),
+    db=Depends(get_db),
+    redis=Depends(get_redis),
+):
+    return await generate_cultural_route(db, user_id, payload, redis)
 
 

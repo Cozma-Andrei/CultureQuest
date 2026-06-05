@@ -56,6 +56,18 @@ async def seed(lat: float, lng: float, user_id=Depends(get_current_user), db=Dep
     return await seed_landmarks(db, lat, lng, user_id=user_id)
 
 
+async def _check_submitter_or_admin(db, landmark_id: str, user_id: str):
+    """Returns the landmark or raises 403/404."""
+    lm = await get_landmark_by_id(db, landmark_id)
+    if not lm:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Landmark not found")
+    user_doc = await db.users.find_one({"_id": __import__("bson").ObjectId(user_id)})
+    is_admin = user_doc.get("is_admin", False) if user_doc else False
+    if not is_admin and lm.submitted_by != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the submitter or an admin can update this landmark")
+    return lm
+
+
 @router.patch("/{landmark_id}/website", response_model=LandmarkResponse)
 async def set_website(
     landmark_id: str,
@@ -64,15 +76,20 @@ async def set_website(
     db=Depends(get_db),
 ):
     """Set or update the website for a landmark (submitter or admin only)."""
-    lm = await get_landmark_by_id(db, landmark_id)
-    if not lm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Landmark not found")
-    user_doc = await db.users.find_one({"_id": __import__("bson").ObjectId(user_id)})
-    is_admin = user_doc.get("is_admin", False) if user_doc else False
-    if not is_admin and lm.submitted_by != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the submitter or an admin can update this landmark")
-    result = await edit_landmark(db, landmark_id, payload)
-    return result
+    await _check_submitter_or_admin(db, landmark_id, user_id)
+    return await edit_landmark(db, landmark_id, payload)
+
+
+@router.patch("/{landmark_id}/info", response_model=LandmarkResponse)
+async def set_info(
+    landmark_id: str,
+    payload: LandmarkEdit,
+    user_id=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """Set or update opening hours, ticket price, and discount info (submitter or admin only)."""
+    await _check_submitter_or_admin(db, landmark_id, user_id)
+    return await edit_landmark(db, landmark_id, payload)
 
 
 @router.post("/{landmark_id}/visit", status_code=204)

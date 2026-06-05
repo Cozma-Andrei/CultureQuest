@@ -44,6 +44,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   String _navMode = 'walking'; // 'walking' | 'driving' | 'transit'
   int? _navDurationSec;        // seconds from OSRM for current nav
   int? _routeDurationSec;      // seconds from OSRM for route overview
+  int? _routeDistanceM;        // metres from OSRM for route overview
   bool _headingUp = false;
   StreamSubscription<CompassEvent>? _compassSub;
   double _lastCompassHeading = 0;
@@ -89,6 +90,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       if (next.activeRoute != null && prev?.activeRoute != next.activeRoute) {
         setState(() { _navTarget = null; _navPolyline = const []; });
         _fetchStreetRoute(next.activeRoute!.stops, next.position);
+        _fetchGeneratedRouteOverview(next.activeRoute!);
       }
       if (next.activeRoute == null && prev?.activeRoute != null) {
         setState(() { _streetPolyline = const []; _headingUp = false; });
@@ -105,7 +107,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         _animateToRoute(next.activeProgressRoute!);
       }
       if (next.activeProgressRoute == null && prev?.activeProgressRoute != null) {
-        setState(() { _streetPolyline = const []; _overviewPolyline = const []; _routeDurationSec = null; _headingUp = false; });
+        setState(() { _streetPolyline = const []; _overviewPolyline = const []; _routeDurationSec = null; _routeDistanceM = null; _headingUp = false; });
         _mapController.rotate(0);
       }
       // Heading-up: rotate map to GPS heading (cardinal direction of travel)
@@ -566,9 +568,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   // Re-fetch progress route overview
                   final pr = ref.read(mapProvider).activeProgressRoute;
                   if (pr != null) _fetchRouteOverview(pr);
-                  // Re-fetch generated route polyline
+                  // Re-fetch generated route polyline + overview
                   final ar = ref.read(mapProvider).activeRoute;
-                  if (ar != null) _fetchStreetRoute(ar.stops, ref.read(mapProvider).position);
+                  if (ar != null) {
+                    _fetchStreetRoute(ar.stops, ref.read(mapProvider).position);
+                    _fetchGeneratedRouteOverview(ar);
+                  }
                 },
                 onStopNav: () {
                   // Closing nav inside a route returns to route — no landmark sheet
@@ -576,6 +581,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   _mapController.rotate(0);
                 },
                 routeDurationSec: _routeDurationSec,
+                routeDistanceM: _routeDistanceM,
                 openInMaps: _openGoogleMaps,
                 headingUp: _headingUp,
                 onHeadingUpToggle: () {
@@ -879,6 +885,27 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     _mapController.move(LatLng(pos.latitude, pos.longitude), 15.0);
   }
 
+  Future<void> _fetchGeneratedRouteOverview(RouteModel route) async {
+    if (route.stops.isEmpty || _navMode == 'transit') return;
+    final pos = ref.read(mapProvider).position;
+    try {
+      final stopPoints = route.stops
+          .map((s) => '${s.landmark.location.lng},${s.landmark.location.lat}')
+          .join(';');
+      final waypoints = pos != null
+          ? '${pos.longitude},${pos.latitude};$stopPoints'
+          : stopPoints;
+      final res = await Dio().get(
+        _osrmUrl(_navMode, waypoints),
+        queryParameters: {'overview': 'false'},
+      );
+      final osrmRoute = res.data['routes'][0];
+      final duration = (osrmRoute['duration'] as num).toInt();
+      final distM = (osrmRoute['distance'] as num).toInt();
+      if (mounted) setState(() { _routeDurationSec = duration; _routeDistanceM = distM; });
+    } catch (_) {}
+  }
+
   Future<void> _fetchRouteOverview(RouteWithProgress route) async {
     if (route.stops.isEmpty || _navMode == 'transit') return;
     final pos = ref.read(mapProvider).position;
@@ -897,12 +924,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       final osrmRoute = res.data['routes'][0];
       final coords = osrmRoute['geometry']['coordinates'] as List;
       final duration = (osrmRoute['duration'] as num).toInt();
+      final distM = (osrmRoute['distance'] as num).toInt();
       if (mounted) {
         setState(() {
           _overviewPolyline = coords
               .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
               .toList();
           _routeDurationSec = duration;
+          _routeDistanceM = distM;
         });
       }
     } catch (_) {
@@ -1363,6 +1392,111 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     );
   }
 
+  void _showSetInfoDialog(
+    String landmarkId,
+    String landmarkName,
+    String? currentHours,
+    double? currentPrice,
+    String? currentDiscount,
+  ) {
+    final hoursCtrl    = TextEditingController(text: currentHours ?? '');
+    final priceCtrl    = TextEditingController(
+      text: currentPrice != null
+          ? (currentPrice % 1 == 0 ? currentPrice.toInt().toString() : currentPrice.toStringAsFixed(2))
+          : '',
+    );
+    final discountCtrl = TextEditingController(text: currentDiscount ?? '');
+    final formKey      = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Hours & Tickets\n$landmarkName', style: const TextStyle(fontSize: 15)),
+        content: SingleChildScrollView(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: hoursCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Opening hours',
+                    hintText: 'e.g. Mon-Fri 09:00-18:00, Sat 10:00-16:00',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.access_time),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: priceCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Ticket price (RON) - leave blank for free',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.confirmation_number_outlined),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+                    final parsed = double.tryParse(v.trim().replaceAll(',', '.'));
+                    if (parsed == null || parsed < 0) return 'Enter a valid price or leave blank';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: discountCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Discount / reduction info (optional)',
+                    hintText: 'e.g. Free for children under 7',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.local_offer_outlined),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              Navigator.pop(ctx);
+              if (mounted) Navigator.pop(context);
+              try {
+                final priceRaw = priceCtrl.text.trim().replaceAll(',', '.');
+                final price = priceRaw.isEmpty ? null : double.parse(priceRaw);
+                await ref.read(apiServiceProvider).patch(
+                  '/landmarks/$landmarkId/info',
+                  data: {
+                    'opening_hours': hoursCtrl.text.trim().isEmpty ? null : hoursCtrl.text.trim(),
+                    'ticket_price': price,
+                    'discount_info': discountCtrl.text.trim().isEmpty ? null : discountCtrl.text.trim(),
+                  },
+                );
+                ref.read(mapProvider.notifier).fetchAllLandmarks();
+                if (mounted) {
+                  final m = ScaffoldMessenger.of(context);
+                  m.clearSnackBars();
+                  m.showSnackBar(SnackBar(
+                    content: const Text('Hours & tickets updated!'),
+                    behavior: SnackBarBehavior.floating,
+                    margin: EdgeInsets.only(
+                      left: 16, right: 16,
+                      bottom: MediaQuery.of(context).size.height * 0.32,
+                    ),
+                  ));
+                }
+              } catch (_) {}
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showAddStoryDialog(String landmarkId, String landmarkName) {
     final ctrl = TextEditingController();
     showDialog(
@@ -1751,6 +1885,34 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 ),
               ),
             ],
+            // Add/Edit opening hours & ticket info (submitter or admin)
+            if (l.submittedBy == ref.read(authProvider).user?.id ||
+                (ref.read(authProvider).user?.isAdmin ?? false)) ...[
+              const SizedBox(height: 4),
+              TextButton.icon(
+                onPressed: () => _showSetInfoDialog(l.id, l.name, l.openingHours, l.ticketPrice, l.discountInfo),
+                icon: Icon(
+                  (l.openingHours == null || l.openingHours!.isEmpty) &&
+                      l.ticketPrice == null &&
+                      (l.discountInfo == null || l.discountInfo!.isEmpty)
+                      ? Icons.add_circle_outline
+                      : Icons.edit_outlined,
+                  size: 16,
+                ),
+                label: Text(
+                  (l.openingHours == null || l.openingHours!.isEmpty) &&
+                      l.ticketPrice == null &&
+                      (l.discountInfo == null || l.discountInfo!.isEmpty)
+                      ? 'Add hours & tickets'
+                      : 'Edit hours & tickets',
+                ),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  foregroundColor: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Wrap(
               spacing: 6,
@@ -2112,6 +2274,7 @@ class _BottomPanel extends ConsumerStatefulWidget {
   final void Function(String) onNavModeChanged;
   final VoidCallback onStopNav;
   final int? routeDurationSec;
+  final int? routeDistanceM;
   final Future<void> Function(double lat, double lng, String mode) openInMaps;
   final bool headingUp;
   final VoidCallback onHeadingUpToggle;
@@ -2126,6 +2289,7 @@ class _BottomPanel extends ConsumerStatefulWidget {
     required this.onNavModeChanged,
     required this.onStopNav,
     this.routeDurationSec,
+    this.routeDistanceM,
     required this.openInMaps,
     required this.headingUp,
     required this.onHeadingUpToggle,
@@ -2213,6 +2377,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
                   onNavModeChanged: widget.onNavModeChanged,
                   onClose: () => ref.read(mapProvider.notifier).clearProgressRoute(),
                   durationSec: widget.routeDurationSec,
+                  distanceM: widget.routeDistanceM,
                   headingUp: widget.headingUp,
                   onHeadingUpToggle: widget.onHeadingUpToggle,
                 ),
@@ -2249,6 +2414,8 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
                     onHeadingUpToggle: widget.onHeadingUpToggle,
                     navMode: widget.navMode,
                     onNavModeChanged: widget.onNavModeChanged,
+                    durationSec: widget.routeDurationSec,
+                    distanceM: widget.routeDistanceM,
                   ),
                 ),
               ),
@@ -2680,6 +2847,7 @@ class _ProgressRouteHeader extends StatelessWidget {
   final String navMode;
   final void Function(String) onNavModeChanged;
   final int? durationSec;
+  final int? distanceM;
   final bool headingUp;
   final VoidCallback onHeadingUpToggle;
 
@@ -2689,6 +2857,7 @@ class _ProgressRouteHeader extends StatelessWidget {
     required this.navMode,
     required this.onNavModeChanged,
     this.durationSec,
+    this.distanceM,
     required this.headingUp,
     required this.onHeadingUpToggle,
   });
@@ -2700,8 +2869,9 @@ class _ProgressRouteHeader extends StatelessWidget {
     final travelLabel = durationSec != null
         ? '~${(durationSec! / 60).ceil()} min ${navMode == "driving" ? "drive" : "walk"} · '
         : '';
-    final kmLabel = route.totalDistanceM > 0
-        ? '${(route.totalDistanceM / 1000).toStringAsFixed(1)} km · '
+    final effectiveDistM = distanceM ?? route.totalDistanceM;
+    final kmLabel = effectiveDistM > 0
+        ? '${(effectiveDistM / 1000).toStringAsFixed(1)} km · '
         : '';
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 12, 4),
@@ -2799,13 +2969,7 @@ class _ProgressStopTile extends StatelessWidget {
                   child: Text('Next', style: TextStyle(fontSize: 10, color: theme.colorScheme.primary, fontWeight: FontWeight.w600)),
                 ),
             ]),
-            Row(children: [
-              Text(stop.landmark.type, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              const SizedBox(width: 8),
-              Icon(Icons.schedule, size: 11, color: theme.colorScheme.onSurfaceVariant),
-              const SizedBox(width: 2),
-              Text('${stop.dwellMinutes} min', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ]),
+            Text(stop.landmark.type, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ]),
         ),
         const SizedBox(width: 8),
@@ -2828,6 +2992,8 @@ class _RouteHeader extends StatelessWidget {
   final VoidCallback onHeadingUpToggle;
   final String navMode;
   final void Function(String) onNavModeChanged;
+  final int? durationSec;
+  final int? distanceM;
 
   const _RouteHeader({
     required this.route,
@@ -2836,11 +3002,21 @@ class _RouteHeader extends StatelessWidget {
     required this.onHeadingUpToggle,
     required this.navMode,
     required this.onNavModeChanged,
+    this.durationSec,
+    this.distanceM,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dwellTotal = route.stops.fold<int>(0, (s, stop) => s + stop.estimatedDurationMinutes);
+    final travelLabel = durationSec != null
+        ? '~${(durationSec! / 60).ceil()} min ${navMode == "driving" ? "drive" : "walk"} · '
+        : '';
+    final effectiveDistM = distanceM ?? route.totalDistanceM;
+    final kmLabel = effectiveDistM > 0
+        ? '${(effectiveDistM / 1000).toStringAsFixed(1)} km · '
+        : '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2849,9 +3025,7 @@ class _RouteHeader extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Your Route', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               Text(
-                '${route.stops.length} stops · '
-                '${route.totalDurationMinutes} min · '
-                '${(route.totalDistanceM / 1000).toStringAsFixed(1)} km',
+                '${route.stops.length} stops · $travelLabel${kmLabel}$dwellTotal min at stops',
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ]),
           ),

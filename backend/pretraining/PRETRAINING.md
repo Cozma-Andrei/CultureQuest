@@ -141,7 +141,7 @@ knowledge (Romanian landmark types, Central-Eastern European cultural patterns).
 | 18 | interestMatchScore | [0, 1] | Fraction of user interests matching landmark type |
 | 19 | isPartOfRoute | 0 or 1 | Was this interaction within a route? |
 | 20 | routeStopNormalized | [0, 1] | 0=first/farthest stop, 1=last/closest |
-| 21 | routeLengthNormalized | [0, 1] | Route length / 9 stops |
+| 21 | routeLengthNormalized | [0, 1] | (route length - 1) / 4 — max 5 stops maps to 1.0 |
 
 ### Features NOT used in global pre-training
 
@@ -432,3 +432,42 @@ FL then personalises this baseline per user over time, with
 `relativeDistanceRank`, `isPartOfRoute`, `routeStopNormalized`, and
 `routeLengthNormalized` only becoming meaningful once real route interaction
 data starts flowing from the app.
+
+---
+
+## FL Dwell Time Scaling (route generation)
+
+When a route is generated (`POST /api/routes/generate`) the backend loads the
+current global weights from Redis and runs inference for each selected stop.
+The predicted score scales the base dwell time from `_VISIT_MINUTES_BY_TYPE`:
+
+```
+multiplier = 0.75 + 0.5 * fl_score      # range [0.75x, 1.25x]
+scaled_dwell = max(5, round(base_dwell * multiplier))
+```
+
+| FL score | Multiplier | Museum (base 70 min) | Monument (base 20 min) |
+|----------|-----------|----------------------|------------------------|
+| 0.0 | 0.75x | 52 min | 15 min |
+| 0.5 | 1.00x | 70 min | 20 min |
+| 1.0 | 1.25x | 87 min | 25 min |
+
+The feature vector used for inference is built server-side with:
+- User interests and landmark type from the database
+- `isOpen = 1.0` (assumed open during planning)
+- Current weekday and hour
+- `relativeDistanceRank` computed among route candidates
+- Route position (`routeStopNormalized`, `routeLengthNormalized`) using final stop count
+
+If Redis is unavailable, dwell times fall back to the unscaled type-based values.
+
+**Important**: `routeStopNormalized` (dim 20) and `routeLengthNormalized` (dim 21)
+are always `0.0` in pretraining data, so the model weights for those columns are
+effectively uninitialised from pretraining — FL rounds with real route data are the
+only source of signal for those dimensions.
+
+### routeLengthNormalized normalisation
+
+The route generator caps at `max_landmarks = 5` stops.
+The normalisation constant is `4` (= max_stops - 1), so a 5-stop route
+correctly reaches `(5-1)/4 = 1.0`.

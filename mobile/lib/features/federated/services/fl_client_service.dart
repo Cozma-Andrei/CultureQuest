@@ -12,7 +12,7 @@ import '../../../core/services/api_service.dart';
 //  [18]   interestMatchScore         float [0,1]
 //  [19]   isPartOfRoute              binary
 //  [20]   routeStopNormalized        float [0=first/farthest stop, 1=last/closest]
-//  [21]   routeLengthNormalized      float [0=short, 1=long, /9 stops]
+//  [21]   routeLengthNormalized      float [0=short, 1=long, /4 = max 5 stops]
 const _inputDim = 22;
 
 const _interests = ['art', 'architecture', 'history', 'gastronomy', 'nature', 'music'];
@@ -101,7 +101,7 @@ class FLClientService {
         ? (routeStopIndex / (routeLength - 1)).clamp(0.0, 1.0)
         : 0.0;
     v[21] = isPartOfRoute && routeLength > 0
-        ? ((routeLength - 1) / 9.0).clamp(0.0, 1.0)
+        ? ((routeLength - 1) / 4.0).clamp(0.0, 1.0) // max 5 stops -> (5-1)/4 = 1.0
         : 0.0;
 
     return v;

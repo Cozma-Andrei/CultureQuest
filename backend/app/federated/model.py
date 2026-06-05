@@ -28,6 +28,20 @@ LAYER_SHAPES = [
 ]
 
 
+def fl_predict(weights: list[list[float]], x: list[float]) -> float:
+    """Single-sample inference: weights = [W1, b1, W2, b2, W3, b3]."""
+    W1 = np.array(weights[0]).reshape(HIDDEN_DIMS[0], INPUT_DIM)
+    b1 = np.array(weights[1])
+    W2 = np.array(weights[2]).reshape(HIDDEN_DIMS[1], HIDDEN_DIMS[0])
+    b2 = np.array(weights[3])
+    W3 = np.array(weights[4]).reshape(OUTPUT_DIM, HIDDEN_DIMS[1])
+    b3 = np.array(weights[5])
+    a = np.array(x, dtype=np.float32)
+    a = np.maximum(0, W1 @ a + b1)
+    a = np.maximum(0, W2 @ a + b2)
+    return float(1.0 / (1.0 + np.exp(-np.clip((W3 @ a + b3)[0], -30, 30))))
+
+
 def build_initial_weights() -> list[list[float]]:
     result = []
     for shape in LAYER_SHAPES:
