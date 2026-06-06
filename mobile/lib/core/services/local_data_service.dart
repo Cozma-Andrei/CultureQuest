@@ -12,6 +12,7 @@ class LocalDataService {
   static const _completedSuffix  = 'completed_quests';
   static const _votedSuffix      = 'voted_items';
   static const _commentIdsSuffix = 'my_comment_ids'; // landmarkId → commentId
+  static const _flBufferSuffix   = 'fl_interaction_buffer';
 
   final SharedPreferences _prefs;
   final String _userId; // 'guest' for unauthenticated
@@ -121,6 +122,21 @@ class LocalDataService {
     await _prefs.setStringList(_k(_votedSuffix), ids.toList());
   }
 
+  // ── FL interaction buffer ─────────────────────────────────────────────────
+  // Persisted so pending interactions survive app kills mid-training.
+  // Each entry: { 'features': [...], 'maxEngagement': float, 'explicitRating': float? }
+
+  Map<String, dynamic> getFlBuffer() {
+    final raw = _prefs.getString(_k(_flBufferSuffix));
+    if (raw == null) return {};
+    return Map<String, dynamic>.from(jsonDecode(raw));
+  }
+
+  Future<void> saveFlBuffer(Map<String, dynamic> buffer) =>
+      _prefs.setString(_k(_flBufferSuffix), jsonEncode(buffer));
+
+  Future<void> clearFlBuffer() => _prefs.remove(_k(_flBufferSuffix));
+
   // ── Landmark cache (global, not user-scoped) ──────────────────────────────
   // Landmarks are public data — stored under a fixed key, not namespaced per user.
   // Refreshed on every successful fetch; used as fallback when backend is unreachable.
@@ -141,6 +157,7 @@ class LocalDataService {
     await _prefs.remove(_k(_completedSuffix));
     await _prefs.remove(_k(_votedSuffix));
     await _prefs.remove(_k(_commentIdsSuffix));
+    await _prefs.remove(_k(_flBufferSuffix));
   }
 }
 

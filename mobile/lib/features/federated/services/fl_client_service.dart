@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import '../../../core/services/api_service.dart';
+import '../../../core/services/local_data_service.dart';
 
 // Architecture: 22 -> 32 -> 16 -> 1
 // Input:
@@ -75,19 +76,46 @@ class _LandmarkBuffer {
 
 class FLClientService {
   final ApiService _api;
+  final LocalDataService _local;
 
   List<List<double>> _weights = [];
   int _currentRound = 0;
-  final Map<String, _LandmarkBuffer> _buffer = {}; // landmarkId -> best signal
+  final Map<String, _LandmarkBuffer> _buffer = {};
   final _rng = math.Random();
 
-  FLClientService(this._api);
+  FLClientService(this._api, this._local) {
+    _restoreBuffer();
+  }
 
   bool get hasWeights => _weights.isNotEmpty;
   int get round => _currentRound;
   int get pendingInteractions => _buffer.length;
 
-  void clearInteractions() => _buffer.clear();
+  void _restoreBuffer() {
+    final saved = _local.getFlBuffer();
+    for (final entry in saved.entries) {
+      final v = entry.value as Map<String, dynamic>;
+      _buffer[entry.key] = _LandmarkBuffer(
+        features: (v['features'] as List).map((e) => (e as num).toDouble()).toList(),
+        maxEngagement: (v['maxEngagement'] as num).toDouble(),
+        explicitRating: v['explicitRating'] != null ? (v['explicitRating'] as num).toDouble() : null,
+      );
+    }
+  }
+
+  Future<void> _persistBuffer() => _local.saveFlBuffer({
+    for (final e in _buffer.entries)
+      e.key: {
+        'features': e.value.features,
+        'maxEngagement': e.value.maxEngagement,
+        'explicitRating': e.value.explicitRating,
+      }
+  });
+
+  void clearInteractions() {
+    _buffer.clear();
+    _local.clearFlBuffer();
+  }
 
   // ── Feature engineering ────────────────────────────────────────────────────
 
@@ -139,22 +167,19 @@ class FLClientService {
   /// Label should be the engagement constant for this event type.
   void recordEngagement(String landmarkId, List<double> features, double label) {
     final existing = _buffer[landmarkId];
-    if (existing == null) {
-      _buffer[landmarkId] = _LandmarkBuffer(features: features, maxEngagement: label);
-    } else {
-      _buffer[landmarkId] = existing.withEngagement(label, features);
-    }
+    _buffer[landmarkId] = existing == null
+        ? _LandmarkBuffer(features: features, maxEngagement: label)
+        : existing.withEngagement(label, features);
+    _persistBuffer();
   }
 
-  /// Record an explicit star rating (1-5). Overrides any engagement label.
   void recordRating(String landmarkId, List<double> features, int stars) {
     final r = stars.clamp(1, 5) / 5.0;
     final existing = _buffer[landmarkId];
-    if (existing == null) {
-      _buffer[landmarkId] = _LandmarkBuffer(features: features, maxEngagement: r, explicitRating: r);
-    } else {
-      _buffer[landmarkId] = existing.withRating(r, features);
-    }
+    _buffer[landmarkId] = existing == null
+        ? _LandmarkBuffer(features: features, maxEngagement: r, explicitRating: r)
+        : existing.withRating(r, features);
+    _persistBuffer();
   }
 
   // ── FL round ───────────────────────────────────────────────────────────────
@@ -198,6 +223,7 @@ class FLClientService {
     });
 
     _buffer.clear();
+    _local.clearFlBuffer();
     _currentRound = res.data['round'] as int;
     return res.data as Map<String, dynamic>;
   }

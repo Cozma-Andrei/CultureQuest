@@ -5,8 +5,8 @@ import '../services/fl_client_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../map/providers/map_provider.dart';
 import '../../../shared/models/landmark_model.dart';
-import '../../../core/services/api_service.dart';
 import '../../../core/utils/opening_hours_parser.dart';
+import '../../../core/services/local_data_service.dart';
 
 // Engagement labels — ordered weakest to strongest
 const flLabelSheetOpened      = 0.3;
@@ -69,7 +69,10 @@ class FLNotifier extends StateNotifier<FLState> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  Future<void> _init() async => _refreshWeights();
+  Future<void> _init() async {
+    await _refreshWeights();
+    if (_client.pendingInteractions >= _autoRoundThreshold) runRound();
+  }
 
   // ── Context helpers ────────────────────────────────────────────────────────
 
@@ -210,5 +213,6 @@ class FLNotifier extends StateNotifier<FLState> with WidgetsBindingObserver {
 
 final flProvider = StateNotifierProvider<FLNotifier, FLState>((ref) {
   final api = ref.watch(apiServiceProvider);
-  return FLNotifier(FLClientService(api), ref);
+  final local = ref.watch(localDataProvider);
+  return FLNotifier(FLClientService(api, local), ref);
 });

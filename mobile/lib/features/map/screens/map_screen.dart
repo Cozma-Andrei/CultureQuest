@@ -972,6 +972,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   }
 
   void _showSuggestSheet(LatLng? picked) {
+    final isAdmin = ref.read(authProvider).user?.isAdmin == true;
     final theme = Theme.of(context);
     final nameCtrl = TextEditingController();
     final descCtrl = TextEditingController();
@@ -992,7 +993,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               children: [
                 Text('Suggest a Location', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text('Your submission will be reviewed by an admin.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                Text(isAdmin ? 'You are adding as admin. Approve the location yourself in the admin panel.' : 'Your submission will be reviewed by an admin.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                 const SizedBox(height: 20),
                 TextField(
                   controller: nameCtrl,
@@ -1054,7 +1055,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                                 final m = ScaffoldMessenger.of(context);
                                 m.clearSnackBars();
                                 m.showSnackBar(SnackBar(
-                                  content: const Text('Submitted! An admin will review your suggestion.'),
+                                  content: Text(isAdmin ? 'Submitted! Approve it in the admin panel.' : 'Submitted! An admin will review your suggestion.'),
                                   behavior: SnackBarBehavior.floating,
                                   margin: EdgeInsets.only(
                                     left: 16, right: 16,

@@ -3,10 +3,43 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../federated/providers/fl_provider.dart';
-import '../../../core/services/api_service.dart';
 import '../../../core/services/local_data_service.dart';
 import '../../map/providers/map_provider.dart';
-import '../../federated/providers/fl_provider.dart';
+
+class _LeaderboardEntry {
+  final int rank;
+  final String name;
+  final int points;
+  final int completedQuests;
+  final bool isMe;
+  const _LeaderboardEntry({
+    required this.rank,
+    required this.name,
+    required this.points,
+    required this.completedQuests,
+    required this.isMe,
+  });
+}
+
+class _LeaderboardData {
+  final int myRank;
+  final List<_LeaderboardEntry> entries;
+  const _LeaderboardData({required this.myRank, required this.entries});
+}
+
+final _leaderboardProvider = FutureProvider.autoDispose<_LeaderboardData>((ref) async {
+  final api = ref.watch(apiServiceProvider);
+  final res = await api.get('/users/leaderboard');
+  final data = res.data as Map<String, dynamic>;
+  final entries = (data['leaderboard'] as List).map((e) => _LeaderboardEntry(
+    rank: e['rank'] as int,
+    name: e['name'] as String,
+    points: e['points'] as int,
+    completedQuests: e['completed_quests'] as int,
+    isMe: e['is_me'] as bool,
+  )).toList();
+  return _LeaderboardData(myRank: data['my_rank'] as int, entries: entries);
+});
 
 const _categories = [
   (id: 'art', label: 'Art', icon: Icons.palette_outlined),
@@ -77,9 +110,9 @@ class ProfileScreen extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.amber.withOpacity(0.08),
+              color: Colors.amber.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.amber.withOpacity(0.25)),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.25)),
             ),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Icon(Icons.local_activity_outlined, color: Colors.amber, size: 20),
@@ -92,6 +125,13 @@ class ProfileScreen extends ConsumerWidget {
               ),
             ]),
           ),
+
+          const SizedBox(height: 28),
+
+          // Leaderboard
+          Text('Clasament', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          _LeaderboardSection(),
 
           const SizedBox(height: 28),
 
@@ -158,12 +198,14 @@ class ProfileScreen extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.tonal(
-                  onPressed: flState.isTraining || flState.pendingInteractions == 0
+                  onPressed: flState.isTraining || flState.pendingInteractions < 8
                       ? null
                       : () => ref.read(flProvider.notifier).runRound(),
                   child: Text(flState.pendingInteractions == 0
                       ? 'No pending interactions'
-                      : 'Sync ${flState.pendingInteractions} interaction${flState.pendingInteractions == 1 ? '' : 's'}'),
+                      : flState.pendingInteractions < 8
+                          ? '${flState.pendingInteractions} interaction${flState.pendingInteractions == 1 ? '' : 's'}, need ${8 - flState.pendingInteractions} more to sync'
+                          : 'Sync ${flState.pendingInteractions} interaction${flState.pendingInteractions == 1 ? '' : 's'}'),
                 ),
               ),
             ]),
@@ -236,12 +278,106 @@ class ProfileScreen extends ConsumerWidget {
             icon: Icon(Icons.logout, color: theme.colorScheme.error),
             label: Text('Logout', style: TextStyle(color: theme.colorScheme.error)),
             style: OutlinedButton.styleFrom(
-              side: BorderSide(color: theme.colorScheme.error.withOpacity(0.5)),
+              side: BorderSide(color: theme.colorScheme.error.withValues(alpha: 0.5)),
               minimumSize: const Size(double.infinity, 50),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
           ),
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeaderboardSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final async = ref.watch(_leaderboardProvider);
+
+    return async.when(
+      loading: () => const Center(child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: CircularProgressIndicator(),
+      )),
+      error: (_, __) => Text(
+        'Could not load leaderboard.',
+        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      ),
+      data: (lb) => Column(
+        children: [
+          // My rank banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.emoji_events_rounded, color: Colors.amber, size: 22),
+              const SizedBox(width: 10),
+              Text('Your rank', style: theme.textTheme.bodyMedium),
+              const Spacer(),
+              Text('#${lb.myRank}',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+            ]),
+          ),
+          const SizedBox(height: 10),
+          // Top users list
+          ...lb.entries.map((e) {
+            final isTop3 = e.rank <= 3;
+            final medalColor = e.rank == 1 ? Colors.amber
+                : e.rank == 2 ? Colors.grey.shade400
+                : Colors.brown.shade300;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: e.isMe
+                    ? theme.colorScheme.primary.withValues(alpha: 0.10)
+                    : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: e.isMe
+                      ? theme.colorScheme.primary.withValues(alpha: 0.35)
+                      : Colors.transparent,
+                ),
+              ),
+              child: Row(children: [
+                SizedBox(
+                  width: 28,
+                  child: isTop3
+                      ? Icon(Icons.circle, color: medalColor, size: 20)
+                      : Text('#${e.rank}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    e.isMe ? '${e.name} (you)' : e.name,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: e.isMe ? FontWeight.bold : FontWeight.normal),
+                  ),
+                ),
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Row(children: [
+                    const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
+                    const SizedBox(width: 3),
+                    Text('${e.points}', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
+                  ]),
+                  Row(children: [
+                    Icon(Icons.task_alt_rounded, color: theme.colorScheme.primary, size: 14),
+                    const SizedBox(width: 3),
+                    Text('${e.completedQuests}', style: theme.textTheme.bodySmall),
+                  ]),
+                ]),
+              ]),
+            );
+          }),
         ],
       ),
     );
@@ -277,9 +413,9 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(children: [
         Icon(icon, color: color, size: 32),

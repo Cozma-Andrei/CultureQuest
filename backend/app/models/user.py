@@ -51,6 +51,19 @@ class NearbyUser(BaseModel):
     distance_m: float
 
 
+class LeaderboardEntry(BaseModel):
+    rank: int
+    name: str
+    points: int
+    completed_quests: int
+    is_me: bool = False
+
+
+class LeaderboardResponse(BaseModel):
+    my_rank: int
+    leaderboard: list[LeaderboardEntry]
+
+
 class ModelUpdate(BaseModel):
     round: int
     weights: list[list[float]]
