@@ -129,6 +129,65 @@ visit the Romanian Athenaeum?") was in any client's training set.
 Noise is generated on-device via Box-Muller transform. DP can be disabled
 by setting `kDPEnabled = false` for performance testing.
 
+### Staleness-aware aggregation
+
+A client that downloaded global weights at round 3 and submits at round 50 is
+47 rounds stale. If its update were weighted equally to a fresh client, stale
+knowledge would be treated as current and the global model would regress.
+
+The discount formula follows FedAsync (Xie et al., *Asynchronous Federated
+Optimization*, arXiv:1903.03934, 2019):
+
+```
+staleness         = current_round − client_round   (clamped to 0)
+discount          = 1 / (1 + staleness)
+effective_samples = max(1, round(num_samples × discount))
+```
+
+`effective_samples` replaces `num_samples` in the weighted average inside
+`clipped_fedavg`. A client that is 9 rounds stale contributes 1/10th the
+weight of a fresh one. A fresh client (staleness = 0) is unaffected (discount = 1).
+
+The client's round is already included in the `ModelUpdate` payload (`round`
+field) and passed straight to `submit_client_update` as `client_round`.
+The staleness and resulting effective sample count are returned in the
+aggregation response for client-side logging.
+
+Two concrete scenarios where staleness accumulates despite the small user base:
+
+- **Holiday concurrent usage** — multiple users launch the app at the same
+  time (e.g. a busy weekend in the city centre), all downloading the same
+  global round R. As they walk routes and hit the 15-interaction threshold one
+  by one, each submission advances the global round. Later submitters in the
+  same group are now stale relative to the updates already applied by earlier
+  submitters in the same session.
+- **App kept in background** — a user opens the app, backgrounds it, and
+  resumes hours or days later without relaunching. Global weights are only
+  fetched on `AppLifecycleState.resumed` (foreground) and at first launch, so
+  a user who never fully closes the app would accumulate staleness across
+  multiple interaction sessions without ever refreshing.
+
+### Aggregation lock
+
+The read-aggregate-write cycle in `submit_client_update` is protected by a Redis
+`SET NX PX` lock (`fl:agg_lock`, 5 s TTL):
+
+```
+acquire fl:agg_lock (SET NX PX 5000)
+  → read global weights
+  → compute clipped_fedavg
+  → write new weights + round + algorithm
+release fl:agg_lock (Lua: del only if token matches)
+```
+
+Without the lock, two simultaneous uploads would both read the same `global_weights`,
+each compute an independent update, and one would silently overwrite the other.
+At low traffic this is rare; at high concurrency it is near-certain.
+
+The lock token is a per-request UUID checked in the release Lua script, so a
+crashed request cannot accidentally release another request's lock.
+The 5 s TTL ensures the lock is freed even if the server process is killed mid-aggregation.
+
 ### Interaction threshold
 
 Local training triggers automatically after **15 interactions** (`_autoRoundThreshold`).
@@ -220,6 +279,56 @@ gradually correct this, but it is slow across many users.
 ---
 
 ## Future Recommendations
+
+### Switch to synchronous FL at scale (conditional)
+
+The current architecture processes one client upload per round (async FL).
+This was chosen because a small user base cannot guarantee concurrent sessions,
+and async FL requires no synchronisation barrier. Its main drawback is that
+FedProx's theoretical guarantees do not hold: the proximal term
+`μ/2 · ‖w − w_global‖²` was designed to bound divergence *between clients
+sharing the same round checkpoint* (Li et al., MLSys 2020). In async mode
+there are no co-round clients to diverge, so FedProx acts only as a
+regulariser with no convergence proof behind it.
+
+However, switching to synchronous FL is only appropriate when clients are
+**reliably available simultaneously**. For a consumer mobile app like
+CultureQuest this is rarely true: users range from daily commuters to
+occasional tourists visiting once a month. Their availability windows are
+completely different. Synchronous FL in this setting runs into the
+**straggler problem** — the round cannot close until all N required clients
+have submitted, so the system throughput is bounded by the slowest
+participant. The practical options are both bad:
+
+- **Wait** for slow clients → rounds take hours or never close.
+- **Drop** slow clients → users with older hardware, poor connectivity, or
+  irregular usage patterns are systematically excluded, biasing the global
+  model toward users with better devices and more frequent sessions.
+
+Async FL avoids this entirely: every client contributes whenever it is ready.
+The FedAsync staleness discount (Xie et al., 2019) handles the resulting
+staleness — a client that is behind contributes proportionally less, rather
+than being dropped or blocking the round.
+
+Synchronous FL becomes the right choice only if the user base has
+**homogeneous availability** — e.g. a corporate deployment where all devices
+are online during the same working hours. For a general-audience mobile app,
+async with staleness discount is the correct long-term architecture regardless
+of scale.
+
+If synchronous FL were adopted despite this, the implementation would be:
+
+1. Clients submit updates to a Redis list (`RPUSH fl:pending_updates`).
+2. An aggregation worker wakes when the list reaches N updates (e.g. N = 50).
+3. `clipped_fedavg` runs over all N updates atomically, then the new global
+   weights are written and the round counter incremented.
+4. With N simultaneous updates, SecAgg becomes applicable — each client's
+   delta can be masked so the server never sees individual uploads.
+
+The `fl:agg_lock` already in place covers the write step; the main addition
+is the buffering layer before aggregation. At very high scale (millions of
+users) the Redis list should be replaced with a message queue (Kafka,
+RabbitMQ) to avoid memory pressure and enable horizontal aggregation workers.
 
 ### Personal head (user-level personalisation)
 

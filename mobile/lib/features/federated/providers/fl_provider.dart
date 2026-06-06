@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/fl_client_service.dart';
@@ -41,20 +42,34 @@ class FLState {
       );
 }
 
-class FLNotifier extends StateNotifier<FLState> {
+class FLNotifier extends StateNotifier<FLState> with WidgetsBindingObserver {
   final FLClientService _client;
   final Ref _ref;
 
   FLNotifier(this._client, this._ref) : super(const FLState()) {
+    WidgetsBinding.instance.addObserver(this);
     _init();
   }
 
-  Future<void> _init() async {
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
+    if (lifecycle == AppLifecycleState.resumed) _refreshWeights();
+  }
+
+  Future<void> _refreshWeights() async {
     try {
       await _client.fetchGlobalWeights();
       state = state.copyWith(round: _client.round);
     } catch (_) {}
   }
+
+  Future<void> _init() async => _refreshWeights();
 
   // ── Context helpers ────────────────────────────────────────────────────────
 

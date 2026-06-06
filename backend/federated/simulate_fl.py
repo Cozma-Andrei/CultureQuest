@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from app.federated.model import build_initial_weights, clipped_fedavg, fl_predict, INPUT_DIM, HIDDEN_DIMS
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-N_CLIENTS              = 10
+N_CLIENTS              = 1000
 N_ROUNDS               = 100
 INTERACTIONS_PER_ROUND = 15
 LEARNING_RATE          = 0.01
@@ -23,6 +23,7 @@ FEDPROX_MU             = 0.1
 DP_SIGMA               = 0.1
 DP_CLIP_NORM           = 1.0
 SERVER_MAX_NORM        = 1.0
+STALENESS_MAX          = 20    # max rounds a client can be behind the global model
 SEED                   = 42
 RESULTS_DIR            = os.path.join(os.path.dirname(__file__), 'results')
 # Redis URL: override via REDIS_URL env var.
@@ -157,33 +158,47 @@ PROBES = {
 }
 
 # ── Simulation ─────────────────────────────────────────────────────────────────
-def run_simulation(algo, initial_weights, clients, test_data):
+def run_simulation(algo, initial_weights, clients, test_data, use_staleness=True):
     gw = [list(layer) for layer in initial_weights]
-    loss_hist, drift_hist = [], []
+    loss_hist, drift_hist, eff_weight_hist = [], [], []
 
     for rnd in range(N_ROUNDS):
         interests = random.choice(clients)
         data      = [_generate_interaction(interests) for _ in range(INTERACTIONS_PER_ROUND)]
         mu        = FEDPROX_MU if algo == 'fedprox' else 0.0
 
+        # Staleness-aware aggregation: mirrors submit_client_update in fl_service.py.
+        # Each client trained on weights from `staleness` rounds ago; discount their
+        # vote proportionally so stale updates have less influence on the global model.
+        staleness = random.randint(0, STALENESS_MAX)
+        discount  = (1.0 / (1.0 + staleness)) if use_staleness else 1.0
+        effective = max(1, round(len(data) * discount))
+        eff_weight_hist.append(discount)
+        last_staleness = staleness
+
         local_w = _train_local(gw, data, LEARNING_RATE, LOCAL_EPOCHS, mu=mu, gw=gw)
 
         drift_hist.append(_drift(local_w, gw))
 
         noisy_w = _add_dp_noise(local_w, gw)
-        virtual = len(data) * 4
-        gw = clipped_fedavg([(len(data), noisy_w), (virtual, gw)], gw, max_norm=SERVER_MAX_NORM)
+        virtual = effective * 4
+        gw = clipped_fedavg([(effective, noisy_w), (virtual, gw)], gw, max_norm=SERVER_MAX_NORM)
 
         loss_hist.append(_bce_loss(gw, test_data))
 
         if (rnd + 1) % 20 == 0:
             print(f'  [{algo:7s}] round {rnd+1:3d}/{N_ROUNDS}  '
-                  f'loss={loss_hist[-1]:.4f}  drift={drift_hist[-1]:.4f}')
+                  f'loss={loss_hist[-1]:.4f}  drift={drift_hist[-1]:.4f}  '
+                  f'eff_weight={discount:.2f} (staleness={staleness if use_staleness else "off"})')
 
     probes = {name: fl_predict(gw, fv.tolist()) for name, (fv, _) in PROBES.items()}
-    return {'loss': loss_hist, 'drift': drift_hist, 'probes': probes,
+    return {'loss': loss_hist, 'drift': drift_hist, 'effective_weight': eff_weight_hist,
+            'probes': probes,
             'final_loss': loss_hist[-1], 'min_loss': min(loss_hist),
-            'avg_drift': float(np.mean(drift_hist)), 'weights': gw}
+            'avg_drift': float(np.mean(drift_hist)),
+            'avg_effective_weight': float(np.mean(eff_weight_hist)),
+            'last_staleness': last_staleness,
+            'weights': gw}
 
 # ── Plots ──────────────────────────────────────────────────────────────────────
 def _smooth(vals, k=5):
@@ -224,6 +239,27 @@ def plot_drift(res):
     ax.legend(); ax.grid(True, alpha=0.3); fig.tight_layout()
     _save(fig, 'weight_drift.png')
 
+def plot_staleness_effect(res):
+    """Loss with vs without staleness discounting — shows effect of FedAsync weighting."""
+    fig, ax = plt.subplots(figsize=(9, 5))
+    init_loss = res['initial']['loss']
+    rounds = np.arange(0, N_ROUNDS + 1)
+    k = 5; sr = rounds[k - 1:]
+    styles = {
+        ('fedavg',  True):  ('C0', '-',  'FedAvg  + staleness discount'),
+        ('fedavg',  False): ('C0', ':',  'FedAvg  no discount'),
+        ('fedprox', True):  ('C1', '-',  'FedProx + staleness discount'),
+        ('fedprox', False): ('C1', ':',  'FedProx no discount'),
+    }
+    for (algo, stale), (color, ls, label) in styles.items():
+        key = f'{algo}_nostale' if not stale else algo
+        full = [init_loss] + res[key]['loss']
+        ax.plot(sr, _smooth(full, k), ls, label=label, linewidth=2, color=color)
+    ax.set_xlabel('Round'); ax.set_ylabel('BCE Loss (test set)')
+    ax.set_title('Effect of Staleness Discount (FedAsync) on Global Loss')
+    ax.legend(); ax.grid(True, alpha=0.3); fig.tight_layout()
+    _save(fig, 'staleness_effect.png')
+
 def plot_probes(res):
     labels   = list(PROBES.keys())
     expected = [v for _, v in PROBES.values()]
@@ -250,18 +286,25 @@ async def _redis_fetch():
     finally:
         await redis.aclose()
 
-async def _redis_push(weights, algo, n_rounds):
+async def _redis_push(weights, algo, n_rounds, last_staleness):
     import json
     from redis.asyncio import Redis as ARedis
-    from app.services.fl_service import FL_WEIGHTS_KEY, FL_ROUND_KEY, FL_SAMPLES_KEY, FL_ALGORITHM_KEY
+    from app.services.fl_service import (
+        FL_WEIGHTS_KEY, FL_ROUND_KEY, FL_SAMPLES_KEY,
+        FL_ALGORITHM_KEY, FL_CLIENTS_KEY, FL_LAST_STALENESS_KEY,
+    )
     redis = ARedis.from_url(REDIS_URL, decode_responses=True)
     try:
         current_round = int(await redis.get(FL_ROUND_KEY) or 0)
         await redis.set(FL_WEIGHTS_KEY, json.dumps(weights))
         await redis.set(FL_ROUND_KEY, str(current_round + n_rounds))
         await redis.set(FL_ALGORITHM_KEY, algo)
+        await redis.set(FL_LAST_STALENESS_KEY, str(last_staleness))
         await redis.incrby(FL_SAMPLES_KEY, n_rounds * INTERACTIONS_PER_ROUND)
+        # Add synthetic client IDs so the dashboard reflects the simulated population
+        await redis.sadd(FL_CLIENTS_KEY, *[f'sim_client_{i}' for i in range(N_CLIENTS)])
         print(f'  pushed {algo.upper()} weights to Redis — round {current_round} -> {current_round + n_rounds}')
+        print(f'  last_staleness={last_staleness}  unique_contributors={N_CLIENTS} (synthetic)')
     finally:
         await redis.aclose()
 
@@ -294,10 +337,12 @@ def main():
 
     results = {'initial': {'loss': initial_loss, 'probes': initial_probes}}
     for algo in ('fedavg', 'fedprox'):
-        print(f'\n── {algo.upper()} ──')
-        random.seed(SEED)
-        np.random.seed(SEED)
-        results[algo] = run_simulation(algo, initial_weights, clients, test_data)
+        print(f'\n── {algo.upper()} (with staleness discount) ──')
+        random.seed(SEED); np.random.seed(SEED)
+        results[algo] = run_simulation(algo, initial_weights, clients, test_data, use_staleness=True)
+        print(f'\n── {algo.upper()} (no staleness discount) ──')
+        random.seed(SEED); np.random.seed(SEED)
+        results[f'{algo}_nostale'] = run_simulation(algo, initial_weights, clients, test_data, use_staleness=False)
 
     # Stats JSON
     stats = {
@@ -307,6 +352,7 @@ def main():
             'local_epochs': LOCAL_EPOCHS, 'lr': LEARNING_RATE,
             'fedprox_mu': FEDPROX_MU, 'dp_sigma': DP_SIGMA,
             'dp_clip_norm': DP_CLIP_NORM, 'server_max_norm': SERVER_MAX_NORM,
+            'staleness_max': STALENESS_MAX,
         },
         'baseline': {
             'initial_loss':   initial_loss,
@@ -317,14 +363,19 @@ def main():
                 'final_loss':           results[algo]['final_loss'],
                 'min_loss':             results[algo]['min_loss'],
                 'avg_drift':            results[algo]['avg_drift'],
-                'loss_improvement':     round(initial_loss - results[algo]['final_loss'], 6),
-                'loss_improvement_pct': round((initial_loss - results[algo]['final_loss']) / initial_loss * 100, 2),
-                'probes':               results[algo]['probes'],
+                'loss_improvement':        round(initial_loss - results[algo]['final_loss'], 6),
+                'loss_improvement_pct':    round((initial_loss - results[algo]['final_loss']) / initial_loss * 100, 2),
+                'avg_effective_weight':    results[algo]['avg_effective_weight'],
+                'probes':                  results[algo]['probes'],
             }
             for algo in ('fedavg', 'fedprox')
         },
         'per_round': {
-            algo: {'loss': results[algo]['loss'], 'drift': results[algo]['drift']}
+            algo: {
+                'loss':             results[algo]['loss'],
+                'drift':            results[algo]['drift'],
+                'effective_weight': results[algo]['effective_weight'],
+            }
             for algo in ('fedavg', 'fedprox')
         },
     }
@@ -336,6 +387,7 @@ def main():
     print('\nPlotting...')
     plot_loss(results)
     plot_drift(results)
+    plot_staleness_effect(results)
     plot_probes(results)
 
     print('\n── Summary ───────────────────────────────────────────────────')
@@ -345,6 +397,7 @@ def main():
         sign = '+' if s['loss_improvement'] >= 0 else ''
         print(f'  {algo.upper():8s}  final_loss={s["final_loss"]:.4f}  '
               f'min_loss={s["min_loss"]:.4f}  avg_drift={s["avg_drift"]:.4f}  '
+              f'avg_eff_weight={s["avg_effective_weight"]:.3f}  '
               f'vs_initial={sign}{s["loss_improvement"]:.4f} ({sign}{s["loss_improvement_pct"]:.1f}%)')
     fa  = stats['summary']['fedavg']['final_loss']
     fp  = stats['summary']['fedprox']['final_loss']
@@ -354,7 +407,7 @@ def main():
 
     print('\nPushing winner weights to Redis...')
     try:
-        asyncio.run(_redis_push(winner_w, winner, N_ROUNDS))
+        asyncio.run(_redis_push(winner_w, winner, N_ROUNDS, results[winner]['last_staleness']))
     except Exception as e:
         print(f'  Redis push failed: {e}')
         print('  (start the backend stack, or set REDIS_URL env var)')

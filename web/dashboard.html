@@ -177,6 +177,11 @@
     <div class="stat-sub" id="s-algorithm-sub">Client-side local training strategy.</div>
   </div>
   <div class="stat-block">
+    <div class="stat-label">Last update staleness</div>
+    <div class="stat-val" id="s-staleness" style="color:var(--teal)">-</div>
+    <div class="stat-sub" id="s-staleness-sub">Rounds behind global model when last client submitted. Effective weight: 1 / (1 + staleness).</div>
+  </div>
+  <div class="stat-block">
     <div class="stat-label">Architecture</div>
     <div class="stat-val" style="font-size:16px;letter-spacing:-.5px;color:var(--blue)">22→32→16→1</div>
     <div class="stat-sub">ReLU hidden layers · Sigmoid output → score ∈ [0,1]<br>1,281 parameters · 22-dim input</div>
@@ -753,6 +758,15 @@ async function load() {
     } else {
       document.getElementById('s-algorithm').textContent='-';
       document.getElementById('s-algorithm-sub').textContent='No simulation or FL round recorded yet.';
+    }
+    const staleness=status.last_staleness;
+    if(staleness!=null){
+      const effWeight=(1/(1+staleness)).toFixed(3);
+      document.getElementById('s-staleness').textContent=staleness===0?'0 (fresh)':staleness;
+      document.getElementById('s-staleness-sub').textContent=`Rounds behind global model when last client submitted. Effective weight: ${effWeight}.`;
+    } else {
+      document.getElementById('s-staleness').textContent='-';
+      document.getElementById('s-staleness-sub').textContent='No client update recorded yet.';
     }
     renderAll();
   } catch {

@@ -20,7 +20,7 @@ async def receive_model_update(
     redis=Depends(get_redis),
 ):
     """Accept local weight updates from a device and run FedAvg aggregation."""
-    result = await submit_client_update(redis, payload.weights, payload.num_samples, user_id=user_id, algorithm=payload.algorithm)
+    result = await submit_client_update(redis, payload.weights, payload.num_samples, client_round=payload.round, user_id=user_id, algorithm=payload.algorithm)
     return result
 
 

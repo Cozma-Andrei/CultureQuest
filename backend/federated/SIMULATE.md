@@ -39,27 +39,29 @@ Results are written to `backend/federated/results/`.
 
 | File | Contents |
 |------|----------|
-| `results/stats.json` | Config, initial baseline, per-algorithm summary (incl. % improvement vs initial), per-round arrays |
-| `results/loss_curve.png` | Global Binary Cross-Entropy loss over rounds with a dotted baseline for the pretrained model before simulation |
+| `results/stats.json` | Config, initial baseline, per-algorithm summary (incl. % improvement vs initial, avg effective weight), per-round arrays |
+| `results/loss_curve.png` | Global Binary Cross-Entropy loss over rounds |
 | `results/weight_drift.png` | L2 norm of local−global delta each round |
+| `results/staleness_effect.png` | Loss curves with vs without staleness discount for both algorithms — directly shows the benefit of FedAsync weighting |
 | `results/probe_scores.png` | 4-bar groups: Expected / Initial / FedAvg / FedProx — shows how much each algorithm moved from the untrained model |
-| `results/loss_gap.png` | Round-by-round loss difference (FedAvg − FedProx) — positive means FedProx wins |
 
 ## Key config (top of script)
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `N_CLIENTS` | 10 | Distinct client interest profiles |
+| `N_CLIENTS` | 1000 | Distinct client interest profiles |
 | `N_ROUNDS` | 100 | Total FL rounds per algorithm |
 | `INTERACTIONS_PER_ROUND` | 15 | Synthetic interactions per round (matches app threshold) |
 | `LOCAL_EPOCHS` | 5 | SGD passes over local data |
 | `FEDPROX_MU` | 0.1 | Proximal penalty strength |
 | `DP_SIGMA` | 0.1 | DP noise scale |
+| `STALENESS_MAX` | 20 | Maximum simulated staleness in rounds (uniform 0–20 per client) |
 | `SEED` | 42 | Controls both client profiles and per-round client selection |
 
 ## Notes
 
 - Both runs start from the same Redis weights and use the same client sequence — only the local training step differs.
+- The simulation writes weights directly via `_redis_push`, bypassing the `fl:agg_lock` used in production. This is intentional — the simulation is a single sequential process with no concurrent callers.
 - DP noise and server-side delta clipping are applied in both runs (same as production).
 - `fedavg` (plain, no clipping) is kept in `model.py` for reference but is not used here; production always uses `clipped_fedavg`.
 - The winning algorithm's weights are pushed to Redis at the end, so the real model benefits from the simulation.
