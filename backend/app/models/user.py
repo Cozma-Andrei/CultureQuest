@@ -55,6 +55,7 @@ class ModelUpdate(BaseModel):
     round: int
     weights: list[list[float]]
     num_samples: int
+    algorithm: str = 'fedprox'
 
 class InitializePayload(BaseModel):
     weights: list[list[float]]

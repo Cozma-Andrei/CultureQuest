@@ -1,3 +1,4 @@
+import math
 import numpy as np
 
 # Architecture: 22 -> 32 -> 16 -> 1
@@ -54,7 +55,8 @@ def build_initial_weights() -> list[list[float]]:
 
 
 def fedavg(updates: list[tuple[int, list[list[float]]]]) -> list[list[float]]:
-    """Weighted average of weight tensors across client updates."""
+    """Weighted average of weight tensors across client updates.
+    Kept for baseline comparison — use clipped_fedavg in production."""
     total = sum(n for n, _ in updates)
     result: list[list[float]] | None = None
     for n_samples, client_weights in updates:
@@ -65,3 +67,36 @@ def fedavg(updates: list[tuple[int, list[list[float]]]]) -> list[list[float]]:
             for i, layer in enumerate(client_weights):
                 result[i] = [acc + v * factor for acc, v in zip(result[i], layer)]
     return result  # type: ignore[return-value]
+
+
+def clipped_fedavg(
+    updates: list[tuple[int, list[list[float]]]],
+    global_weights: list[list[float]],
+    max_norm: float = 1.0,
+) -> list[list[float]]:
+    """FedAvg with per-client delta norm clipping (production aggregator).
+
+    For async FL (one client per round) coordinate-wise median/trimmed-mean
+    are not applicable — there is only one incoming update to compare against.
+    Delta clipping is the standard defence: each client's update is allowed to
+    move the global model by at most max_norm in L2 distance. A malicious client
+    that rates everything adversarially will produce a large-norm delta that gets
+    scaled down to max_norm before being averaged in, limiting its influence to
+    at most max_norm / global_virtual_samples per weight coordinate.
+    """
+    clipped: list[tuple[int, list[list[float]]]] = []
+    for n_samples, client_weights in updates:
+        delta = [
+            [c - g for c, g in zip(cl, gl)]
+            for cl, gl in zip(client_weights, global_weights)
+        ]
+        norm = math.sqrt(sum(v ** 2 for layer in delta for v in layer))
+        scale = min(1.0, max_norm / max(norm, 1e-8))
+        clipped_weights = [
+            [g + d * scale for g, d in zip(gl, dl)]
+            for gl, dl in zip(global_weights, delta)
+        ]
+        clipped.append((n_samples, clipped_weights))
+    return fedavg(clipped)
+
+

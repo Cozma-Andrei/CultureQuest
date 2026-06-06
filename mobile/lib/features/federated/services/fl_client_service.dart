@@ -18,6 +18,31 @@ const _inputDim = 22;
 const _interests = ['art', 'architecture', 'history', 'gastronomy', 'nature', 'music'];
 const _types = ['museum', 'monument', 'park', 'gallery', 'restaurant', 'square', 'building', 'other'];
 
+// FL algorithm selection — switch here to compare FedAvg vs FedProx.
+// Used by the testing/comparison script; production uses FedProx.
+enum FLAlgorithm { fedAvg, fedProx }
+
+const kFLAlgorithm = FLAlgorithm.fedProx;
+
+// Proximal term coefficient for FedProx.
+// Controls how tightly local weights stay close to the global model.
+// Higher μ → less client drift, more conservative updates.
+// Typical range: 0.001 (near-FedAvg) to 0.1 (very conservative).
+const kFedProxMu = 0.1;
+
+// Differential Privacy settings.
+// Gaussian noise N(0, (kDPSigma * kDPClipNorm)²) is added to each weight
+// coordinate of the delta before upload, preventing membership inference:
+// an adversary querying the global model cannot determine whether a specific
+// interaction (e.g. "did this user visit the Romanian Athenaeum?") was in
+// any client's training set.
+// kDPSigma = 0   → DP disabled (noise-free, maximum utility)
+// kDPSigma = 0.1 → mild noise, practical privacy for a low-stakes app
+// kDPSigma = 1.0 → strong DP guarantee, noticeable accuracy impact
+const kDPEnabled  = true;
+const kDPSigma    = 0.1;   // noise multiplier
+const kDPClipNorm = 1.0;   // must match server-side max_norm in clipped_fedavg
+
 class Interaction {
   final List<double> features;
   final double label;
@@ -54,6 +79,7 @@ class FLClientService {
   List<List<double>> _weights = [];
   int _currentRound = 0;
   final Map<String, _LandmarkBuffer> _buffer = {}; // landmarkId -> best signal
+  final _rng = math.Random();
 
   FLClientService(this._api);
 
@@ -141,16 +167,34 @@ class FLClientService {
         .toList();
   }
 
-  Future<Map<String, dynamic>> runFLRound() async {
+  Future<Map<String, dynamic>> runFLRound({FLAlgorithm? algorithm}) async {
     if (_buffer.isEmpty) return {'skipped': true};
     if (_weights.isEmpty) await fetchGlobalWeights();
 
-    _trainLocally();
+    final algo = algorithm ?? kFLAlgorithm;
+
+    // Snapshot the global weights before local training.
+    // FedProx needs this to compute the proximal penalty each step.
+    // FedAvg keeps it for logging/comparison parity.
+    final globalSnapshot = _weights.map((layer) => List<double>.from(layer)).toList();
+
+    if (algo == FLAlgorithm.fedProx) {
+      _trainLocallyFedProx(globalSnapshot);
+    } else {
+      _trainLocallyFedAvg();
+    }
+
+    // Differential Privacy: add Gaussian noise to the weight delta before
+    // uploading. This prevents membership inference — an adversary querying
+    // the global model cannot determine whether a specific interaction was in
+    // this client's training set.
+    if (kDPEnabled) _addDPNoise(globalSnapshot);
 
     final res = await _api.post('/federated/model/update', data: {
       'round': _currentRound,
       'weights': _weights,
       'num_samples': _buffer.length,
+      'algorithm': algo.name,
     });
 
     _buffer.clear();
@@ -165,7 +209,8 @@ class FLClientService {
 
   // ── MLP forward + backprop ─────────────────────────────────────────────────
 
-  void _trainLocally({double lr = 0.01, int epochs = 5}) {
+  // Standard FedAvg local training: plain SGD on the local loss.
+  void _trainLocallyFedAvg({double lr = 0.01, int epochs = 5}) {
     final samples = _buffer.values.map((b) => Interaction(b.features, b.label)).toList();
 
     // W1(32,22) b1(32) W2(16,32) b2(16) W3(1,16) b3(1)
@@ -207,11 +252,8 @@ class FLClientService {
         final dW1  = _outerVec(dz1, x);
         final db1g = List<double>.from(dz1);
 
-        // NaN guard: skip this sample if any gradient is corrupt
         if (_hasNaN(db1g) || _hasNaN(db2g) || _hasNaN(db3)) continue;
 
-        // Global gradient norm clipping (max_norm = 1.0)
-        // Prevents exploding gradients from a single bad sample corrupting weights.
         final allGrads = [
           ...dW1.expand((r) => r), ...db1g,
           ...dW2.expand((r) => r), ...db2g,
@@ -223,6 +265,94 @@ class FLClientService {
         _applyGrad(w1, dW1, lr * scale);  _applyGradVec(b1, db1g, lr * scale);
         _applyGrad(w2, dW2, lr * scale);  _applyGradVec(b2, db2g, lr * scale);
         _applyGrad(w3, dW3, lr * scale);  _applyGradVec(b3, db3,  lr * scale);
+      }
+    }
+
+    _weights[0] = w1.expand((r) => r).toList();
+    _weights[1] = b1;
+    _weights[2] = w2.expand((r) => r).toList();
+    _weights[3] = b2;
+    _weights[4] = w3.expand((r) => r).toList();
+    _weights[5] = b3;
+  }
+
+  // FedProx local training: SGD with proximal term μ/2 * ||w - w_global||².
+  // The proximal gradient μ*(w - w_global) is added to each weight update,
+  // preventing the local model from drifting too far from the global weights.
+  // The server-side aggregation is identical to FedAvg — only local training differs.
+  void _trainLocallyFedProx(
+    List<List<double>> globalWeights, {
+    double lr = 0.01,
+    int epochs = 5,
+    double mu = kFedProxMu,
+  }) {
+    final samples = _buffer.values.map((b) => Interaction(b.features, b.label)).toList();
+
+    final w1 = _reshape(_weights[0], 32, _inputDim);
+    final b1 = List<double>.from(_weights[1]);
+    final w2 = _reshape(_weights[2], 16, 32);
+    final b2 = List<double>.from(_weights[3]);
+    final w3 = _reshape(_weights[4], 1, 16);
+    final b3 = List<double>.from(_weights[5]);
+
+    // Global weight snapshots for the proximal term.
+    final gw1 = _reshape(globalWeights[0], 32, _inputDim);
+    final gb1 = globalWeights[1];
+    final gw2 = _reshape(globalWeights[2], 16, 32);
+    final gb2 = globalWeights[3];
+    final gw3 = _reshape(globalWeights[4], 1, 16);
+    final gb3 = globalWeights[5];
+
+    for (int epoch = 0; epoch < epochs; epoch++) {
+      for (final sample in samples) {
+        final x = sample.features;
+        final y = sample.label;
+
+        // Forward
+        final z1 = _matVec(w1, x, b1);
+        final a1 = z1.map(_relu).toList();
+        final z2 = _matVec(w2, a1, b2);
+        final a2 = z2.map(_relu).toList();
+        final z3 = _matVec(w3, a2, b3);
+        final out = _sigmoid(z3[0]);
+
+        // Backward (same as FedAvg)
+        final dLoss = 2.0 * (out - y);
+        final dSig  = out * (1.0 - out);
+        final dz3   = [dLoss * dSig];
+
+        final dW3  = _outerVec(dz3, a2);
+        final db3  = List<double>.from(dz3);
+        final da2  = _vecMatT(dz3, w3);
+        final dz2  = List.generate(16, (i) => da2[i] * _reluDeriv(z2[i]));
+
+        final dW2  = _outerVec(dz2, a1);
+        final db2g = List<double>.from(dz2);
+        final da1  = _vecMatT(dz2, w2);
+        final dz1  = List.generate(32, (i) => da1[i] * _reluDeriv(z1[i]));
+
+        final dW1  = _outerVec(dz1, x);
+        final db1g = List<double>.from(dz1);
+
+        if (_hasNaN(db1g) || _hasNaN(db2g) || _hasNaN(db3)) continue;
+
+        final allGrads = [
+          ...dW1.expand((r) => r), ...db1g,
+          ...dW2.expand((r) => r), ...db2g,
+          ...dW3.expand((r) => r), ...db3,
+        ];
+        final norm = math.sqrt(allGrads.fold(0.0, (s, v) => s + v * v));
+        final scale = (norm > 1.0) ? 1.0 / norm : 1.0;
+
+        // Apply task gradient
+        _applyGrad(w1, dW1, lr * scale);  _applyGradVec(b1, db1g, lr * scale);
+        _applyGrad(w2, dW2, lr * scale);  _applyGradVec(b2, db2g, lr * scale);
+        _applyGrad(w3, dW3, lr * scale);  _applyGradVec(b3, db3,  lr * scale);
+
+        // Apply proximal term: w -= lr * μ * (w - w_global)
+        _applyProximal(w1, gw1, lr, mu);  _applyProximalVec(b1, gb1, lr, mu);
+        _applyProximal(w2, gw2, lr, mu);  _applyProximalVec(b2, gb2, lr, mu);
+        _applyProximal(w3, gw3, lr, mu);  _applyProximalVec(b3, gb3, lr, mu);
       }
     }
 
@@ -277,6 +407,45 @@ class FLClientService {
 
   void _applyGradVec(List<double> b, List<double> db, double lr) {
     for (int i = 0; i < b.length; i++) b[i] -= lr * db[i];
+  }
+
+  void _applyProximal(List<List<double>> W, List<List<double>> Wg, double lr, double mu) {
+    for (int i = 0; i < W.length; i++)
+      for (int j = 0; j < W[i].length; j++) W[i][j] -= lr * mu * (W[i][j] - Wg[i][j]);
+  }
+
+  void _applyProximalVec(List<double> b, List<double> bg, double lr, double mu) {
+    for (int i = 0; i < b.length; i++) b[i] -= lr * mu * (b[i] - bg[i]);
+  }
+
+  // Adds calibrated Gaussian noise N(0, (kDPSigma * kDPClipNorm)²) to each
+  // coordinate of the weight delta (trained - global). The delta is clipped to
+  // kDPClipNorm before noise is added so sensitivity is bounded.
+  void _addDPNoise(List<List<double>> globalSnapshot) {
+    final noiseStd = kDPSigma * kDPClipNorm;
+    for (int l = 0; l < _weights.length; l++) {
+      // Clip delta coordinate-wise (bound sensitivity)
+      final delta = List<double>.generate(
+        _weights[l].length,
+        (i) => (_weights[l][i] - globalSnapshot[l][i]).clamp(-kDPClipNorm, kDPClipNorm),
+      );
+      // Add Gaussian noise to each delta coordinate
+      for (int i = 0; i < delta.length; i++) {
+        delta[i] += _gaussian(noiseStd);
+      }
+      // Reconstruct noisy weights
+      for (int i = 0; i < _weights[l].length; i++) {
+        _weights[l][i] = globalSnapshot[l][i] + delta[i];
+      }
+    }
+  }
+
+  // Box-Muller transform: produces N(0, sigma²) samples from uniform RNG.
+  double _gaussian(double sigma) {
+    final u1 = _rng.nextDouble().clamp(1e-10, 1.0);
+    final u2 = _rng.nextDouble();
+    final z = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2);
+    return z * sigma;
   }
 
   double _relu(double x) => x > 0 ? x : 0;

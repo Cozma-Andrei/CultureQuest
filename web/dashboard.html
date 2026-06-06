@@ -172,9 +172,9 @@
     <div class="stat-sub">Landmark interactions trained on across all FL rounds.</div>
   </div>
   <div class="stat-block">
-    <div class="stat-label">Aggregation strategy</div>
-    <div class="stat-val" style="font-size:18px;letter-spacing:-.5px"><span class="tag fedavg">FedAvg</span></div>
-    <div class="stat-sub">Weighted average of local updates. No raw data leaves any device.</div>
+    <div class="stat-label">Training algorithm</div>
+    <div class="stat-val" style="font-size:18px;letter-spacing:-.5px" id="s-algorithm"><span class="tag fedavg">-</span></div>
+    <div class="stat-sub" id="s-algorithm-sub">Client-side local training strategy.</div>
   </div>
   <div class="stat-block">
     <div class="stat-label">Architecture</div>
@@ -303,7 +303,7 @@
   <div class="card">
     <div class="card-title">W1 - Input (22) → Hidden layer 1 (32)</div>
     <div class="card-desc">Shape: 32 × 22. Each row is a hidden neuron; each column is one of the 22 input features. Column order matches the feature vector above (6 interests → 8 types → isOpen → isWeekend → hour → relRank → interestMatch → 3 route dims).</div>
-    <canvas id="c-w1" width="22" height="32"></canvas>
+    <div id="c-w1" style="overflow-x:auto"></div>
     <div class="legend" style="margin-top:8px">
       <span style="color:#5080dc">Negative</span>
       <div class="legend-bar" style="background:linear-gradient(to right,#5080dc,#e4e4ee,#dc4632)"></div>
@@ -313,7 +313,7 @@
   <div class="card">
     <div class="card-title">W2 - Hidden layer 1 (32) → Hidden layer 2 (16)</div>
     <div class="card-desc">Shape: 16 × 32. Each row is a layer-2 neuron combining patterns from layer 1 before the final prediction.</div>
-    <canvas id="c-w2" width="32" height="16"></canvas>
+    <div id="c-w2" style="overflow-x:auto"></div>
     <div class="legend" style="margin-top:8px">
       <span style="color:#5080dc">Negative</span>
       <div class="legend-bar" style="background:linear-gradient(to right,#5080dc,#e4e4ee,#dc4632)"></div>
@@ -649,18 +649,65 @@ function renderW3() {
   });
 }
 
-// ── Canvas heatmaps ──────────────────────────────────────────────────────────
-function renderCanvas(id, flat, rows, cols) {
-  const canvas=document.getElementById(id);
-  canvas.width=cols;canvas.height=rows;
-  const ctx=canvas.getContext('2d');
-  const absMax=Math.max(...flat.map(Math.abs),1e-9);
-  const img=ctx.createImageData(cols,rows);
-  for(let r=0;r<rows;r++){for(let c=0;c<cols;c++){
-    const [R,G,B]=weightRGB(flat[r*cols+c],absMax);
-    const idx=(r*cols+c)*4;img.data[idx]=R;img.data[idx+1]=G;img.data[idx+2]=B;img.data[idx+3]=255;
-  }}
-  ctx.putImageData(img,0,0);
+// ── Weight grid heatmaps (div-based for crisp labels) ────────────────────────
+function renderCanvas(id, flat, rows, cols, colLabels, xTitle, yTitle) {
+  const CELL = 15;
+  const GAP  = 1;
+  const container = document.getElementById(id);
+  container.innerHTML = '';
+
+  const absMax = Math.max(...flat.map(Math.abs), 1e-9);
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;align-items:flex-start;gap:6px';
+
+  // Y-axis title
+  if (yTitle) {
+    const yt = document.createElement('div');
+    yt.style.cssText = 'writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;color:#778;white-space:nowrap;align-self:center;';
+    yt.textContent = yTitle;
+    wrap.appendChild(yt);
+  }
+
+  const right = document.createElement('div');
+
+  // Weight grid
+  const grid = document.createElement('div');
+  grid.style.cssText = `display:grid;grid-template-columns:repeat(${cols},${CELL}px);gap:${GAP}px;`;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const [R,G,B] = weightRGB(flat[r*cols+c], absMax);
+      const cell = document.createElement('div');
+      cell.style.cssText = `width:${CELL}px;height:${CELL}px;background:rgb(${R},${G},${B});border-radius:1px;`;
+      cell.title = flat[r*cols+c].toFixed(4);
+      grid.appendChild(cell);
+    }
+  }
+  right.appendChild(grid);
+
+  // Column labels (vertical text)
+  if (colLabels) {
+    const lblRow = document.createElement('div');
+    lblRow.style.cssText = `display:grid;grid-template-columns:repeat(${cols},${CELL}px);gap:${GAP}px;margin-top:4px;`;
+    colLabels.forEach(lbl => {
+      const d = document.createElement('div');
+      d.style.cssText = `font-size:9px;color:#aab;font-family:monospace;writing-mode:vertical-rl;transform:rotate(180deg);height:56px;overflow:hidden;line-height:${CELL}px;`;
+      d.textContent = lbl;
+      lblRow.appendChild(d);
+    });
+    right.appendChild(lblRow);
+  }
+
+  // X-axis title
+  if (xTitle) {
+    const xt = document.createElement('div');
+    xt.style.cssText = 'font-size:10px;color:#778;text-align:center;margin-top:6px;';
+    xt.textContent = xTitle;
+    right.appendChild(xt);
+  }
+
+  wrap.appendChild(right);
+  container.appendChild(wrap);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -678,8 +725,8 @@ function renderAll(){
   try { renderHeatmap();   } catch(e){ console.error('renderHeatmap',e);   }
   try { renderIsOpen();    } catch(e){ console.error('renderIsOpen',e);    }
   try { renderW3();        } catch(e){ console.error('renderW3',e);        }
-  try { renderCanvas('c-w1',weights[0],32,22); } catch(e){ console.error('c-w1',e); }
-  try { renderCanvas('c-w2',weights[2],16,32); } catch(e){ console.error('c-w2',e); }
+  try { renderCanvas('c-w1',weights[0],32,22,FEAT_LABELS,null,'Neurons'); } catch(e){ console.error('c-w1',e); }
+  try { renderCanvas('c-w2',weights[2],16,32,null,'H1 neurons (0-31)','H2 neurons'); } catch(e){ console.error('c-w2',e); }
 }
 
 // ── Load from API ─────────────────────────────────────────────────────────────
@@ -695,6 +742,18 @@ async function load() {
     document.getElementById('s-round').textContent=model.round;
     document.getElementById('s-clients').textContent=status.num_clients;
     document.getElementById('s-samples').textContent=status.total_samples;
+    const algo=status.algorithm;
+    if(algo){
+      const algoLabel=algo==='fedprox'?'FedProx':'FedAvg';
+      const algoSub=algo==='fedprox'
+        ?'FedProx local training: proximal term prevents excessive drift from global model.'
+        :'FedAvg local training: plain SGD on local data. Kept for baseline comparison.';
+      document.getElementById('s-algorithm').innerHTML=`<span class="tag fedavg">${algoLabel}</span>`;
+      document.getElementById('s-algorithm-sub').textContent=algoSub;
+    } else {
+      document.getElementById('s-algorithm').textContent='-';
+      document.getElementById('s-algorithm-sub').textContent='No simulation or FL round recorded yet.';
+    }
     renderAll();
   } catch {
     document.getElementById('dot').className='dot err';

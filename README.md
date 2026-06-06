@@ -1,48 +1,180 @@
 # CultureQuest
 
-Mobile platform for urban exploration based on proximity and Federated Learning.
+Mobile platform for urban cultural exploration driven by proximity awareness and on-device Federated Learning.
+
+---
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Mobile | Flutter + TensorFlow Lite |
-| Backend | FastAPI (Python) |
+| Mobile | Flutter + Riverpod |
+| Backend | FastAPI (Python 3.11) |
 | Database | MongoDB |
-| Cache | Redis |
-| Proximity | Custom geofencing (geofence_service) |
-| Federated Learning | Flower (flwr) |
-| ML Model | MLP → TFLite |
+| Cache / FL state | Redis |
+| Routing | OSRM (via public API) |
+| Geofencing | geofence_service (Flutter) |
+| FL model | Custom MLP (22→32→16→1), implemented from scratch in Dart and Python |
+
+No TensorFlow, no Flower. The FL model runs entirely in Dart on-device.
+
+---
 
 ## Structure
 
 ```
 CultureQuest/
-├── backend/        # FastAPI server + Flower FL orchestrator
-├── mobile/         # Flutter app (FL client + TFLite inference)
+├── backend/
+│   ├── app/                  # FastAPI application
+│   │   ├── api/              # Route handlers
+│   │   ├── federated/        # Model architecture, FedAvg, clipped FedAvg
+│   │   └── services/         # FL service, route service, etc.
+│   ├── pretraining/          # Pretrain + finetune scripts and MD docs
+│   ├── federated/            # FL documentation and simulation script
+│   │   ├── FL.md             # Full FL architecture doc
+│   │   ├── SIMULATE.md       # Simulation script doc
+│   │   └── simulate_fl.py    # FedAvg vs FedProx comparison simulation
+│   ├── seed_bucharest.py     # DB seeder (landmarks, users, quests, etc.)
+│   └── requirements.txt
+├── mobile/
+│   └── lib/
+│       ├── features/
+│       │   ├── federated/    # FL client service (FedProx, DP noise, weight training)
+│       │   ├── map/          # Map screen, navigation, route generation
+│       │   ├── profile/      # Profile, privacy screen, FL sync
+│       │   └── ...
+│       └── core/
+├── web/
+│   └── dashboard.html        # Admin FL dashboard (open locally in browser)
 └── docker-compose.yml
 ```
 
-## Running locally
+---
+
+## How to start
+
+### 1. Start the backend stack
 
 ```bash
-# Infrastructure
-docker-compose up -d
+docker compose up -d
+```
 
-# Backend
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+Starts MongoDB, Redis, and the FastAPI backend on port 8000.
 
-# Mobile
+### 2. Seed the database
+
+```bash
+docker exec culturequest_backend python3 seed_bucharest.py
+```
+
+Creates landmarks, users, quests, routes, events, and simulated activity for Bucharest.
+
+### 3. Load the FL model (pretrain + finetune)
+
+```bash
+python3 backend/pretraining/pretrain.py
+python3 backend/pretraining/finetune.py
+```
+
+Trains the recommendation MLP on Foursquare + Yelp + synthetic data, then pushes the weights to Redis. Only needed once after initial setup or after clearing Redis.
+
+Run from the repo root. Requires `numpy`, `scikit-learn`, `requests`.
+
+### 4. Run the mobile app
+
+```bash
 cd mobile
 flutter pub get
 flutter run
 ```
 
-## Federated Learning progression
+The app connects to `http://10.0.2.2:8000` (Android emulator) or the configured backend URL.
 
-- Phase 1: FedAvg + MLP (initial)
-- Phase 2: FedProx (non-IID data)
-- Phase 3: FedAdam (faster convergence)
-- Phase 4: Secure Aggregation (privacy hardening)
+---
+
+## FL dashboard
+
+Open `web/dashboard.html` directly in a browser. It connects to the backend to show:
+
+- Current FL round, number of contributing devices, total training samples
+- Last training algorithm (FedAvg or FedProx)
+- Live engagement heatmap (Interest × Landmark type)
+- W1 / W2 weight matrix visualisation with feature labels
+- Interactive predictor and sensitivity panel
+
+---
+
+## Federated Learning system
+
+### Model
+
+A small MLP with sigmoid output predicting engagement probability ∈ [0, 1]:
+
+```
+Input (22) → W1 (32×22) → ReLU → W2 (16×32) → ReLU → W3 (1×16) → Sigmoid
+```
+
+1,281 parameters. Implemented from scratch in both Dart (client) and Python (server/simulation).
+
+### What is implemented
+
+| Component | Detail |
+|---|---|
+| **FedProx** (client) | Proximal term `μ/2 · ‖w − w_global‖²` added to local loss during SGD. Prevents excessive drift. Default `μ = 0.1`. |
+| **Clipped FedAvg** (server) | Delta norm clipped to `max_norm = 1.0` before aggregation. Limits influence of adversarial clients. |
+| **Differential Privacy** (client) | Gaussian noise `N(0, (σ·C)²)` added to weight delta before upload. Mitigates membership inference attacks (Shokri et al., 2017). `σ = 0.1`, `C = 1.0`. |
+| **Async FL** | One client per round. Server aggregates immediately after each upload. No synchronisation barrier needed. |
+| **Interaction threshold** | Local training triggers automatically after 15 interactions, or manually from the profile screen. |
+| **Route generation pipeline** | Step 1: FL score × 0.8 + proximity × 0.2 for candidate filtering. Step 2: interest-match tiebreaker for greedy selection. Step 3: FL-scaled dwell time per stop. |
+| **Pretraining** | Offline MLP trained on Foursquare check-ins + Yelp reviews + synthetic engagement data. |
+| **Finetuning** | Second training pass with route-aware features and bias corrections before pushing to Redis. |
+
+### Engagement labels
+
+| Event | Label |
+|---|---|
+| Landmark sheet opened | 0.40 |
+| Navigation started | 0.65 |
+| Quest completed | 0.90 |
+| Rating (1–5 stars) | stars / 5.0 (overrides all others) |
+
+### Privacy
+
+- Raw visit history, ratings, routes, and quest answers never leave the device.
+- Only trained weight deltas (with DP noise) are uploaded.
+- Server applies delta norm clipping before aggregation.
+- Privacy details are surfaced to users in the in-app Privacy screen.
+
+---
+
+## FL simulation script
+
+Compares FedAvg vs FedProx over 100 synthetic rounds starting from the current Redis weights.
+
+```bash
+# Run inside the backend container (Redis is not exposed to the host)
+docker exec -it culturequest_backend python3 federated/simulate_fl.py
+
+# Copy results to host
+docker cp culturequest_backend:/app/federated/results backend/federated/results
+```
+
+Produces `loss_curve.png`, `weight_drift.png`, `probe_scores.png`, and `stats.json`. Pushes the winning algorithm's weights back to Redis.
+
+See `backend/federated/SIMULATE.md` for full details.
+
+---
+
+## Useful commands
+
+```bash
+# Rebuild backend after code changes
+docker compose up -d --build backend
+
+# Clear all FL state from Redis (forces re-init from finetune weights on next request)
+docker exec $(docker ps -qf name=redis) redis-cli -a secret --no-auth-warning \
+    DEL fl:global_weights fl:round fl:client_ids fl:total_samples fl:algorithm
+
+# Reseed database
+docker exec culturequest_backend python3 seed_bucharest.py
+```

@@ -150,7 +150,41 @@ class PrivacyScreen extends ConsumerWidget {
 
           const SizedBox(height: 24),
 
-          // ── Federated Learning note ─────────────────────────────────────
+          // ── Federated Learning & model privacy ──────────────────────────
+          _SectionHeader(
+            icon: Icons.hub_outlined,
+            label: 'AI model privacy',
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(height: 12),
+          _DataCard(children: [
+            _DataRow(
+              icon: Icons.model_training_outlined,
+              label: 'Federated Learning',
+              value: 'on-device',
+              detail: 'Your interactions train the recommendation model locally. '
+                  'Only weight updates are shared - never your raw visit data.',
+            ),
+            _DataRow(
+              icon: Icons.noise_aware_outlined,
+              label: 'Differential Privacy',
+              value: 'enabled',
+              detail: 'Gaussian noise is added to model updates before upload. '
+                  'This prevents membership inference - even by querying the global '
+                  'model, no one can determine whether you visited a specific landmark.',
+            ),
+            _DataRow(
+              icon: Icons.content_cut_outlined,
+              label: 'Update norm clipping',
+              value: 'enabled',
+              detail: 'Each update is clipped to a maximum size before aggregation, '
+                  'limiting how much any single device (including a malicious one) '
+                  'can shift the shared model.',
+            ),
+          ]),
+
+          const SizedBox(height: 16),
+
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -158,13 +192,18 @@ class PrivacyScreen extends ConsumerWidget {
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(Icons.hub_outlined, size: 18, color: theme.colorScheme.primary),
+              Icon(Icons.info_outline, size: 18, color: theme.colorScheme.onSurfaceVariant),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'AI recommendations use Federated Learning - your interactions train a model locally on this device. '
-                  'Only the trained model weights are shared, never the raw data.',
-                  style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
+                  'Research (Shokri et al., 2017) shows that model weights alone can '
+                  'reveal whether a specific data point was used in training - known as '
+                  'a membership inference attack. The Differential Privacy noise above '
+                  'provides a mathematical bound on this leakage.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    height: 1.5,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ]),

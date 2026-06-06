@@ -17,7 +17,7 @@ const flLabelQuestSuggested   = 0.80;
 const flLabelStorySubmitted   = 0.85;
 const flLabelQuestCompleted   = 0.9;
 
-const _autoRoundThreshold = 10;
+const _autoRoundThreshold = 15;
 
 class FLState {
   final int round;
