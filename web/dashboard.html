@@ -22,7 +22,6 @@
     .url-in:focus{outline:none;border-color:var(--primary)}
     .btn{background:var(--primary);color:#fff;border:none;border-radius:7px;padding:5px 13px;font-size:12px;font-weight:600;cursor:pointer}
     .btn:hover{background:var(--prim-d)}
-    .refresh-lbl{font-size:11px;color:var(--dim)}
     main{max-width:1440px;margin:0 auto;padding:20px;display:flex;flex-direction:column;gap:18px}
     .card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:18px}
     .card-title{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin-bottom:5px}
@@ -147,9 +146,7 @@
   <div class="logo"><em>CultureQuest</em> · FL Dashboard</div>
   <div class="pill"><div class="dot" id="dot"></div><span id="conn-lbl">connecting…</span></div>
   <div class="spacer"></div>
-  <span class="refresh-lbl" id="refresh-lbl"></span>
   <input class="url-in" id="url" value="http://localhost:8000" />
-  <button class="btn" onclick="load()">↻ Refresh</button>
 </header>
 
 <main>
@@ -359,7 +356,6 @@ let selInterests = new Set(['art','history']);
 let selTypeIdx = 0;
 let isOpen = true, isWeekend = false;
 let timeHour = 12, relRank = 0.5;
-let refreshSec = 30, countdown = refreshSec;
 
 // ── MLP - identical to fl_client_service.dart ────────────────────────────────
 const relu = x => Math.max(0, x);
@@ -791,12 +787,6 @@ function showTip(e,text){tip.style.opacity=1;tip.innerHTML=text.replace('\n','<b
 function hideTip(){tip.style.opacity=0;}
 function moveTip(e){tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-34)+'px';}
 
-// ── Auto-refresh ──────────────────────────────────────────────────────────────
-setInterval(()=>{
-  countdown--;
-  document.getElementById('refresh-lbl').textContent=`auto-refresh in ${countdown}s`;
-  if(countdown<=0){countdown=refreshSec;load();}
-},1000);
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 buildInterestGrid();buildTypeGrid();

@@ -83,7 +83,7 @@ async def submit_client_update(
         new_round = current_round + 1
         await redis.set(FL_WEIGHTS_KEY, json.dumps(new_weights))
         await redis.set(FL_ROUND_KEY, str(new_round))
-        await redis.set(FL_ALGORITHM_KEY, algorithm)
+        await redis.set(FL_ALGORITHM_KEY, algorithm.lower())
         await redis.set(FL_LAST_STALENESS_KEY, str(staleness))
         if user_id:
             await redis.sadd(FL_CLIENTS_KEY, user_id)
