@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 CultureQuest FL Pre-training Data Preparation
-=============================================
+
 Processes Foursquare (TSMC2014, TIST2015, ubicomp2013) + Yelp + Seeder data
 into 22-dim feature vectors with engagement labels for MLP warm-start.
 
@@ -28,7 +28,7 @@ except ImportError:
     HAS_MONGO = False
     print("WARNING: pymongo not installed. Seeder data will be skipped.")
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
+# Paths
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TSMC2014_ZIP = '/home/andrei-cozma/Desktop/dataset_tsmc2014.zip'
 TIST2015_ZIP = '/home/andrei-cozma/Desktop/dataset_TIST2015.zip'
@@ -39,7 +39,7 @@ OUT_DIR      = os.path.join(os.path.dirname(__file__), 'output')
 CHARTS_DIR   = os.path.join(OUT_DIR, 'charts')
 os.makedirs(CHARTS_DIR, exist_ok=True)
 
-# ── Feature schema (must match fl_client_service.dart) ────────────────────────
+# Feature schema (must match fl_client_service.dart)
 INTERESTS = ['art', 'architecture', 'history', 'gastronomy', 'nature', 'music']
 TYPES     = ['museum', 'monument', 'park', 'gallery', 'restaurant', 'square', 'building', 'other']
 INPUT_DIM = 22
@@ -50,7 +50,7 @@ INPUT_DIM = 22
 #   [20] routeStopNormalized   -> 0.0
 #   [21] routeLengthNormalized -> 0.0
 
-# ── Label constants ────────────────────────────────────────────────────────────
+# Label constants
 L_CHECKIN  = 0.70   # single Foursquare check-in
 L_REPEAT   = 0.90   # 3+ check-ins same venue (capped)
 L_TIP      = 0.75   # user left a tip/comment (stronger engagement)
@@ -59,7 +59,7 @@ L_SEEDER   = 0.70   # seeder simulated visit baseline
 # Yelp: label = stars / 5.0  (explicit sentiment, overrides everything)
 # Repeat check-in bonus: L_CHECKIN + 0.05 * max(0, count-1), capped at L_REPEAT
 
-# ── Category mappings ─────────────────────────────────────────────────────────
+# Category mappings
 
 FS_EXACT = {
     'museum':'museum','art museum':'museum','history museum':'museum',
@@ -199,7 +199,7 @@ TYPE_TO_INTERESTS = {
     'other':      [],
 }
 
-# ── Utility functions ─────────────────────────────────────────────────────────
+# Utility functions
 
 def map_fs_category(cat: str) -> str | None:
     if not cat:
@@ -267,7 +267,7 @@ def parse_fs_time(utc_str: str, tz_offset: int) -> datetime | None:
     except:
         return None
 
-# ── Dataset processors ────────────────────────────────────────────────────────
+# Dataset processors
 
 def process_tsmc2014() -> list:
     print("\n[TSMC2014] NYC + Tokyo Foursquare check-ins...")
@@ -663,7 +663,7 @@ def process_seeder() -> list:
     print(f"  Records generated: {len(records):,}")
     return records
 
-# ── Charts ────────────────────────────────────────────────────────────────────
+# Charts
 
 def save_charts(X: np.ndarray, y: np.ndarray, source_counts: dict):
     print("\n[Charts] Generating analysis plots...")
@@ -768,14 +768,14 @@ def save_charts(X: np.ndarray, y: np.ndarray, source_counts: dict):
     plt.close()
     print(f"  Saved: {path}")
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# Main
 
 def generate_closed_samples(n_per_type: int = 300) -> list:
     """
     Synthetic samples for closed landmarks.
 
     All real data sources (Foursquare check-ins, Yelp reviews) only record
-    interactions where the place was actually open — a user who finds a
+    interactions where the place was actually open: a user who finds a
     closed museum doesn't check in. Without synthetic examples the model
     never sees isOpen=0 during pretraining and can't learn that feature.
 
@@ -806,9 +806,7 @@ def generate_closed_samples(n_per_type: int = 300) -> list:
 
 
 def main():
-    print("=" * 60)
     print("CultureQuest FL Pre-training Data Preparation")
-    print("=" * 60)
 
     all_records = []
     source_counts = {}
@@ -842,7 +840,7 @@ def main():
 
     import random
 
-    # ── Fix 1: Balance type distribution ─────────────────────────────────────
+    # Fix 1: Balance type distribution
     # Restaurant dominance skews the model toward gastronomy users.
     # Cap any single type at 2x the median type count so all 8 types
     # contribute meaningfully to weight training.
@@ -866,10 +864,10 @@ def main():
         print(f"  {t:12s}: {type_kept[i]:,}")
     print(f"  Total after balancing: {len(all_records):,}")
 
-    # ── Fix 2: Replace artificial noon spike ─────────────────────────────────
+    # Fix 2: Replace artificial noon spike
     # Yelp records have hour=0.5 (noon) because review timestamps have no time.
     # Replace with a realistic random hour per landmark type to avoid training
-    # a spurious "noon → high engagement" association.
+    # a spurious "noon -> high engagement" association.
     TYPE_HOUR_RANGES = {
         'museum':     (10/24, 18/24),
         'gallery':    (10/24, 20/24),

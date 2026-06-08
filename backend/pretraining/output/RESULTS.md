@@ -21,7 +21,7 @@
 | Val (20%) | 148,318 | |
 
 **Label distribution**: mean = 0.738, std = 0.154  
-Range is narrow and skewed positive — most sources only record
+Range is narrow and skewed positive: most sources only record
 successful visits (check-ins, reviews), with negative sentiment
 underrepresented after type balancing.
 
@@ -49,7 +49,7 @@ underrepresented after type balancing.
 | RMSE | 0.1524 | **0.1520** |
 | R² (approx.) | ~0.025 | **~0.025** |
 
-**Prediction range**: [0.588, 0.852] — mean = 0.738
+**Prediction range**: [0.588, 0.852], mean = 0.738
 
 Training time: 76 seconds on CPU.
 
@@ -63,14 +63,14 @@ Training time: 76 seconds on CPU.
 - Train and val loss are nearly identical (no overfitting), which is
   expected for a model this small on a dataset this large.
 - Predictions are centred on the correct mean (0.738 ≈ label mean).
-- The model correctly encodes the direction of preferences — higher
-  scores for matching interests, lower for closed venues — just with
+- The model correctly encodes the direction of preferences: higher
+  scores for matching interests, lower for closed venues, just with
   low confidence.
 - Weights uploaded successfully to Redis as round 0.
 
 ### What is concerning
 
-**R² ≈ 0.025** — the model explains only ~2.5% of label variance.
+**R² ≈ 0.025**: the model explains only ~2.5% of label variance.
 The remaining 97.5% is effectively noise from the model's perspective.
 This manifests as a narrow prediction range [0.59, 0.85]: the model
 predicts near the mean for almost every input and cannot produce
@@ -94,7 +94,7 @@ inadvertently removing the bulk of low-engagement training signal.
 balancing, the label distribution from Yelp is skewed high.
 
 **3. Fast convergence / LR too low**  
-Loss moved from 0.0242 to 0.0231 across 60 epochs — 95% of improvement
+Loss moved from 0.0242 to 0.0231 across 60 epochs: 95% of improvement
 happened in the first 5 epochs. The LR decay of 0.98 per epoch is too
 aggressive; by epoch 30 the LR was 0.00545 and effectively stalled.
 
@@ -117,8 +117,8 @@ The pre-trained model is **better than random initialisation** but
   device's weights away from the near-mean plateau and produce
   meaningful differentiation.
 
-The pretraining still achieves its core goal — avoiding cold-start
-random noise — but the ranking signal is weak.
+The pretraining still achieves its core goal, avoiding cold-start
+random noise, but the ranking signal is weak.
 
 ---
 
@@ -136,7 +136,7 @@ from the saved weights:
 
 A full retrain from scratch is only needed if the model architecture
 changes (e.g. 22->64->32->1) or if the feature vector dimensions change.
-Continuing from the current weights counts as **fine-tuning** — see below.
+Continuing from the current weights counts as **fine-tuning**; see below.
 
 ---
 

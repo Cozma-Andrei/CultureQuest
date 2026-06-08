@@ -54,7 +54,7 @@ class PrivacyScreen extends ConsumerWidget {
 
           const SizedBox(height: 28),
 
-          // ── On this device ──────────────────────────────────────────────
+          // On this device
           _SectionHeader(
             icon: Icons.phone_android_outlined,
             label: 'Stored only on this device',
@@ -96,7 +96,7 @@ class PrivacyScreen extends ConsumerWidget {
 
           const SizedBox(height: 24),
 
-          // ── On the server ───────────────────────────────────────────────
+          // On the server
           _SectionHeader(
             icon: Icons.cloud_outlined,
             label: 'Stored on the server',
@@ -132,7 +132,7 @@ class PrivacyScreen extends ConsumerWidget {
 
           const SizedBox(height: 24),
 
-          // ── Never stored ────────────────────────────────────────────────
+          // Never stored
           _SectionHeader(
             icon: Icons.visibility_off_outlined,
             label: 'What the server never sees',
@@ -150,7 +150,7 @@ class PrivacyScreen extends ConsumerWidget {
 
           const SizedBox(height: 24),
 
-          // ── Federated Learning & model privacy ──────────────────────────
+          // Federated Learning & model privacy
           _SectionHeader(
             icon: Icons.hub_outlined,
             label: 'AI model privacy',

@@ -94,7 +94,7 @@ async def record_visit(db: AsyncIOMotorDatabase, landmark_id: str) -> None:
 async def rate_landmark(
     db: AsyncIOMotorDatabase, landmark_id: str, rating: int, previous_rating: int | None = None
 ) -> LandmarkResponse | None:
-    """Update aggregate rating using sum/count — no per-user record stored."""
+    """Update aggregate rating using sum/count: no per-user record stored."""
     try:
         oid = ObjectId(landmark_id)
     except InvalidId:

@@ -8,7 +8,7 @@ from app.models.landmark import CommentCreate, CommentResponse
 
 _MAX_COMMENTS = 50  # per landmark
 
-# Local fallback — catches slurs and severe harassment when OpenAI is unavailable
+# Local fallback: catches slurs and severe harassment when OpenAI is unavailable
 _BLOCKED = re.compile(
     r'\b(nigga|nigger|faggot|fag|kike|spic|chink|cunt|whore|bitch|retard|'
     r'motherfuck|kill\s+your?self|go\s+die|piece\s+of\s+shit|fuck\s+you)\b',
@@ -57,7 +57,7 @@ async def _moderate(text: str, comment_id: str, db: AsyncIOMotorDatabase) -> boo
         except Exception:
             pass
 
-    # Local keyword fallback — runs when OpenAI is unavailable or returned non-200
+    # Local keyword fallback: runs when OpenAI is unavailable or returned non-200
     if not flagged and _local_flag(text):
         flagged = True
         categories = ["harassment"]
@@ -96,7 +96,7 @@ async def submit_comment(
     comment_id = str(result.inserted_id)
     doc["_id"] = result.inserted_id
 
-    # Synchronous moderation — caller gets accurate flagged status
+    # Synchronous moderation: caller gets accurate flagged status
     flagged = await _moderate(payload.text.strip(), comment_id, db)
     doc["flagged"] = flagged
 

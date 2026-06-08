@@ -21,7 +21,7 @@ async def _vote(db, collection: str, item_id: str, user_id: str, auto_approve_fn
     if doc.get("submitted_by") == user_id:
         raise HTTPException(status_code=403, detail="You cannot validate your own submission")
 
-    # Increment anonymous vote counter — no user ID stored
+    # Increment anonymous vote counter: no user ID stored
     new_count = doc.get("community_vote_count", 0) + 1
     approved = new_count >= _VOTES_NEEDED
 

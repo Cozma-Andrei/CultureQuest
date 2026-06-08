@@ -143,7 +143,7 @@ class MapNotifier extends StateNotifier<MapState> {
   void _onPosition(Position pos) {
     if (_disposed) return;
     final isFirstFix = state.position == null;
-    // Reject any fix worse than 50 m — network-location noise on bad-internet days
+    // Reject any fix worse than 50 m: network-location noise on bad-internet days
     // can produce large accuracy spikes that make the dot jump erratically.
     // The threshold is 100 m only for the very first fix (we need something to start with);
     // after that we tighten to 50 m.

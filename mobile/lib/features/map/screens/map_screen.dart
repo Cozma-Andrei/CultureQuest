@@ -37,7 +37,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   final _sheetController = DraggableScrollableController();
   late final TabController _tabController;
   bool _centeredOnUser = false;
-  List<LatLng> _streetPolyline = const [];   // teal: user → next route stop
+  List<LatLng> _streetPolyline = const [];   // teal: user -> next route stop
   List<LatLng> _overviewPolyline = const []; // purple dashed: all route stops via streets
   List<LatLng> _navPolyline = const [];      // teal: standalone landmark navigation
   LandmarkModel? _navTarget;
@@ -274,14 +274,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 keepBuffer: 4,
                 maxZoom: 17,
               ),
-              // Generated route polyline — hidden while navigation is active
+              // Generated route polyline: hidden while navigation is active
               if (mapState.activeRoute != null && progressRoute == null && _navTarget == null)
                 PolylineLayer(polylines: [
                   _streetPolyline.isNotEmpty
                       ? Polyline(points: _streetPolyline, strokeWidth: 4, color: Colors.deepPurple)
                       : _buildRoutePolyline(mapState.activeRoute!.stops.map((s) => s.landmark).toList(), mapState.position),
                 ]),
-              // Progress route overview polyline — hidden while navigation is active
+              // Progress route overview polyline: hidden while navigation is active
               if (progressRoute != null && _overviewPolyline.isNotEmpty && _navTarget == null)
                 PolylineLayer(polylines: [
                   Polyline(
@@ -290,7 +290,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                     color: Colors.deepPurple,
                   ),
                 ]),
-              // Navigation polyline — on top, shown whenever nav is active (including over routes)
+              // Navigation polyline: on top, shown whenever nav is active (including over routes)
               if (_navTarget != null && _navPolyline.isNotEmpty)
                 PolylineLayer(polylines: [Polyline(points: _navPolyline, strokeWidth: 5, color: Colors.teal)]),
               // Landmark markers - numbered for generated route stops, normal otherwise
@@ -479,7 +479,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                         setState(() { _navTarget = null; _navPolyline = const []; _navMode = 'walking'; _headingUp = false; _navDurationSec = null; _navDistanceM = null; });
                         _mapController.rotate(0);
                         _restoreSheet();
-                        // Only reopen landmark sheet if there was no route — if there was
+                        // Only reopen landmark sheet if there was no route; if there was
                         // a route, closing nav simply returns to route display.
                         if (stoppedTarget != null && !hadRoute) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -578,7 +578,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   }
                 },
                 onStopNav: () {
-                  // Closing nav inside a route returns to route — no landmark sheet
+                  // Closing nav inside a route returns to route: no landmark sheet
                   setState(() { _navTarget = null; _navPolyline = const []; _headingUp = false; _navDurationSec = null; _navDistanceM = null; });
                   _mapController.rotate(0);
                 },
@@ -598,7 +598,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     );
   }
 
-  // ── Path-bearing helpers ──────────────────────────────────────────────────────
+  // Path-bearing helpers
 
   double _distM(LatLng a, LatLng b) {
     final lat1 = a.latitude * math.pi / 180;
@@ -631,7 +631,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   }
 
   LatLng? _lookaheadOnPath(Position pos) {
-    // Priority: progress-route overview → generated-route street line → standalone nav
+    // Priority: progress-route overview -> generated-route street line -> standalone nav
     final polyline = _overviewPolyline.isNotEmpty
         ? _overviewPolyline
         : _streetPolyline.isNotEmpty
@@ -1124,7 +1124,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     );
   }
 
-  // ── Events ──────────────────────────────────────────────────────────────────
+  // Events
 
   Future<List<EventModel>> _fetchEvents(String landmarkId) async {
     try {
@@ -1815,7 +1815,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     final l = all.where((x) => x.id == stale.id).firstOrNull ?? stale;
     final theme = Theme.of(context);
     setState(() => _selectedLandmarkId = l.id);
-    // Weakest positive signal — user was curious enough to open the sheet
+    // Weakest positive signal: user was curious enough to open the sheet
     ref.read(flProvider.notifier).recordEngagement(l, flLabelSheetOpened);
     showModalBottomSheet(
       context: context,
@@ -2309,7 +2309,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       };
 }
 
-// ── Tile cache ─────────────────────────────────────────────────────────────────
+// Tile cache
 
 final _tileCacheManager = CacheManager(
   Config(
@@ -2329,7 +2329,7 @@ class _CachedTileProvider extends TileProvider {
       );
 }
 
-// ── Bottom panel ───────────────────────────────────────────────────────────────
+// Bottom panel
 
 // _BottomPanel is now a single CustomScrollView so dragging anywhere
 // (including the handle and tab bar) expands/collapses the sheet.
@@ -2423,7 +2423,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
         child: CustomScrollView(
           controller: widget.scrollController,
           slivers: [
-            // ── Handle ──────────────────────────────────────────────────────
+            // Handle
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -2439,7 +2439,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
               ),
             ),
 
-            // ── Header area (depends on active mode) ────────────────────────
+            // Header area (depends on active mode)
             if (mapState.activeProgressRoute != null) ...[
               SliverToBoxAdapter(
                 child: _ProgressRouteHeader(
@@ -2739,7 +2739,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
 
     final items = <Widget>[];
 
-    // ── My Routes (locally stored, user-generated) ─────────────────────────
+    // My Routes (locally stored, user-generated)
     items.add(Padding(
       padding: const EdgeInsets.fromLTRB(0, 12, 0, 6),
       child: Row(children: [
@@ -2758,7 +2758,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
       for (final r in mapState.myRoutes) items.add(_RouteCard(route: r));
     }
 
-    // ── Curated Routes (global, visible to all) ────────────────────────────
+    // Curated Routes (global, visible to all)
     if (mapState.globalRoutes.isNotEmpty) {
       items.add(Padding(
         padding: const EdgeInsets.fromLTRB(0, 16, 0, 6),
@@ -2910,7 +2910,7 @@ class _RouteCard extends ConsumerWidget {
   }
 }
 
-// ── Progress route detail ──────────────────────────────────────────────────────
+// Progress route detail
 
 class _ProgressRouteHeader extends StatelessWidget {
   final RouteWithProgress route;
@@ -3054,7 +3054,7 @@ class _ProgressStopTile extends StatelessWidget {
   }
 }
 
-// ── Shared widgets ─────────────────────────────────────────────────────────────
+// Shared widgets
 
 class _RouteHeader extends StatelessWidget {
   final RouteModel route;
@@ -3188,11 +3188,11 @@ class _LandmarkTile extends StatelessWidget {
   }
 }
 
-// ── Admin: pending submissions ─────────────────────────────────────────────────
+// Admin: pending submissions
 
-// ── Community review sheet ─────────────────────────────────────────────────────
+// Community review sheet
 
-// ── Admin: create global route ─────────────────────────────────────────────────
+// Admin: create global route
 
 class _CreateRouteSheet extends ConsumerStatefulWidget {
   final List<LandmarkModel> allLandmarks;
@@ -3207,7 +3207,7 @@ class _CreateRouteSheetState extends ConsumerState<_CreateRouteSheet> {
   final _searchCtrl = TextEditingController();
   String _search = '';
   final List<LandmarkModel> _stops = [];
-  final Map<String, int> _dwellMinutes = {}; // landmarkId → minutes
+  final Map<String, int> _dwellMinutes = {}; // landmarkId -> minutes
   bool _saving = false;
 
   @override
@@ -4239,7 +4239,7 @@ class _AdminSubmissionsSheetState extends ConsumerState<_AdminSubmissionsSheet>
   }
 }
 
-// ── Comments section ───────────────────────────────────────────────────────────
+// Comments section
 
 class _CommentsSection extends ConsumerStatefulWidget {
   final String landmarkId;
@@ -4353,7 +4353,7 @@ class _CommentsSectionState extends ConsumerState<_CommentsSection> {
   }
 }
 
-// ── Events section ─────────────────────────────────────────────────────────────
+// Events section
 
 class _EventsSection extends ConsumerStatefulWidget {
   final String landmarkId;
@@ -4470,7 +4470,7 @@ class _EventTile extends StatelessWidget {
   }
 }
 
-// ── Nearby events sheet ────────────────────────────────────────────────────────
+// Nearby events sheet
 
 class _NearbyEventsSheet extends ConsumerStatefulWidget {
   final dynamic pos;
@@ -4688,7 +4688,7 @@ class _StarRatingRowState extends State<_StarRatingRow> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Overall community rating (always shown, read-only) ──────────────
+        // Overall community rating (always shown, read-only)
         Row(children: [
           Text('Overall rating:',
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
@@ -4705,7 +4705,7 @@ class _StarRatingRowState extends State<_StarRatingRow> {
           ),
         ]),
 
-        // ── Previous personal rating ──────────────────────────────────────
+        // Previous personal rating
         if (widget.myRating != null && widget.myRating! > 0) ...[
           const SizedBox(height: 4),
           Text(
@@ -4714,7 +4714,7 @@ class _StarRatingRowState extends State<_StarRatingRow> {
           ),
         ],
 
-        // ── Interactive rating row (only when canRate) ────────────────────
+        // Interactive rating row (only when canRate)
         if (widget.canRate) ...[
           const SizedBox(height: 8),
           Row(children: [

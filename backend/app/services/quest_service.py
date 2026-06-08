@@ -24,8 +24,8 @@ def _doc_to_quest(doc: dict, completed_ids: set[str] | None = None) -> QuestResp
 async def get_quests_for_landmark(
     db: AsyncIOMotorDatabase, landmark_id: str, user_id: str
 ) -> list[QuestResponse]:
-    # completed status is tracked locally on device — server returns quests without completion state
-    # Only return approved (seeded) or explicitly approved quests — exclude pending submissions
+    # completed status is tracked locally on device; server returns quests without completion state
+    # Only return approved (seeded) or explicitly approved quests; exclude pending submissions
     docs = await db.quests.find({
         "landmark_id": landmark_id,
         "$or": [{"status": {"$exists": False}}, {"status": "approved"}],
@@ -54,7 +54,7 @@ async def complete_quest(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # completed_quest_ids is no longer stored server-side — client tracks locally
+    # completed_quest_ids is no longer stored server-side; client tracks locally
     correct = True
     if quest["type"] == "educational" and quest.get("correct_option_index") is not None:
         correct = answer_index == quest["correct_option_index"]
@@ -87,7 +87,7 @@ async def get_user_progress(db: AsyncIOMotorDatabase, user_id: str) -> dict:
     return {
         "points": user.get("points", 0),
         "completed_quests": user.get("completed_quests", 0),
-        # completed_quest_ids intentionally omitted — tracked locally on device
+        # completed_quest_ids intentionally omitted: tracked locally on device
     }
 
 
@@ -223,7 +223,7 @@ async def submit_quest(
     })
     if active_count >= _MAX_QUESTS:
         raise HTTPException(status_code=422, detail=f"Landmark already has {_MAX_QUESTS} quests (maximum)")
-    # Admins and the landmark's creator bypass review — quest goes live immediately
+    # Admins and the landmark's creator bypass review: quest goes live immediately
     user_doc = await db.users.find_one({"_id": ObjectId(user_id)})
     is_admin = user_doc.get("is_admin", False) if user_doc else False
     is_creator = lm.get("submitted_by") == user_id

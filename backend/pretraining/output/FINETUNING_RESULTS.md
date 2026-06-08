@@ -15,7 +15,7 @@
 | **Total augmented train** | **703,706** (was 593,270) | |
 
 Label distribution after augmentation: mean=0.653, std=0.247  
-(was mean=0.738, std=0.154 — shifted lower and wider as intended)
+(was mean=0.738, std=0.154; shifted lower and wider as intended)
 
 ---
 
@@ -25,9 +25,9 @@ Label distribution after augmentation: mean=0.653, std=0.247
 |---|---|---|
 | Initial LR | 0.020 | Higher (was 0.010) to escape plateau |
 | LR decay | 0.995 / epoch | Slower (was 0.980) |
-| Epochs | 40 | Fewer (was 60) — weights already close |
+| Epochs | 40 | Fewer (was 60); weights already close |
 | Early stopping patience | 12 | Slightly more tolerant |
-| Weight initialisation | pretrained_weights.json | **Not random** — this is what makes it fine-tuning |
+| Weight initialisation | pretrained_weights.json | **Not random**: this is what makes it fine-tuning |
 
 ---
 
@@ -75,7 +75,7 @@ After fine-tuning:
 
 This is the behaviour required for meaningful landmark ranking.
 
-### Val MSE increased — expected and acceptable
+### Val MSE increased: expected and acceptable
 
 Val MSE rose from 0.0231 to 0.0266 (+15%). This is expected because:
 
@@ -85,7 +85,7 @@ data before fine-tuning. It contains almost no records with labels below
 like large errors on a val set where true labels cluster around 0.73.
 
 The MSE increase is an artifact of measuring on a val set that does not
-represent the full label range the model now covers — not evidence that
+represent the full label range the model now covers, not evidence that
 the model got worse at the real task.
 
 Analogy: a model trained to diagnose rare diseases will score higher MSE
@@ -109,7 +109,7 @@ reversed because the augmented training set contains synthetic and
 oversampled records that are harder to fit than the natural records
 in the val set. The model fits the natural data well (low val loss)
 but the synthetic extremes pull the training loss up. This is the
-desired behaviour — the synthetic samples are doing their job of
+desired behaviour: the synthetic samples are doing their job of
 applying pressure without dominating the model.
 
 ---
@@ -118,10 +118,10 @@ applying pressure without dominating the model.
 
 | Goal | Achieved? |
 |---|---|
-| Widen prediction range beyond 0.26 | Yes — 0.80 (×3) |
-| Model predicts meaningfully low scores for closed venues | Yes — min 0.037 |
-| No catastrophic forgetting of pretraining patterns | Yes — max 0.837, mean 0.701 (structure preserved) |
-| Upload to Redis as new global model | Yes — round 0 reset |
+| Widen prediction range beyond 0.26 | Yes: 0.80 (×3) |
+| Model predicts meaningfully low scores for closed venues | Yes: min 0.037 |
+| No catastrophic forgetting of pretraining patterns | Yes: max 0.837, mean 0.701 (structure preserved) |
+| Upload to Redis as new global model | Yes: round 0 reset |
 
 The fine-tuned model is **ready for FL deployment**. Initial landmark
 rankings will be meaningfully differentiated from day one. FL

@@ -23,7 +23,7 @@ def _classify(doc: dict) -> tuple[bool, bool]:
         if end and end > now:
             return False, True
         if not end and start <= now:
-            # No end time — treat as ongoing for 24 h after start
+            # No end time: treat as ongoing for 24 h after start
             from datetime import timedelta
             return False, (now - start).total_seconds() < 86400
     except Exception:

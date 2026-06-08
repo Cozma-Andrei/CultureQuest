@@ -94,7 +94,7 @@ async def set_info(
 
 @router.post("/{landmark_id}/visit", status_code=204)
 async def visit(landmark_id: str, db=Depends(get_db)):
-    """Anonymous visit counter — no user identity stored."""
+    """Anonymous visit counter: no user identity stored."""
     await record_visit(db, landmark_id)
 
 
@@ -114,7 +114,7 @@ async def submit(payload: LandmarkSubmit, user_id=Depends(get_current_user), db=
     return await submit_landmark(db, payload, user_id)
 
 
-# ── Admin endpoints ────────────────────────────────────────────────────────────
+# Admin endpoints
 
 @router.post("/admin/{landmark_id}/approve", response_model=LandmarkResponse)
 async def approve(landmark_id: str, _=Depends(get_admin_user), db=Depends(get_db)):
@@ -146,7 +146,7 @@ async def admin_delete(landmark_id: str, _=Depends(get_admin_user), db=Depends(g
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Landmark not found")
 
 
-# ── Story endpoints ────────────────────────────────────────────────────────────
+# Story endpoints
 
 @router.post("/{landmark_id}/stories", response_model=StoryResponse, status_code=201)
 async def add_story(landmark_id: str, payload: StorySubmit, user_id=Depends(get_current_user), db=Depends(get_db)):

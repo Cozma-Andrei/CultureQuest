@@ -41,7 +41,7 @@ async def list_comments(landmark_id: str, db=Depends(get_db)):
     return await get_comments(db, landmark_id)
 
 
-# ── Admin ──────────────────────────────────────────────────────────────────────
+# Admin
 
 @router.get("/admin/flagged", response_model=list[CommentResponse])
 async def flagged_comments(_=Depends(get_admin_user), db=Depends(get_db)):

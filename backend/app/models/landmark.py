@@ -80,13 +80,13 @@ class StoryResponse(BaseModel):
 
 
 class RatingPayload(BaseModel):
-    rating: int           # 1–5 new value
+    rating: int           # 1-5 new value
     previous_rating: int | None = None  # user's previous rating from local storage
 
 
 class CommentCreate(BaseModel):
     text: str = ""
-    rating: int  # 1–5
+    rating: int  # 1-5
 
 
 class CommentResponse(BaseModel):

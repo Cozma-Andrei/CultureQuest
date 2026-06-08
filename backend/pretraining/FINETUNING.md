@@ -11,7 +11,7 @@ overwriting useful patterns (catastrophic forgetting).
 and pretrain.py from scratch. Required only when the model architecture
 changes (layer sizes or input dimensions).
 
-**FL rounds**: every FL round is also fine-tuning — each device continues
+**FL rounds**: every FL round is also fine-tuning: each device continues
 from the global weights for a few local epochs before uploading its update.
 The only on-device computation that would NOT be fine-tuning would be a
 completely different mechanism (nearest-neighbour lookup, frozen layers
@@ -22,13 +22,13 @@ to CultureQuest's current architecture.
 
 ## Why fine-tuning was needed
 
-The pre-trained model showed **mean reversion** — predictions collapsed into
+The pre-trained model showed **mean reversion**: predictions collapsed into
 a narrow band [0.588, 0.852] despite labels spanning [0.10, 1.00].
 R² ≈ 0.025: the model explained only 2.5% of label variance.
 
 Two structural causes were identified:
 
-### Cause 1 — Insufficient low-label signal
+### Cause 1: Insufficient low-label signal
 
 All real-world sources (Foursquare check-ins, Yelp reviews) record only
 successful visits. There are two distinct types of low-engagement signal:
@@ -46,10 +46,10 @@ Both were underrepresented:
 **Fix**: 2,000 additional synthetic closed samples per type (16,000 new records),
 plus 3× oversampling of any existing record with label ≤ 0.40.
 
-### Cause 2 — Learning rate decayed too fast
+### Cause 2: Learning rate decayed too fast
 
 Pre-training used LR=0.01 with 0.98 decay per epoch. By epoch 30 the LR
-was 0.00545 and the model effectively stalled — MSE moved from 0.0242 at
+was 0.00545 and the model effectively stalled: MSE moved from 0.0242 at
 epoch 5 to only 0.0231 at epoch 60 (95% of improvement in first 5 epochs).
 
 **Fix**: Fine-tuning uses LR=0.02 (higher than where pretraining stalled,
@@ -72,7 +72,7 @@ without aggressively overwriting what was learned.
 **3× oversampling of low-label records (label ≤ 0.40)**:
 - Every record with label 0.10-0.40 is duplicated 3 times
 - Compensates for type-balancing removing restaurant-shaped negative examples
-- Does not add new information — just corrects the weight each existing
+- Does not add new information; just corrects the weight each existing
   negative record has in gradient updates
 
 Effect on label distribution: mean shifts from 0.738 down toward 0.70,
@@ -99,7 +99,7 @@ std increases, low-label bin is better populated.
 
 ## What to expect from the charts
 
-### `finetune_results.png` — three panels
+### `finetune_results.png`: three panels
 
 **Loss curves (left)**:
 - Should decrease more smoothly than pretraining (slower decay gives it more
@@ -125,13 +125,17 @@ std increases, low-label bin is better populated.
 
 **The proxy-preference gap**: the labels (0.70 for a Foursquare check-in,
 stars/5 for a Yelp rating) are proxies, not ground-truth preference.
-No amount of fine-tuning makes the model predict "actual engagement" —
+No amount of fine-tuning makes the model predict "actual engagement";
 it predicts a reconstruction of the proxy labels.
 
 **Individual user preferences**: the global model learns population-level
 patterns. Personal distance preference, route ordering preference, and
 nuanced interest weighting only emerge after FL rounds with real user data.
-Fine-tuning improves the starting point; FL personalisation does the rest.
+Fine-tuning improves the starting point; ongoing FL rounds keep adapting the
+shared model from real interaction data. Durable *per-user* personalisation
+(rather than population-level adaptation) needs the personal head described
+in FL.md's Future Recommendations: not yet implemented; see PRETRAINING.md's
+Limitations section for why vanilla FedAvg alone washes individual signal out.
 
 ---
 
@@ -141,12 +145,12 @@ Fine-tuning improves the starting point; FL personalisation does the rest.
 # Prerequisites: pretrain.py must have run first
 # Backend must be running at localhost:8000
 
-python backend/pretraining/finetune.py
+python3 backend/pretraining/finetune.py
 ```
 
 Output:
-- `output/finetuned_weights.json` — local backup of fine-tuned weights
-- `output/charts/finetune_results.png` — loss curves + analysis
+- `output/finetuned_weights.json`: local backup of fine-tuned weights
+- `output/charts/finetune_results.png`: loss curves + analysis
 - Weights uploaded to Redis as round 0 via `POST /api/federated/admin/initialize`, replacing whatever weights are currently stored
 
 ### Determinism
@@ -171,6 +175,6 @@ Architecture change needed (bigger model)?
   -> No: continue fine-tuning from finetuned_weights.json
 
 Real user FL data available?
-  -> Yes: stop manual fine-tuning, let FL do the personalisation
+  -> Yes: stop manual fine-tuning; let FL rounds continue the adaptation
   -> No: continue offline fine-tuning iterations
 ```

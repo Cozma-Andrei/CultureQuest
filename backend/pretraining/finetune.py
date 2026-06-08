@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 CultureQuest FL Global Model Fine-tuning
-=========================================
+
 Continues training from the pre-trained weights (does NOT reinitialise).
 Addresses two weaknesses identified in pretraining:
   1. Too few low-label examples -> model collapses toward mean (~0.74)
@@ -48,7 +48,7 @@ TYPES     = ['museum', 'monument', 'park', 'gallery', 'restaurant', 'square', 'b
 np.random.seed(42)
 random.seed(42)
 
-# ── Model (identical to pretrain.py) ─────────────────────────────────────────
+# Model (identical to pretrain.py)
 
 def relu(x):    return np.maximum(0, x)
 def relu_d(x):  return (x > 0).astype(np.float32)
@@ -106,7 +106,7 @@ def mse(W, X, y):
     out, _ = forward(W, X)
     return float(np.mean((out - y)**2))
 
-# ── Data augmentation ─────────────────────────────────────────────────────────
+# Data augmentation
 
 TYPE_HOUR_RANGES = {
     'museum':     (10/24, 18/24), 'gallery':    (10/24, 20/24),
@@ -169,7 +169,7 @@ def oversample_low_label(X: np.ndarray, y: np.ndarray,
     print(f"  Low-label records (≤{threshold}): {n_low:,} -> {n_low * factor:,} after {factor}x oversample")
     return X_out, y_out
 
-# ── Training loop ─────────────────────────────────────────────────────────────
+# Training loop
 
 def finetune(W, X_train, y_train, X_val, y_val):
     lr       = FT_LR_INIT
@@ -186,7 +186,6 @@ def finetune(W, X_train, y_train, X_val, y_val):
 
     print(f"\nFine-tuning MLP {INPUT_DIM}->{H1}->{H2}->1")
     print(f"  Train: {n:,}  Val: {len(y_val):,}  Epochs: {FT_EPOCHS}  LR: {FT_LR_INIT}  Decay: {FT_LR_DECAY}")
-    print("-" * 60)
 
     t0 = time.time()
     n_batches = max(1, n // BATCH_SIZE)
@@ -228,7 +227,7 @@ def finetune(W, X_train, y_train, X_val, y_val):
 
     return best_W, train_losses, val_losses, post_out, y_val
 
-# ── Charts ────────────────────────────────────────────────────────────────────
+# Charts
 
 def save_charts(train_losses, val_losses, y_pred, y_true,
                 pre_pred_range, post_pred_range):
@@ -266,7 +265,7 @@ def save_charts(train_losses, val_losses, y_pred, y_true,
     plt.close()
     print(f"  Chart saved: {path}")
 
-# ── Upload ────────────────────────────────────────────────────────────────────
+# Upload
 
 def upload(weights_list: list):
     print("\nUploading fine-tuned weights to backend...")
@@ -279,12 +278,10 @@ def upload(weights_list: list):
     data = resp.json()
     print(f"  Status: {data['status']}  Round: {data['round']} (reset)")
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# Main
 
 def main():
-    print("=" * 60)
     print("CultureQuest FL Global Model Fine-tuning")
-    print("=" * 60)
 
     # Load base weights
     weights_path = os.path.join(OUT_DIR, 'pretrained_weights.json')
@@ -348,8 +345,7 @@ def main():
     upload(weights_list)
 
     # Summary
-    print("\n" + "=" * 60)
-    print(f"Prediction range: {pre_range:.3f} -> {post_range:.3f}  "
+    print(f"\nPrediction range: {pre_range:.3f} -> {post_range:.3f}  "
           f"({'wider' if post_range > pre_range else 'narrower'})")
     print("Fine-tuning complete.")
 

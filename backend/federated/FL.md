@@ -6,7 +6,7 @@ CultureQuest uses Federated Learning (FL) to personalise landmark recommendation
 without sending any raw user data to the server. Each device trains a local copy
 of the recommendation model on the user's own interactions, then uploads only the
 trained weight delta. The server merges deltas from all devices into a shared global
-model — no individual visit, rating, or route ever leaves the device.
+model. No individual visit, rating, or route ever leaves the device.
 
 ---
 
@@ -17,11 +17,11 @@ A small MLP with sigmoid output, predicting engagement probability in [0, 1]:
 ```
 Input (22,)
     |
-    W1 (32 × 22) + b1 (32,)  →  ReLU  →  (32,)
+    W1 (32 × 22) + b1 (32,)    ->ReLU  ->  (32,)
     |
-    W2 (16 × 32) + b2 (16,)  →  ReLU  →  (16,)
+    W2 (16 × 32) + b2 (16,)  ->  ReLU  ->  (16,)
     |
-    W3 (1  × 16) + b3  (1,)  →  Sigmoid  →  scalar [0, 1]
+    W3 (1  × 16) + b3  (1,)  ->  Sigmoid  ->  scalar [0, 1]
 
 Total parameters: 1,281
 ```
@@ -39,9 +39,9 @@ Total parameters: 1,281
 | 18 | interestMatchScore | (user interests ∩ landmark categories) / len(user interests) |
 | 19 | isPartOfRoute | 0 or 1 |
 | 20 | routeStopNormalized | 0 = first stop, 1 = last stop |
-| 21 | routeLengthNormalized | (route length − 1) / 4, max 5 stops → 1.0 |
+| 21 | routeLengthNormalized | (route length − 1) / 4, max 5 stops -> 1.0 |
 
-Dims 17, 19, 20, 21 are always 0 in pretraining data — they only carry signal
+Dims 17, 19, 20, 21 are always 0 in pretraining data; they only carry signal
 once real route interactions flow from the app.
 
 ---
@@ -50,23 +50,23 @@ once real route interactions flow from the app.
 
 ```
 1. Pretraining (offline, once)
-   Foursquare + Yelp + synthetic data  →  pretrain.py  →  pretrained_weights.json
-   pretrained_weights.json  →  finetune.py  →  finetuned_weights.json  →  Redis
+   Foursquare + Yelp + synthetic data  ->  pretrain.py  ->  pretrained_weights.json
+   pretrained_weights.json  ->  finetune.py  ->  finetuned_weights.json  ->  Redis
 
 2. Device initialisation
-   GET /api/federated/model/global  →  device downloads global weights
+   GET /api/federated/model/global  ->  device downloads global weights
 
 3. User interacts with app
    Sheet open, navigation start, quest complete, rating, review
-   →  feature vector built + label assigned
-   →  buffered locally (one entry per landmark per round, deduped)
+   ->  feature vector built + label assigned
+   ->  buffered locally (one entry per landmark per round, deduped)
 
 4. Local training triggers (≥ 15 interactions, or manual sync from profile)
-   FedProx local SGD for 5 epochs  →  trained weights
+   Local SGD for 5 epochs (FedAvg client procedure)  ->  trained weights
    Gaussian DP noise added to delta
-   POST /api/federated/model/update  →  uploads noisy delta + num_samples
+   POST /api/federated/model/update  ->  uploads noisy delta + num_samples
 
-5. Server aggregation (async — one client at a time)
+5. Server aggregation (async, one client at a time)
    clipped_fedavg(client_update, global_weights, max_norm=1.0)
    Global weights updated in Redis, round counter incremented
 
@@ -77,29 +77,48 @@ once real route interactions flow from the app.
 
 ## What Is Implemented
 
-### Local training — FedProx
+### Local training
 
-Standard FedAvg uses plain SGD on the local loss. FedProx adds a proximal term
-that prevents the local weights from drifting too far from the global model:
+Each device runs the standard FedAvg client procedure: plain SGD on the local
+loss for a fixed number of epochs (5 by default, learning rate 0.01), then it
+uploads the resulting weights for the server to merge into the global model.
+
+```
+w ← w − lr · ∇L(w)
+```
+
+**Why not FedProx, SCAFFOLD, or FedDyn?**
+
+Each of these algorithms adds a correction term, a proximal penalty for
+FedProx, control variates for SCAFFOLD, a dynamic regulariser for FedDyn,
+that pulls a client's local update back toward consistency with its peers
+training on the same round's checkpoint. FedProx, for example, adds:
 
 ```
 L_FedProx(w) = L(w) + (μ/2) · ‖w − w_global‖²
 ```
 
-Gradient per coordinate during local training:
+so that no single client drifts far from the cohort sharing that checkpoint.
+That correction only has meaning when many clients train concurrently from
+one snapshot and the server must later reconcile their divergent views.
 
-```
-w ← w − lr · (∇L(w) + μ · (w − w_global))
-```
+CultureQuest's async FL aggregates one client per round, so there is no
+concurrent cohort to diverge from and no peer set to reconcile against. A
+cross-client drift correction would have nothing to correct: it would only
+bias every local update toward an arbitrary anchor point, with no convergence
+proof behind it (the published proofs for all three algorithms, including
+FedProx's in Li et al., MLSys 2020, assume synchronised multi-client rounds;
+see *Future Recommendations* below).
 
-`μ = 0.1` (configurable via `kFedProxMu`). Higher μ → less client drift,
-more conservative updates. FedAvg is kept in code for baseline comparison
-via the `FLAlgorithm` enum (`kFLAlgorithm = FLAlgorithm.fedProx`).
+What async FL does need, and what none of these algorithms provide, is a way
+to discount contributions from clients that trained on an outdated snapshot.
+That is a different problem, solved separately by the FedAsync staleness
+discount described later in this document.
 
-### Server aggregation — clipped FedAvg
+### Server aggregation: clipped FedAvg
 
 For async FL (one client per round), coordinate-wise median and trimmed-mean
-are not applicable — there is only one incoming update. Delta norm clipping
+are not applicable: there is only one incoming update. Delta norm clipping
 is the standard defence:
 
 ```
@@ -111,7 +130,9 @@ new_global  = fedavg([(num_samples, clipped), (virtual_samples, global)])
 
 `max_norm = 1.0`. A malicious client can move any weight coordinate by at
 most `1.0 / virtual_samples`, regardless of how extreme its update is.
-Plain `fedavg` is kept alongside for the future comparison script.
+Plain `fedavg` (without clipping) is exercised in the simulation script's
+clipping-robustness sweep, to show exactly how much protection this clipping
+step provides against a single rogue update.
 
 ### Differential Privacy
 
@@ -129,7 +150,7 @@ visit the Romanian Athenaeum?") was in any client's training set.
 Noise is generated on-device via Box-Muller transform. DP can be disabled
 by setting `kDPEnabled = false` for performance testing.
 
-### Staleness-aware aggregation
+### FedAsync staleness discount
 
 A client that downloaded global weights at round 3 and submits at round 50 is
 47 rounds stale. If its update were weighted equally to a fresh client, stale
@@ -153,19 +174,25 @@ field) and passed straight to `submit_client_update` as `client_round`.
 The staleness and resulting effective sample count are returned in the
 aggregation response for client-side logging.
 
-Two concrete scenarios where staleness accumulates despite the small user base:
+A concrete scenario where staleness accumulates despite the small user base:
 
-- **Holiday concurrent usage** — multiple users launch the app at the same
+- **Holiday concurrent usage**: multiple users launch the app at the same
   time (e.g. a busy weekend in the city centre), all downloading the same
   global round R. As they walk routes and hit the 15-interaction threshold one
   by one, each submission advances the global round. Later submitters in the
   same group are now stale relative to the updates already applied by earlier
   submitters in the same session.
-- **App kept in background** — a user opens the app, backgrounds it, and
-  resumes hours or days later without relaunching. Global weights are only
-  fetched on `AppLifecycleState.resumed` (foreground) and at first launch, so
-  a user who never fully closes the app would accumulate staleness across
-  multiple interaction sessions without ever refreshing.
+
+`runFLRound` re-fetches the global weights immediately before every round,
+not just at first launch and on `AppLifecycleState.resumed`. This matters
+because `_weights` holds the device's own locally-trained-and-noised copy
+after the first round, not the server's aggregated result; without a
+per-round re-fetch, a user running several rounds back-to-back in one long
+session (or one who never backgrounds the app for days) would keep training
+on top of their own drifting local copy while still reporting a `client_round`
+that *looks* fresh, silently bypassing the discount above. The re-fetch
+guarantees `client_round` always honestly reflects the round the weights were
+downloaded from, immediately before that round's local training began.
 
 ### Aggregation lock
 
@@ -174,9 +201,9 @@ The read-aggregate-write cycle in `submit_client_update` is protected by a Redis
 
 ```
 acquire fl:agg_lock (SET NX PX 5000)
-  → read global weights
-  → compute clipped_fedavg
-  → write new weights + round + algorithm
+  -> read global weights
+  -> compute clipped_fedavg
+  -> write new weights + round + staleness
 release fl:agg_lock (Lua: del only if token matches)
 ```
 
@@ -191,16 +218,23 @@ The 5 s TTL ensures the lock is freed even if the server process is killed mid-a
 ### Interaction threshold
 
 Local training triggers automatically after **15 interactions** (`_autoRoundThreshold`).
-The user can also trigger it manually from the profile screen at any point
-with ≥ 1 pending interaction.
+The user can also trigger it manually from the profile screen, but only once
+**8 pending interactions** have accumulated; the sync button stays disabled
+and shows "N more to sync" below that count.
 
 ### Engagement labels
 
+Defined in `fl_provider.dart`, ordered weakest to strongest:
+
 | Event | Label |
 |-------|-------|
-| Landmark sheet opened | 0.40 |
-| Navigation started | 0.65 |
-| Quest completed | 0.90 |
+| Landmark sheet opened | 0.30 |
+| Added to route | 0.50 |
+| Quest attempted (incorrect answer) | 0.50 |
+| Navigation started | 0.60 |
+| Quest suggested | 0.80 |
+| Story submitted | 0.85 |
+| Quest completed (correct answer) | 0.90 |
 | Rating given (1-5 stars) | stars / 5.0 (overrides all other labels) |
 
 One entry per landmark per round. Explicit rating overrides engagement label;
@@ -210,7 +244,7 @@ engagement only updates if higher than the current buffered value.
 
 FL inference runs three times per `POST /api/routes/generate`:
 
-**Step 1 — Candidate filtering**
+**Step 1: Candidate filtering**
 
 All landmarks within 10 km scored and top 10 kept:
 ```
@@ -220,7 +254,7 @@ FL score already encodes user interests, landmark type, and interest-match
 fraction via the feature vector. Fallback to `interest_match · 0.8 + proximity · 0.2`
 when Redis has no weights.
 
-**Step 2 — Greedy selection with interest tiebreaker**
+**Step 2: Greedy selection with interest tiebreaker**
 
 Up to 5 stops selected. Selection key (lower = preferred):
 ```
@@ -229,7 +263,7 @@ selection_key  = distance_m − tiebreaker_m · interest_match
 ```
 `tiebreaker_m` is chosen by the user via a slider (0–1000 m).
 
-**Step 3 — Dwell time scaling**
+**Step 3: Dwell time scaling**
 
 FL runs a second inference pass with actual route-position dims filled in:
 ```
@@ -248,7 +282,7 @@ where the server computes only the **sum** of client updates and never sees any
 individual client's weight delta. It requires multiple clients to submit
 simultaneously so their masked contributions cancel each other out.
 
-In CultureQuest's async FL (one client per round) there is nothing to mask with —
+In CultureQuest's async FL (one client per round) there is nothing to mask with;
 the server inherently sees the single incoming update. SecAgg is therefore
 architecturally inapplicable without switching to synchronous multi-client rounds.
 
@@ -264,7 +298,7 @@ first would be a prerequisite for adding SecAgg.
 
 Each device upload is merged into the global model via weighted average.
 A gastronomy-only user and a nature-only user both pull the global model
-in opposite directions — the result serves neither well. The explicit
+in opposite directions, and the result serves neither well. The explicit
 interest declarations in the feature vector (dims 0-5) compensate at
 inference time, but the learned weights still reflect the population average.
 
@@ -282,63 +316,88 @@ gradually correct this, but it is slow across many users.
 
 ### Switch to synchronous FL at scale (conditional)
 
-The current architecture processes one client upload per round (async FL).
-This was chosen because a small user base cannot guarantee concurrent sessions,
-and async FL requires no synchronisation barrier. Its main drawback is that
-FedProx's theoretical guarantees do not hold: the proximal term
-`μ/2 · ‖w − w_global‖²` was designed to bound divergence *between clients
-sharing the same round checkpoint* (Li et al., MLSys 2020). In async mode
-there are no co-round clients to diverge, so FedProx acts only as a
-regulariser with no convergence proof behind it.
+The current architecture aggregates one client update per round (async FL),
+chosen because a small user base cannot guarantee concurrent sessions and
+async needs no synchronisation barrier. The cost is statistical: the model
+moves on a single noisy sample per round instead of an average over many
+simultaneous clients, so it converges more slowly and with higher variance
+than synchronous FedAvg would. Sync would also unlock the broader FL
+catalogue (FedProx, SCAFFOLD, FedDyn, SecAgg) that *Local training* above
+already explains async cannot support, for the same reason: their proofs
+need a concurrent cohort sharing one checkpoint, and async has none.
 
-However, switching to synchronous FL is only appropriate when clients are
-**reliably available simultaneously**. For a consumer mobile app like
-CultureQuest this is rarely true: users range from daily commuters to
-occasional tourists visiting once a month. Their availability windows are
-completely different. Synchronous FL in this setting runs into the
-**straggler problem** — the round cannot close until all N required clients
-have submitted, so the system throughput is bounded by the slowest
-participant. The practical options are both bad:
+But sync only pays off when clients are **reliably available at the same
+time**, and CultureQuest's users, from daily commuters to once-a-month
+tourists, share no such schedule. That runs into the **straggler problem**:
+a round can't close until all N clients submit, so throughput is bounded by
+the slowest. **Wait**, and rounds stretch for hours or never close. **Drop**,
+and you systematically exclude whoever has older devices, worse connectivity,
+or irregular habits, biasing the model toward users with the best hardware
+and the most free time. Async sidesteps this entirely (every client
+contributes when ready); the FedAsync discount (Xie et al., 2019) absorbs
+the resulting staleness instead of dropping anyone or blocking the round.
 
-- **Wait** for slow clients → rounds take hours or never close.
-- **Drop** slow clients → users with older hardware, poor connectivity, or
-  irregular usage patterns are systematically excluded, biasing the global
-  model toward users with better devices and more frequent sessions.
+Sync is the right call only for **homogeneous availability**: a corporate
+deployment where every device is online during the same working hours. For a
+general-audience app, async with the staleness discount is correct
+**regardless of scale**.
 
-Async FL avoids this entirely: every client contributes whenever it is ready.
-The FedAsync staleness discount (Xie et al., 2019) handles the resulting
-staleness — a client that is behind contributes proportionally less, rather
-than being dropped or blocking the round.
+If sync were adopted anyway: clients would push updates to a Redis list
+(`RPUSH fl:pending_updates`); a worker wakes at N updates (e.g. 50) and runs
+`clipped_fedavg` over all of them atomically before writing the new global
+weights and incrementing the round counter; with N simultaneous updates,
+SecAgg becomes viable (masking each client's delta so the server never sees
+individual uploads). The existing `fl:agg_lock` already covers the write;
+the only real addition is the buffer in front of it. At very high scale, swap
+the Redis list for a message queue (Kafka, RabbitMQ) to avoid memory pressure
+and allow horizontal aggregation workers.
 
-Synchronous FL becomes the right choice only if the user base has
-**homogeneous availability** — e.g. a corporate deployment where all devices
-are online during the same working hours. For a general-audience mobile app,
-async with staleness discount is the correct long-term architecture regardless
-of scale.
+### Why not buffered / semi-async FL either?
 
-If synchronous FL were adopted despite this, the implementation would be:
+A middle ground between the two extremes above: buffer K client updates and
+aggregate them as a batch, instead of waiting for all N clients (sync) or
+merging after every single upload (the current approach). This is FedBuff
+(Nguyen et al., arXiv:2106.06639, 2022), and on paper it looks like a fix for
+async's "single noisy sample per round" weakness: average K updates together
+and the variance drops, without sync's all-N requirement.
 
-1. Clients submit updates to a Redis list (`RPUSH fl:pending_updates`).
-2. An aggregation worker wakes when the list reaches N updates (e.g. N = 50).
-3. `clipped_fedavg` runs over all N updates atomically, then the new global
-   weights are written and the round counter incremented.
-4. With N simultaneous updates, SecAgg becomes applicable — each client's
-   delta can be masked so the server never sees individual uploads.
+Both buffering and sync need the same thing to pay off: client participation
+that **clusters in time**, so that K (or N) updates land close enough together
+to combine. Whether a deployment can assume that comes down to *who the
+clients are*:
 
-The `fl:agg_lock` already in place covers the write step; the main addition
-is the buffering layer before aggregation. At very high scale (millions of
-users) the Redis list should be replaced with a message queue (Kafka,
-RabbitMQ) to avoid memory pressure and enable horizontal aggregation workers.
+- **Cross-silo FL (the textbook hospital/bank examples)**: a handful of
+  institutions running FL as a scheduled job on infrastructure they
+  contractually committed to maintain. "Everyone trains between 2-6 AM UTC"
+  is just an operations decision. Clustering is something the deployment can
+  mandate, so sync and buffering work exactly as designed.
+- **Cross-device FL on a consumer phone (CultureQuest)**: participation is a
+  side effect of someone using the app for its own sake, on their own
+  schedule, with no SLA. Nobody can tell a tourist to rack up 15 interactions
+  between 2 and 6 AM. Clustering would have to emerge from human behaviour
+  rather than be mandated by policy, and self-paced sightseeing doesn't
+  produce it: even "Holiday concurrent usage" above, the closest this app
+  gets to a concurrency spike, describes submissions crossing the threshold
+  "one by one", not as a batch.
+
+A buffer here would mostly wait on arrivals that never cluster, which just
+rescales the straggler problem: wait, and updates sit unapplied for hours;
+flush on a timeout, and the buffer empties at K ≈ 1, i.e. today's behaviour,
+but slower and wrapped in extra machinery (buffer state, timeout tuning, a
+second staleness clock for time spent waiting). That isn't a "not enough
+users yet" gap that growth closes: a bigger CultureQuest is just more of the
+same self-paced, staggered sessions, not more synchrony. Async with the
+FedAsync discount matches what this app's users actually do, at any size.
 
 ### Personal head (user-level personalisation)
 
 Keep FedAvg for the global backbone (shared patterns: landmark type scores,
 time-of-day effects, isOpen penalty). Add a small personal last layer
-(16 → 1, 17 parameters) stored on-device only, never uploaded:
+(16 -> 1, 17 parameters) stored on-device only, never uploaded:
 
 ```
-Global backbone (shared, FedAvg):   22 → 32 → 16
-Personal head   (local, on-device):         16 → 1
+Global backbone (shared, FedAvg):   22 -> 32 -> 16
+Personal head   (local, on-device):         16 -> 1
 ```
 
 The global model provides a population-level prior; the personal head learns
@@ -346,7 +405,7 @@ each user's specific preferences (e.g. genuinely prefers greek restaurants over
 romanian ones, prefers shorter visits, engages more on weekends) without being
 diluted by other users' data. This also handles the future taxonomy expansion
 case: if "restaurant" is split into cuisine subtypes, two gastronomy users
-would have identical feature vectors for any subtype — the global backbone
+would have identical feature vectors for any subtype: the global backbone
 cannot distinguish their preferences, but their personal heads can learn the
 difference from actual engagement history.
 
@@ -356,16 +415,16 @@ If CultureQuest scales to multiple cities (Bucharest, Cluj, Timisoara), each
 city runs its own server with its own landmark DB and user base. FTL would:
 
 1. Each city aggregates its own users' updates into a local model (same
-   FedProx + DP pipeline as now)
+   local-training + DP pipeline as now)
 2. A meta-server runs FedAvg across only the **backbone layers** (W1 + W2)
    of each city's model
-3. Each city keeps its **city head** (W3) local — it encodes city-specific
+3. Each city keeps its **city head** (W3) local; it encodes city-specific
    patterns (landmark density, local cultural behaviour, event calendars)
 4. No raw data or city-specific weights cross city boundaries
 
 ```
 Meta-server:
-    FedAvg over W1, W2 across cities  →  shared backbone
+    FedAvg over W1, W2 across cities  ->  shared backbone
 
 City server (Bucharest):
     W3_bucharest  stays local
@@ -374,7 +433,7 @@ City server (Cluj):
     W3_cluj       stays local
 ```
 
-This is architecturally identical to the personal head proposal — the same
+This is architecturally identical to the personal head proposal: the same
 split applied at the organisation/city level instead of the user level.
 The shared backbone transfers general cultural engagement knowledge across
 cities; the city head adapts it to local specifics without leaking data.

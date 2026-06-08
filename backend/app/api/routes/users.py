@@ -77,8 +77,8 @@ async def proximity_ws(websocket: WebSocket, token: str = Query(...), db=Depends
     Persistent WebSocket for real-time user-to-user proximity.
 
     Protocol:
-      Client → server:  {"lat": float, "lng": float}
-      Server → client:  {"type": "nearby_user", "user_id": str, "display_name": str, "distance_m": float}
+      Client -> server:  {"lat": float, "lng": float}
+      Server -> client:  {"type": "nearby_user", "user_id": str, "display_name": str, "distance_m": float}
     """
     user_id = decode_token(token)
     if not user_id:

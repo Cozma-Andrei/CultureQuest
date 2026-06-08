@@ -38,7 +38,6 @@
     .stat-sub{font-size:10px;color:var(--dim);margin-top:2px}
     .tag{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.05em}
     .tag.global{background:rgba(124,106,247,.2);color:var(--primary);border:1px solid rgba(124,106,247,.3)}
-    .tag.fedavg{background:rgba(63,185,80,.15);color:var(--green);border:1px solid rgba(63,185,80,.3)}
 
     /* Layout */
     .top-row{display:grid;grid-template-columns:320px 1fr;gap:18px;align-items:start}
@@ -151,7 +150,7 @@
 
 <main>
 
-<!-- ── Global FL Status ────────────────────────────────────────────────── -->
+<!-- Global FL Status -->
 <div class="global-banner">
   <div class="stat-block">
     <div class="stat-label">Global FL Round &nbsp;<span class="tag global">GLOBAL</span></div>
@@ -169,14 +168,9 @@
     <div class="stat-sub">Landmark interactions trained on across all FL rounds.</div>
   </div>
   <div class="stat-block">
-    <div class="stat-label">Training algorithm</div>
-    <div class="stat-val" style="font-size:18px;letter-spacing:-.5px" id="s-algorithm"><span class="tag fedavg">-</span></div>
-    <div class="stat-sub" id="s-algorithm-sub">Client-side local training strategy.</div>
-  </div>
-  <div class="stat-block">
     <div class="stat-label">Last update staleness</div>
     <div class="stat-val" id="s-staleness" style="color:var(--teal)">-</div>
-    <div class="stat-sub" id="s-staleness-sub">Rounds behind global model when last client submitted. Effective weight: 1 / (1 + staleness).</div>
+    <div class="stat-sub" id="s-staleness-sub">Rounds behind global model when last client submitted. FedAsync discount weight: 1 / (1 + staleness).</div>
   </div>
   <div class="stat-block">
     <div class="stat-label">Architecture</div>
@@ -185,7 +179,7 @@
   </div>
 </div>
 
-<!-- ── Predictor + Heatmap ─────────────────────────────────────────────── -->
+<!-- Predictor + Heatmap -->
 <div class="top-row">
 
   <!-- Predictor -->
@@ -289,7 +283,7 @@
   </div>
 </div>
 
-<!-- ── W3 Output weights ────────────────────────────────────────────────── -->
+<!-- W3 Output weights -->
 <div class="card">
   <div class="card-title">Output Layer Weights - W3 (1 × 16)</div>
   <div class="card-desc">
@@ -300,7 +294,7 @@
   <div style="display:flex;gap:4px" id="w3-group-labels"></div>
 </div>
 
-<!-- ── W1 + W2 canvas heatmaps ────────────────────────────────────────── -->
+<!-- W1 + W2 canvas heatmaps -->
 <div class="canvas-row">
   <div class="card">
     <div class="card-title">W1 - Input (22) → Hidden layer 1 (32)</div>
@@ -327,7 +321,7 @@
 </main>
 
 <script>
-// ── Constants (must match fl_client_service.dart + model.py) ─────────────────
+// Constants (must match fl_client_service.dart + model.py)
 const INTERESTS = ['art','architecture','history','gastronomy','nature','music'];
 const TYPES = ['museum','monument','park','gallery','restaurant','square','building','other'];
 const FEAT_LABELS = [
@@ -350,14 +344,14 @@ const W3_GROUPS = [
   { label: 'Route', indices: [19,20,21] },
 ];
 
-// ── App state ────────────────────────────────────────────────────────────────
+// App state
 let weights = null;
 let selInterests = new Set(['art','history']);
 let selTypeIdx = 0;
 let isOpen = true, isWeekend = false;
 let timeHour = 12, relRank = 0.5;
 
-// ── MLP - identical to fl_client_service.dart ────────────────────────────────
+// MLP - identical to fl_client_service.dart
 const relu = x => Math.max(0, x);
 const sigmoid = x => 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, x))));
 function reshape(flat, rows, cols) {
@@ -396,7 +390,7 @@ function forward(interests, typeIdx, open=true, wk=false, hour=12, rank=0.5) {
   return sigmoid(matVec(W3,a2,b3)[0]);
 }
 
-// ── Colors ───────────────────────────────────────────────────────────────────
+// Colors
 const lerp = (a,b,t) => a+(b-a)*t;
 function scoreColor(v) {
   const stops = [[0,[70,130,220]],[0.5,[215,217,228]],[1,[40,180,90]]];
@@ -414,7 +408,7 @@ function weightRGB(v, absMax) {
   else{const t=n;return[Math.round(lerp(210,220,t)),Math.round(lerp(212,70,t)),Math.round(lerp(220,50,t))];}
 }
 
-// ── Build static UI ──────────────────────────────────────────────────────────
+// Build static UI
 function buildInterestGrid() {
   const el = document.getElementById('interest-grid');
   INTERESTS.forEach(name => {
@@ -440,14 +434,14 @@ function buildFvecLabels(id, labels) {
   labels.forEach(l=>{const d=document.createElement('div');d.className='fvec-lbl';d.textContent=l;el.appendChild(d);});
 }
 
-// ── Context toggles ──────────────────────────────────────────────────────────
+// Context toggles
 function toggleCtx(which) {
   if(which==='open'){ isOpen=!isOpen; document.getElementById('tog-open').classList.toggle('on',isOpen); document.getElementById('tog-open').textContent=isOpen?'✓ Open now':'✗ Closed'; }
   if(which==='wk')  { isWeekend=!isWeekend; document.getElementById('tog-wk').classList.toggle('on',isWeekend); }
   renderAll();
 }
 
-// ── Render predictor ─────────────────────────────────────────────────────────
+// Render predictor
 function renderPredictor() {
   if(!weights)return;
   const score = forward(selInterests, selTypeIdx, isOpen, isWeekend, timeHour, relRank);
@@ -500,7 +494,7 @@ function renderRanking() {
   });
 }
 
-// ── Sensitivity analysis ─────────────────────────────────────────────────────
+// Sensitivity analysis
 function renderSensitivity() {
   if(!weights)return;
   const base = forward(selInterests, selTypeIdx, isOpen, isWeekend, timeHour, relRank);
@@ -525,7 +519,7 @@ function renderSensitivity() {
   });
 }
 
-// ── Heatmap ──────────────────────────────────────────────────────────────────
+// Heatmap
 function renderHeatmap() {
   if(!weights)return;
   const COLS=TYPES.length;
@@ -552,7 +546,7 @@ function renderHeatmap() {
   const n=80;lc.style.background=`linear-gradient(to right,${Array.from({length:n},(_,i)=>scoreColor(i/(n-1))).join(',')})`;
 }
 
-// ── isOpen effect ─────────────────────────────────────────────────────────────
+// isOpen effect
 function renderIsOpen() {
   if(!weights)return;
   const el=document.getElementById('isopen-container');
@@ -570,7 +564,7 @@ function renderIsOpen() {
     lbl.style.cssText='font-size:10px;color:var(--dim);width:70px;text-align:right;flex-shrink:0';
     lbl.textContent=TYPES[ti];
 
-    // Bar container — position:relative so absolute children work reliably
+    // Bar container; position:relative so absolute children work reliably
     const barWrap=document.createElement('div');
     barWrap.style.cssText='flex:1;height:22px;position:relative;background:var(--bg);border-radius:4px;overflow:hidden';
 
@@ -604,7 +598,7 @@ function renderIsOpen() {
   });
 }
 
-// ── W3 bar chart ─────────────────────────────────────────────────────────────
+// W3 bar chart
 function renderW3() {
   if(!weights)return;
   const w3=weights[4];
@@ -650,7 +644,7 @@ function renderW3() {
   });
 }
 
-// ── Weight grid heatmaps (div-based for crisp labels) ────────────────────────
+// Weight grid heatmaps (div-based for crisp labels)
 function renderCanvas(id, flat, rows, cols, colLabels, xTitle, yTitle) {
   const CELL = 15;
   const GAP  = 1;
@@ -711,7 +705,7 @@ function renderCanvas(id, flat, rows, cols, colLabels, xTitle, yTitle) {
   container.appendChild(wrap);
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 function addHmCell(parent,score,tooltip){
   const d=document.createElement('div');d.className='hm-cell';d.style.background=scoreColor(score);d.style.color=textOnScore(score);d.textContent=score.toFixed(2);
   d.addEventListener('mouseenter',e=>showTip(e,tooltip+`\n→ ${score.toFixed(4)}`));
@@ -720,7 +714,7 @@ function addHmCell(parent,score,tooltip){
 }
 function addEl(parent,tag,cls,text){const d=document.createElement(tag);d.className=cls;if(text!=null)d.textContent=text;parent.appendChild(d);return d;}
 
-// ── renderAll ────────────────────────────────────────────────────────────────
+// renderAll
 function renderAll(){
   try { renderPredictor(); } catch(e){ console.error('renderPredictor',e); }
   try { renderHeatmap();   } catch(e){ console.error('renderHeatmap',e);   }
@@ -730,7 +724,7 @@ function renderAll(){
   try { renderCanvas('c-w2',weights[2],16,32,null,'H1 neurons (0-31)','H2 neurons'); } catch(e){ console.error('c-w2',e); }
 }
 
-// ── Load from API ─────────────────────────────────────────────────────────────
+// Load from API
 async function load() {
   const base=document.getElementById('url').value.trim().replace(/\/$/,'');
   try {
@@ -743,23 +737,11 @@ async function load() {
     document.getElementById('s-round').textContent=model.round;
     document.getElementById('s-clients').textContent=status.num_clients;
     document.getElementById('s-samples').textContent=status.total_samples;
-    const algo=status.algorithm;
-    if(algo){
-      const algoLabel=algo==='fedprox'?'FedProx':'FedAvg';
-      const algoSub=algo==='fedprox'
-        ?'FedProx local training: proximal term prevents excessive drift from global model.'
-        :'FedAvg local training: plain SGD on local data. Kept for baseline comparison.';
-      document.getElementById('s-algorithm').innerHTML=`<span class="tag fedavg">${algoLabel}</span>`;
-      document.getElementById('s-algorithm-sub').textContent=algoSub;
-    } else {
-      document.getElementById('s-algorithm').textContent='-';
-      document.getElementById('s-algorithm-sub').textContent='No simulation or FL round recorded yet.';
-    }
     const staleness=status.last_staleness;
     if(staleness!=null){
       const effWeight=(1/(1+staleness)).toFixed(3);
       document.getElementById('s-staleness').textContent=staleness===0?'0 (fresh)':staleness;
-      document.getElementById('s-staleness-sub').textContent=`Rounds behind global model when last client submitted. Effective weight: ${effWeight}.`;
+      document.getElementById('s-staleness-sub').textContent=`Rounds behind global model when last client submitted. FedAsync discount weight: ${effWeight}.`;
     } else {
       document.getElementById('s-staleness').textContent='-';
       document.getElementById('s-staleness-sub').textContent='No client update recorded yet.';
@@ -771,7 +753,7 @@ async function load() {
   }
 }
 
-// ── Controls ─────────────────────────────────────────────────────────────────
+// Controls
 function onControl(){
   timeHour=+document.getElementById('sl-time').value;
   relRank =+document.getElementById('sl-rank').value/100;
@@ -781,14 +763,14 @@ function onControl(){
   renderPredictor();renderHeatmap();renderIsOpen();
 }
 
-// ── Tooltip ───────────────────────────────────────────────────────────────────
+// Tooltip
 const tip=document.getElementById('tip');
 function showTip(e,text){tip.style.opacity=1;tip.innerHTML=text.replace('\n','<br>');moveTip(e);}
 function hideTip(){tip.style.opacity=0;}
 function moveTip(e){tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-34)+'px';}
 
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// Init
 buildInterestGrid();buildTypeGrid();
 buildFvecLabels('fv-int-labels',  INTERESTS);
 buildFvecLabels('fv-type-labels', TYPES);

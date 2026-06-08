@@ -8,12 +8,11 @@ import '../../../shared/models/landmark_model.dart';
 import '../../../core/utils/opening_hours_parser.dart';
 import '../../../core/services/local_data_service.dart';
 
-// Engagement labels — ordered weakest to strongest
+// Engagement labels: ordered weakest to strongest
 const flLabelSheetOpened      = 0.3;
 const flLabelAddedToRoute     = 0.5;
 const flLabelQuestAttempted   = 0.5;
 const flLabelNavigationStarted = 0.6;
-const flLabelReviewSubmitted  = 0.7;
 const flLabelQuestSuggested   = 0.80;
 const flLabelStorySubmitted   = 0.85;
 const flLabelQuestCompleted   = 0.9;
@@ -74,7 +73,7 @@ class FLNotifier extends StateNotifier<FLState> with WidgetsBindingObserver {
     if (_client.pendingInteractions >= _autoRoundThreshold) runRound();
   }
 
-  // ── Context helpers ────────────────────────────────────────────────────────
+  // Context helpers
 
   List<String> get _userInterests =>
       _ref.read(authProvider).user?.interests.map((e) => e.toString()).toList() ?? [];
@@ -114,7 +113,7 @@ class FLNotifier extends StateNotifier<FLState> with WidgetsBindingObserver {
     );
   }
 
-  // ── Public recording API ───────────────────────────────────────────────────
+  // Public recording API
 
   /// Generic engagement event (sheet opened, navigation, quest events, etc.)
   void recordEngagement(
@@ -137,7 +136,7 @@ class FLNotifier extends StateNotifier<FLState> with WidgetsBindingObserver {
     _updateState();
   }
 
-  /// Explicit star rating — overrides any engagement label for this landmark.
+  /// Explicit star rating: overrides any engagement label for this landmark.
   void recordRating(LandmarkModel landmark, int stars) {
     final mapState = _ref.read(mapProvider);
     final rank = _relativeRank(landmark, mapState.position, mapState.landmarks);
@@ -165,7 +164,7 @@ class FLNotifier extends StateNotifier<FLState> with WidgetsBindingObserver {
     _updateState();
   }
 
-  // Keep backward compatibility — existing call sites use recordInteraction
+  // Keep backward compatibility: existing call sites use recordInteraction
   void recordInteraction(LandmarkModel landmark, double label) =>
       recordEngagement(landmark, label);
 

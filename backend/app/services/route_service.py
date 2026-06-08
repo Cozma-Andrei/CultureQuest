@@ -79,7 +79,7 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
     if not nearby:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No landmarks found nearby. Try seeding sample data first.")
 
-    # Load FL weights first — needed for both candidate scoring and tiebreaking.
+    # Load FL weights first: needed for both candidate scoring and tiebreaking.
     fl_weights = None
     if redis is not None:
         try:
@@ -96,7 +96,7 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
     }
     max_nearby_dist = max(nearby_dists.values()) if nearby_dists else 1.0
 
-    # Step 1 — score every nearby landmark to pick the best candidates.
+    # Step 1: score every nearby landmark to pick the best candidates.
     # FL score (route dims = 0) replaces the hand-crafted interest match because it
     # already encodes user interests, landmark type, and interest-match fraction via
     # the feature vector. Fallback to hand-crafted _score if no FL weights.
@@ -119,7 +119,7 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
     candidate_dists = {l.id: nearby_dists[l.id] for l in candidates}
     max_dist = max(candidate_dists.values()) if candidate_dists else 1.0
 
-    # Step 2 — tiebreaker: reuse FL scores from step 1, normalised so the full
+    # Step 2 (tiebreaker): reuse FL scores from step 1, normalised so the full
     # tiebreaker window is in play regardless of how compressed the raw scores are.
     _TIEBREAKER_M = request.fl_tiebreaker_m
     fl_scores = {l.id: all_fl_scores[l.id] for l in candidates if l.id in all_fl_scores}

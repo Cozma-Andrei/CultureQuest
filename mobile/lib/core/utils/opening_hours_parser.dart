@@ -11,7 +11,7 @@ class OpeningHoursParser {
 
     final now = DateTime.now();
     final currentMin = now.hour * 60 + now.minute;
-    final weekday = now.weekday; // 1=Mon … 7=Sun
+    final weekday = now.weekday; // 1=Mon ... 7=Sun
 
     // Handle comma-separated segments, e.g. "Mon-Thu 08:00-00:00, Fri-Sat 08:00-02:00"
     for (final segment in s.split(',')) {

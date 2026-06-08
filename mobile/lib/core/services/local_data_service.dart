@@ -11,7 +11,7 @@ class LocalDataService {
   static const _routesSuffix     = 'my_routes';
   static const _completedSuffix  = 'completed_quests';
   static const _votedSuffix      = 'voted_items';
-  static const _commentIdsSuffix = 'my_comment_ids'; // landmarkId → commentId
+  static const _commentIdsSuffix = 'my_comment_ids'; // landmarkId -> commentId
   static const _flBufferSuffix   = 'fl_interaction_buffer';
 
   final SharedPreferences _prefs;
@@ -22,7 +22,7 @@ class LocalDataService {
   // Key helper - every key is namespaced to this user
   String _k(String suffix) => 'cq_${_userId}_$suffix';
 
-  // ── Visits ────────────────────────────────────────────────────────────────
+  // Visits
 
   Set<String> getVisitedIds() {
     final raw = _prefs.getStringList(_k(_visitedSuffix));
@@ -36,7 +36,7 @@ class LocalDataService {
     await _prefs.setStringList(_k(_visitedSuffix), ids.toList());
   }
 
-  // ── Ratings ───────────────────────────────────────────────────────────────
+  // Ratings
 
   Map<String, double> getAllRatings() {
     final raw = _prefs.getString(_k(_ratingsSuffix));
@@ -52,7 +52,7 @@ class LocalDataService {
     await _prefs.setString(_k(_ratingsSuffix), jsonEncode(ratings));
   }
 
-  // ── Completed quests ──────────────────────────────────────────────────────
+  // Completed quests
 
   Set<String> getCompletedQuestIds() {
     final raw = _prefs.getStringList(_k(_completedSuffix));
@@ -66,7 +66,7 @@ class LocalDataService {
     await _prefs.setStringList(_k(_completedSuffix), ids.toList());
   }
 
-  // ── Comment IDs (per-landmark, for re-review / replace) ──────────────────
+  // Comment IDs (per-landmark, for re-review / replace)
 
   Map<String, String> _getCommentIds() {
     final raw = _prefs.getString(_k(_commentIdsSuffix));
@@ -81,7 +81,7 @@ class LocalDataService {
     await _prefs.setString(_k(_commentIdsSuffix), jsonEncode(ids));
   }
 
-  // ── Routes ────────────────────────────────────────────────────────────────
+  // Routes
 
   List<Map<String, dynamic>> getRoutes() {
     final raw = _prefs.getString(_k(_routesSuffix));
@@ -108,7 +108,7 @@ class LocalDataService {
     await _prefs.setString(_k(_routesSuffix), jsonEncode(routes));
   }
 
-  // ── Voted community items ─────────────────────────────────────────────────
+  // Voted community items
 
   Set<String> getVotedItems() {
     final raw = _prefs.getStringList(_k(_votedSuffix));
@@ -122,7 +122,7 @@ class LocalDataService {
     await _prefs.setStringList(_k(_votedSuffix), ids.toList());
   }
 
-  // ── FL interaction buffer ─────────────────────────────────────────────────
+  // FL interaction buffer
   // Persisted so pending interactions survive app kills mid-training.
   // Each entry: { 'features': [...], 'maxEngagement': float, 'explicitRating': float? }
 
@@ -137,8 +137,8 @@ class LocalDataService {
 
   Future<void> clearFlBuffer() => _prefs.remove(_k(_flBufferSuffix));
 
-  // ── Landmark cache (global, not user-scoped) ──────────────────────────────
-  // Landmarks are public data — stored under a fixed key, not namespaced per user.
+  // Landmark cache (global, not user-scoped)
+  // Landmarks are public data: stored under a fixed key, not namespaced per user.
   // Refreshed on every successful fetch; used as fallback when backend is unreachable.
 
   static const _landmarksCacheKey = 'cq_landmarks_all';
@@ -148,7 +148,7 @@ class LocalDataService {
   Future<void> saveLandmarksCache(String json) =>
       _prefs.setString(_landmarksCacheKey, json);
 
-  // ── Clear (this user's data only) ─────────────────────────────────────────
+  // Clear (this user's data only)
 
   Future<void> clearAll() async {
     await _prefs.remove(_k(_visitedSuffix));

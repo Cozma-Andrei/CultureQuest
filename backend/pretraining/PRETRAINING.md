@@ -80,7 +80,7 @@ in the way tarfile expects). The script extracts the tar to `/tmp/cq_yelp_datase
 - **Business file** (pass 1): `business_id -> {type, hours}` for tourist-relevant businesses
 - **Review file** (pass 2+3): star ratings as labels, review date for isOpen/isWeekend
 
-**Label**: `stars / 5.0` — this is an **explicit rating override**, the most
+**Label**: `stars / 5.0`, which is an **explicit rating override**, the most
 valuable signal because it reflects direct user sentiment (not just presence).
 
 **isOpen**: computed from business hours + review date (noon assumption,
@@ -98,7 +98,7 @@ since people don't check in to places they don't like. Yelp fixes this.
 ### 5. Synthetic Closed Samples (generated, 300 per type = 2,400 total)
 
 **Problem**: Every real-world source (Foursquare check-ins, Yelp reviews) only
-records interactions where the place was open — if a user finds a museum closed,
+records interactions where the place was open: if a user finds a museum closed,
 they simply leave and no data is recorded. Without synthetic examples the model
 never trains on `isOpen=0` and cannot learn that closed places get low engagement.
 
@@ -141,7 +141,7 @@ knowledge (Romanian landmark types, Central-Eastern European cultural patterns).
 | 18 | interestMatchScore | [0, 1] | Fraction of user interests matching landmark type |
 | 19 | isPartOfRoute | 0 or 1 | Was this interaction within a route? |
 | 20 | routeStopNormalized | [0, 1] | 0=first/farthest stop, 1=last/closest |
-| 21 | routeLengthNormalized | [0, 1] | (route length - 1) / 4 — max 5 stops maps to 1.0 |
+| 21 | routeLengthNormalized | [0, 1] | (route length - 1) / 4; max 5 stops maps to 1.0 |
 
 ### Features NOT used in global pre-training
 
@@ -264,7 +264,7 @@ After running `prepare_data.py` the `output/charts/` directory contains plots
 that help diagnose dataset quality. Two structural biases are present in the
 raw data and are corrected automatically by the script.
 
-### Bias 1 — Restaurant dominance
+### Bias 1: Restaurant dominance
 
 **Origin**: Yelp's dataset is ~65% restaurants and bars. ubicomp2013 is 100%
 restaurants. In the raw combined dataset, restaurants can account for 55-60%
@@ -273,7 +273,7 @@ of all records.
 **Effect on the model**: The weight column `W1[:,10]` (restaurant type, dim 10
 of the input) receives far more gradient updates than columns for museum,
 gallery, or monument. The model becomes highly confident about restaurant
-engagement patterns but underfitted for cultural landmark types — exactly the
+engagement patterns but underfitted for cultural landmark types: exactly the
 wrong outcome for a cultural tourism app where art and history users are the
 primary audience.
 
@@ -291,7 +291,7 @@ so you can inspect the final counts.
 
 ---
 
-### Bias 2 — Artificial noon spike (Yelp)
+### Bias 2: Artificial noon spike (Yelp)
 
 **Origin**: Yelp reviews carry a date (`2020-06-15`) but no time of day.
 The script cannot determine what hour the user actually visited, so a neutral
@@ -301,7 +301,7 @@ distribution (dim 16).
 
 **Effect on the model**: The model sees an outsized number of
 `(restaurant, noon, star rating)` training samples. It trains a spurious
-correlation: `hour ≈ 0.5 → moderate/high engagement`. At inference time this
+correlation: `hour ≈ 0.5 -> moderate/high engagement`. At inference time this
 slightly biases scores upward around midday regardless of the actual landmark
 type or context.
 
@@ -325,29 +325,29 @@ that landmark type:
 
 Foursquare and seeder records already have real timestamps and are left
 untouched (detected by `|hour - 0.5| > 0.01`). This removes the artificial
-spike without injecting real information — we are honest about the uncertainty
+spike without injecting real information; we are honest about the uncertainty
 rather than pretending Yelp reviewers always visit at noon.
 
 ---
 
-### Bias 3 — Yelp negative sentiment pulls restaurant engagement scores down
+### Bias 3: Yelp negative sentiment pulls restaurant engagement scores down
 
 **Origin**: Yelp is the only dataset with explicit negative signal (1-3 star
-reviews → labels 0.20-0.60). Roughly 20-25% of Yelp reviews are 1-3 stars,
+reviews -> labels 0.20-0.60). Roughly 20-25% of Yelp reviews are 1-3 stars,
 and Yelp is ~65% restaurants. This means the training set contains a large
-volume of `gastronomy user + restaurant → low label` examples, mixed with the
-positive Foursquare check-ins (`gastronomy + restaurant → 0.70`). The model
+volume of `gastronomy user + restaurant -> low label` examples, mixed with the
+positive Foursquare check-ins (`gastronomy + restaurant -> 0.70`). The model
 learns a muddled average for this combination.
 
 **Effect on the model**: A gastronomy-only user at a restaurant receives a
-lower predicted engagement score than intuition suggests — around 0.65-0.75
+lower predicted engagement score than intuition suggests, around 0.65-0.75
 rather than 0.85+. This is especially visible with mean reversion (see
 FINETUNING.md), where predictions collapse toward the dataset mean regardless
 of input.
 
 **Partial fixes applied**:
 - Finetuning oversamples low-label records (label ≤ 0.40) 3× to sharpen
-  the model's ability to discriminate — see FINETUNING.md.
+  the model's ability to discriminate; see FINETUNING.md.
 - The type-balancing cap reduces the overall volume of restaurant records,
   limiting how heavily Yelp negative sentiment influences the restaurant
   weight column.
@@ -357,12 +357,12 @@ this bias. If gastronomy users in the app consistently rate restaurants
 positively, those local SGD updates push the restaurant weights upward.
 However this correction is slow (many rounds, many users) and population-level
 (FedAvg dilutes individual signals). A personal head stored on-device would
-correct it per-user without waiting for population convergence — see the
+correct it per-user without waiting for population convergence; see the
 Future Improvements section.
 
 ---
 
-### Bias 4 — No closed landmarks in real data (corrected synthetically)
+### Bias 4: No closed landmarks in real data (corrected synthetically)
 
 All real-world sources record only interactions where the place was open
 (you only check in to or review an open venue). Without intervention, `isOpen`
@@ -380,12 +380,12 @@ for the negative case of `isOpen`. See the Synthetic section above for details.
 
 | Chart | What to look for |
 |-------|-----------------|
-| `dataset_overview.png` — Label Distribution | Bell-curve-ish shape with mean ~0.65. Heavy skew toward 1.0 means dataset is too positive; heavy skew toward low values means too much synthetic negative data. |
-| `dataset_overview.png` — Landmark Type Distribution | After balancing, bars should be within 2× of each other. If restaurant still dominates, increase balancing stringency. |
-| `dataset_overview.png` — isOpen Distribution | Should show a visible Closed bar (~2,400 records). If absent, synthetic samples failed. |
-| `dataset_overview.png` — Hour of Day | Should be roughly uniform or bimodal (lunch + evening peaks). A spike at exactly 0.5 means the noon fix did not apply. |
+| `dataset_overview.png`: Label Distribution | Bell-curve-ish shape with mean ~0.65. Heavy skew toward 1.0 means dataset is too positive; heavy skew toward low values means too much synthetic negative data. |
+| `dataset_overview.png`: Landmark Type Distribution | After balancing, bars should be within 2× of each other. If restaurant still dominates, increase balancing stringency. |
+| `dataset_overview.png`: isOpen Distribution | Should show a visible Closed bar (~2,400 records). If absent, synthetic samples failed. |
+| `dataset_overview.png`: Hour of Day | Should be roughly uniform or bimodal (lunch + evening peaks). A spike at exactly 0.5 means the noon fix did not apply. |
 | `label_by_type.png` | Each box plot should span a reasonable range. A type with a very narrow box and high median means too few negative examples for that type. |
-| `training_results.png` — Predicted vs Actual | Points should cluster along the diagonal. A horizontal band means the model collapsed to predicting the mean. |
+| `training_results.png`: Predicted vs Actual | Points should cluster along the diagonal. A horizontal band means the model collapsed to predicting the mean. |
 
 ---
 
@@ -401,7 +401,7 @@ pip install numpy matplotlib requests pymongo
 
 ```bash
 cd /path/to/CultureQuest
-python backend/pretraining/prepare_data.py
+python3 backend/pretraining/prepare_data.py
 ```
 
 This reads all dataset zips, generates feature vectors, and saves:
@@ -417,7 +417,7 @@ Expected time: 20-60 minutes (dominated by Yelp's 4.3GB tar).
 Make sure the backend is running (`flutter run` or docker-compose), then:
 
 ```bash
-python backend/pretraining/pretrain.py
+python3 backend/pretraining/pretrain.py
 ```
 
 This trains the MLP (~3 minutes), saves weights locally to
@@ -467,14 +467,14 @@ data starts flowing from the app.
 
 ---
 
-## Route Generation — Full FL Pipeline
+## Route Generation: Full FL Pipeline
 
 `POST /api/routes/generate` runs three FL-driven steps. All three share the
 same global weights loaded once from Redis at the start of the request.
 
 ---
 
-### Step 1 — Candidate filtering
+### Step 1: Candidate filtering
 
 All landmarks within 10 km are fetched from MongoDB. The top
 `max_landmarks × 2` (= 10) are kept, sorted descending by:
@@ -483,7 +483,7 @@ All landmarks within 10 km are fetched from MongoDB. The top
 initial_score = fl_score * 0.8 + proximity * 0.2
 ```
 
-- `fl_score` — FL inference with route-position dims (`routeStopNormalized`,
+- `fl_score`: FL inference with route-position dims (`routeStopNormalized`,
   `routeLengthNormalized`) set to 0. Already encodes user interests (dims 0-5),
   landmark type (dims 6-13), and interest-match fraction (dim 18), so it
   naturally ranks relevant landmark types higher for the given user.
@@ -495,7 +495,7 @@ where `interest_match = (categories ∩ user_interests) / len(categories)`.
 
 ---
 
-### Step 2 — Greedy selection with FL tiebreaker
+### Step 2: Greedy selection with FL tiebreaker
 
 Iterates up to `max_landmarks` (= 5) times. Each iteration picks the
 candidate with the lowest selection key (lower = preferred):
@@ -505,10 +505,10 @@ interest_match = (categories ∩ user_interests) / len(categories)   # [0, 1]
 selection_key  = distance_m - tiebreaker_m * interest_match
 ```
 
-- `distance_m` — from the **last added stop** (start position for the first stop)
-- `interest_match` — fraction of the landmark's categories matching the user's declared interests
+- `distance_m`: from the **last added stop** (start position for the first stop)
+- `interest_match`: fraction of the landmark's categories matching the user's declared interests
 
-Using interest match directly gives a clean 0→1 range regardless of whether
+Using interest match directly gives a clean 0->1 range regardless of whether
 FL weights are in Redis. A perfect-match landmark (e.g. a restaurant for a
 gastronomy-only user) always gets the full `tiebreaker_m` advantage over a
 zero-match landmark (e.g. a monument).
@@ -520,13 +520,13 @@ non-matching one.
 
 | tiebreaker_m | Effect |
 |-------------|--------|
-| 0 | Pure nearest-neighbour — interests have no influence on ordering |
+| 0 | Pure nearest-neighbour; interests have no influence on ordering |
 | 200 | Slight relevance boost within 200 m |
-| 1000 | Strong preference — interest match can override up to 1 km of extra distance |
+| 1000 | Strong preference; interest match can override up to 1 km of extra distance |
 
 ---
 
-### Step 3 — Dwell time scaling
+### Step 3: Dwell time scaling
 
 After all stops are chosen, FL runs a **second inference pass** per stop with
 the actual route-position dims filled in
@@ -545,7 +545,7 @@ dwell = max(5, round(base_dwell × (0.75 + 0.5 × fl_score)))
 If Redis is unavailable all three steps fall back to unscaled type-based values.
 
 **Note**: `routeStopNormalized` (dim 20) and `routeLengthNormalized` (dim 21)
-are always `0.0` in pretraining data — FL rounds with real route interaction
+are always `0.0` in pretraining data; FL rounds with real route interaction
 data are the only source of signal for those dimensions.
 
 ### routeLengthNormalized normalisation
@@ -566,17 +566,17 @@ becomes the new global model. Each device then downloads this updated global.
 
 The problem: individual preferences are diluted by the population average.
 A user who only likes gastronomy and a user who only likes nature both pull
-the global model in opposite directions — the result is a compromise that
+the global model in opposite directions: the result is a compromise that
 serves neither of them well. The explicit interest declarations in the feature
 vector (dims 0-5) compensate for this at inference time, but the model's
 *learned weights* still reflect the average user, not the individual.
 
-### Recommended fix — local personal head
+### Recommended fix: local personal head
 
-Keep FedAvg for the global backbone (22→32→16 layers) which learns
+Keep FedAvg for the global backbone (22->32->16 layers) which learns
 population-level patterns well: landmark type base scores, time-of-day
 effects, the isOpen penalty, weekend behaviour. Add a small **personal last
-layer** (16→1, 17 weights + 1 bias) that is fine-tuned locally on each
+layer** (16->1, 17 weights + 1 bias) that is fine-tuned locally on each
 device using only that user's own engagement history and is **never uploaded**.
 
 ```
@@ -591,12 +591,12 @@ individual behaviour without being diluted by other users.
 
 Currently there are 8 landmark types (museum, monument, park, gallery,
 restaurant, square, building, other). Suppose "restaurant" is later split
-into finer subtypes — greek restaurant, chinese restaurant, romanian
+into finer subtypes: greek restaurant, chinese restaurant, romanian
 restaurant. Each would get its own one-hot dimension in the type block
 (dims 6-13 would expand), requiring a full retrain of the backbone.
 
 More importantly, two users who both declared "gastronomy" interest would
-have **identical feature vectors** for any restaurant subtype — the global
+have **identical feature vectors** for any restaurant subtype: the global
 model cannot distinguish a user who always picks greek restaurants from one
 who always picks romanian ones, because the shared backbone learns the
 population average across all gastronomy users.
@@ -604,7 +604,7 @@ population average across all gastronomy users.
 With a personal head, the 16 activations going into the last layer carry
 the backbone's representation of the landmark. The personal head learns
 which combinations of those activations correlate with *this user's*
-engagement — effectively learning a personal re-weighting of the backbone's
+engagement, effectively learning a personal re-weighting of the backbone's
 features. If that user consistently rates greek restaurants higher, the
 personal head's weights shift accordingly, without any architecture change
 or retraining of the backbone.

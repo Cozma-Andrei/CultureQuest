@@ -32,7 +32,7 @@ def haversine(lat1, lng1, lat2, lng2) -> float:
     return 2 * R * math.asin(math.sqrt(a))
 
 
-# ── Users ──────────────────────────────────────────────────────────────────────
+# Users
 USERS_DATA = [
     dict(name="Maria Popescu",     email="maria@example.com",   interests=["art","architecture","history"],    pw="pass1234"),
     dict(name="Andrei Constantin", email="andrei@example.com",  interests=["history","gastronomy"],            pw="pass1234"),
@@ -46,10 +46,10 @@ USERS_DATA = [
 
 ADMIN_DATA = dict(name="Admin", email="admin@culturequest.ro", pw="admin1234")
 
-# ── 100 Bucharest Landmarks ────────────────────────────────────────────────────
+# 100 Bucharest Landmarks
 # (name, type, lat, lng, description, [categories], [stories])
 RAW_LANDMARKS = [
-    # ── Old Town / Centru Vechi ────────────────────────────────────────────────
+    # Old Town / Centru Vechi
     ("Romanian Athenaeum",             "building",   44.4411, 26.0973,
      "A stunning concert hall and one of the most beautiful buildings in Romania, inaugurated in 1888.",
      ["architecture","music"], ["Built after a public fundraising campaign, citizens donated under the motto 'Give a penny for the Athenaeum'.", "George Enescu performed here for the first time as a student in 1897."]),
@@ -111,7 +111,7 @@ RAW_LANDMARKS = [
      "A restored 18th-century inn now serving as a contemporary arts venue and creative hub.",
      ["art","architecture"], ["Named after the Bulgarian merchants from Gabrovo who traded silk here."]),
 
-    # ── Calea Victoriei ────────────────────────────────────────────────────────
+    # Calea Victoriei
     ("George Enescu National Museum",  "museum",     44.4430, 26.0945,
      "The George Enescu Memorial Museum, set in the magnificent Cantacuzino Palace.",
      ["music","architecture","art"], ["The palace was built for Prince Gheorghe Grigore Cantacuzino in 1901-1903.", "Enescu's original Steinway piano and personal manuscripts are preserved in the rooms he occupied."]),
@@ -143,7 +143,7 @@ RAW_LANDMARKS = [
      "The grand boulevard known as 'Victory Avenue', the main promenade of Bucharest since 1692.",
      ["history","architecture"], ["Originally a dirt road through forests, it was paved with oak blocks in 1692 by order of Prince Constantin Brâncoveanu."]),
 
-    # ── Parks & Nature ────────────────────────────────────────────────────────
+    # Parks & Nature
     ("Cișmigiu Gardens",               "park",       44.4362, 26.0837,
      "Bucharest's oldest and most beloved public park, designed in 1847 by Wilhelm Friedrich Meyer.",
      ["nature"], ["The lake was formed artificially in the 19th century on the site of a marsh.", "In winter the lake transforms into a public ice-skating rink."]),
@@ -175,7 +175,7 @@ RAW_LANDMARKS = [
      "A tranquil lake and forest area in northeastern Bucharest surrounding a historic monastery.",
      ["nature","history"], []),
 
-    # ── Herăstrău / Aviatorilor ────────────────────────────────────────────────
+    # Herăstrău / Aviatorilor
     ("Arc de Triomphe",                "monument",   44.4679, 26.0796,
      "Bucharest's triumphal arch, built in 1936 to commemorate Romania's role in World War I.",
      ["architecture","history"], ["The current arch replaced a temporary wooden structure erected after WWI.", "It was renovated extensively in 2016 and has viewing terraces at the top."]),
@@ -198,7 +198,7 @@ RAW_LANDMARKS = [
      "A grand tree-lined boulevard from the Arc de Triomphe toward the city center.",
      ["architecture"], ["Laid out in the 1830s by Pavel Kiseleff, the Russian general-governor of Wallachia."]),
 
-    # ── Cotroceni / Grozăvești ─────────────────────────────────────────────────
+    # Cotroceni / Grozăvești
     ("Cotroceni Palace",               "building",   44.4348, 26.0696,
      "The official residence of Romania's president, originally a 17th-century monastery rebuilt as a royal palace.",
      ["architecture","history"], ["Prince Mihnea III founded a monastery here in 1679.", "Queen Marie of Romania loved the palace and wrote her memoirs in its gardens."]),
@@ -221,7 +221,7 @@ RAW_LANDMARKS = [
      "A 16th-century monastery on a hill overlooking the Dâmbovița River, with spectacular city views.",
      ["history","architecture"], ["Mircea Ciobanul founded the monastery in 1568 on the ruins of an even earlier foundation."]),
 
-    # ── Carol / Timpuri Noi ────────────────────────────────────────────────────
+    # Carol / Timpuri Noi
     ("Parliament Palace (Casa Poporului)","building",44.4273,26.0875,
      "The world's second-largest administrative building, built by Nicolae Ceaușescu from 1984.",
      ["architecture","history"], ["It has 1,100 rooms, 12 stories above ground and 8 underground, covering 330,000 square metres.", "Its construction required the demolition of one-fifth of historic Bucharest and displaced 40,000 residents.", "Ceaușescu never set foot inside the completed building."]),
@@ -241,7 +241,7 @@ RAW_LANDMARKS = [
      "A revitalized linear park along the Dâmbovița River, once heavily industrialized.",
      ["nature","architecture"], []),
 
-    # ── Floreasca / Dorobanți ──────────────────────────────────────────────────
+    # Floreasca / Dorobanți
     ("Floreasca Market",               "square",     44.4610, 26.1090,
      "One of Bucharest's main covered markets, buzzing with fruit, vegetables and artisan products.",
      ["gastronomy"], []),
@@ -264,7 +264,7 @@ RAW_LANDMARKS = [
      "A charming pedestrian street nicknamed 'the artists' street' for its galleries and workshops.",
      ["art"], ["In the early 20th century, many of Romania's most celebrated painters had studios along this street."]),
 
-    # ── Titan / Pantelimon ────────────────────────────────────────────────────
+    # Titan / Pantelimon
     ("Alexandru Ioan Cuza Park Lake",  "park",       44.4110, 26.1440,
      "The central lake of IOR Park, offering pedal boats, fishing and lakeside cafés.",
      ["nature"], []),
@@ -284,7 +284,7 @@ RAW_LANDMARKS = [
      "A Brâncovenesc-style palace on a lake north of Bucharest, built by Constantin Brâncoveanu in 1702.",
      ["architecture","history"], ["The palace was confiscated by the Ottomans after Brâncoveanu's execution in Constantinople.", "It was restored by Princess Marthe Bibescu in the 20th century who made it her residence."]),
 
-    # ── Additional central landmarks ───────────────────────────────────────────
+    # Additional central landmarks
     ("Elisabeta Palace",               "building",   44.4330, 26.0728,
      "A neoclassical palace used as the official residence of Princess Margareta of Romania.",
      ["architecture","history"], []),
@@ -389,7 +389,7 @@ RAW_LANDMARKS = [
 assert len(RAW_LANDMARKS) >= 100, f"Only {len(RAW_LANDMARKS)} landmarks"
 
 
-# ── Quest templates ────────────────────────────────────────────────────────────
+# Quest templates
 def quests_for(name: str, ltype: str, cats: list) -> list[dict]:
     """Return 2-3 quest documents for this landmark."""
     q = []
@@ -482,7 +482,7 @@ def quests_for(name: str, ltype: str, cats: list) -> list[dict]:
     return q[:3]  # cap at 3
 
 
-# ── Named routes ───────────────────────────────────────────────────────────────
+# Named routes
 NAMED_ROUTES = [
     dict(name="Historic Heart of Bucharest",
          interests=["history","architecture"],
@@ -512,18 +512,16 @@ NAMED_ROUTES = [
 ]
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  SEED
-# ══════════════════════════════════════════════════════════════════════════════
-print("🗑  Clearing existing data …")
+# Seed
+print("Clearing existing data...")
 for col in ["users","landmarks","quests","visits","ratings","routes","stories","events","comments"]:
     db[col].drop()
 
-# ── Create 2dsphere index ──────────────────────────────────────────────────────
+# Create 2dsphere index
 db.landmarks.create_index([("location", GEOSPHERE)])
 
-# ── Insert users ───────────────────────────────────────────────────────────────
-print("👤 Inserting users …")
+# Insert users
+print("Inserting users...")
 user_docs = []
 for u in USERS_DATA:
     doc = dict(
@@ -546,9 +544,9 @@ db.users.insert_one(dict(
     created_at=datetime.utcnow(),
 ))
 admin_id = str(db.users.find_one({"is_admin": True})["_id"])
-print(f"   ✓ {len(user_ids)} users + 1 admin created")
+print(f"   {len(user_ids)} users + 1 admin created")
 
-# ── Insert landmarks ───────────────────────────────────────────────────────────
+# Insert landmarks
 LANDMARK_WEBSITES = {
     "Romanian Athenaeum":        "https://www.fge.org.ro",
     "National History Museum":   "https://www.mnir.ro",
@@ -683,7 +681,7 @@ LANDMARK_DISCOUNTS = {
     "Museum of Jewish History":             "20% off for 80 pts or 3 completed quests",
 }
 
-print("📍 Inserting 100 Bucharest landmarks …")
+print("Inserting 100 Bucharest landmarks...")
 landmark_docs = []
 for name, ltype, lat, lng, desc, cats, stories in RAW_LANDMARKS:
     price_val = LANDMARK_PRICES.get(name)
@@ -706,10 +704,10 @@ landmark_ids = [str(oid) for oid in res.inserted_ids]
 name_to_id   = {doc["name"]: lid for doc, lid in zip(landmark_docs, landmark_ids)}
 name_to_lat  = {doc["name"]: doc["location"]["coordinates"][1] for doc in landmark_docs}
 name_to_lng  = {doc["name"]: doc["location"]["coordinates"][0] for doc in landmark_docs}
-print(f"   ✓ {len(landmark_ids)} landmarks created")
+print(f"   {len(landmark_ids)} landmarks created")
 
-# ── Insert quests ──────────────────────────────────────────────────────────────
-print("🗺  Inserting quests …")
+# Insert quests
+print("Inserting quests...")
 quest_docs = []
 for raw, lid in zip(RAW_LANDMARKS, landmark_ids):
     name, ltype, _, _, _, cats, _ = raw
@@ -723,15 +721,15 @@ for raw, lid in zip(RAW_LANDMARKS, landmark_ids):
 res = db.quests.insert_many(quest_docs)
 quest_ids = [str(oid) for oid in res.inserted_ids]
 
-# Build lookup: landmark_id → list of (quest_id, quest_doc)
+# Build lookup: landmark_id -> list of (quest_id, quest_doc)
 from collections import defaultdict
 lm_quests: dict[str, list] = defaultdict(list)
 for qid, qdoc in zip(quest_ids, quest_docs):
     lm_quests[qdoc["landmark_id"]].append((qid, qdoc))
-print(f"   ✓ {len(quest_ids)} quests created")
+print(f"   {len(quest_ids)} quests created")
 
-# ── Simulate visits, ratings, quest completions ────────────────────────────────
-print("🚶 Simulating user activity …")
+# Simulate visits, ratings, quest completions
+print("Simulating user activity...")
 
 # How many landmarks each user visits (realistic spread)
 visits_per_user = [28, 22, 18, 20, 14, 32, 12, 10]
@@ -790,8 +788,8 @@ for ui, (uid, n_visits) in enumerate(zip(user_ids, visits_per_user)):
 
 print(f"   visits: {total_visits}  ratings: {total_ratings}")
 
-# ── Aggregate visit_count and rating on each landmark (anonymous) ──────────────
-print("📊 Aggregating visit counts and ratings …")
+# Aggregate visit_count and rating on each landmark (anonymous)
+print("Aggregating visit counts and ratings...")
 for lid in landmark_ids:
     vc = visit_counts[lid]
     r_sum = rating_sums[lid]
@@ -803,8 +801,8 @@ for lid in landmark_ids:
         {"$set": {"visit_count": vc, "rating": avg_r, "rating_sum": r_sum, "rating_count": r_count}},
     )
 
-# ── Update user stats ──────────────────────────────────────────────────────────
-print("💰 Updating user points and completed quests …")
+# Update user stats
+print("Updating user points and completed quests...")
 for ui, uid in enumerate(user_ids):
     from bson import ObjectId as OID
     db.users.update_one({"_id": OID(uid)}, {"$set": {
@@ -813,8 +811,8 @@ for ui, uid in enumerate(user_ids):
         # completed_quest_ids not stored server-side - tracked locally on device
     }})
 
-# ── Insert routes ──────────────────────────────────────────────────────────────
-print("🛣  Inserting routes …")
+# Insert routes
+print("Inserting routes...")
 route_count = 0
 for route_def in NAMED_ROUTES:
     uid = user_ids[route_def["user_idx"]]
@@ -848,10 +846,10 @@ for route_def in NAMED_ROUTES:
     ))
     route_count += 1
 
-print(f"   ✓ {route_count} routes created")
+print(f"   {route_count} routes created")
 
-# ── Insert events ──────────────────────────────────────────────────────────────
-print("🎉 Inserting events …")
+# Insert events
+print("Inserting events...")
 now = datetime.utcnow()
 
 def future(days, hour=18, minute=0):
@@ -863,7 +861,7 @@ def past(days, hour=10, minute=0):
     return datetime(d.year, d.month, d.day, hour, minute).isoformat()
 
 EVENTS_DATA = [
-    # ── Ongoing ──────────────────────────────────────────────────────────────
+    # Ongoing
     ("Romanian Athenaeum",        "George Enescu Festival",
      "Annual classical music festival celebrating Romania's greatest composer.",
      past(0, 10), future(3, 22)),
@@ -883,7 +881,7 @@ EVENTS_DATA = [
      "Weekly organic produce and artisan food market in the park.",
      past(0, 9), past(0, 14)),
 
-    # ── Upcoming ─────────────────────────────────────────────────────────────
+    # Upcoming
     ("Herăstrău Park",            "Bucharest Jazz in the Park",
      "Free outdoor jazz festival with local and international artists.",
      future(4, 16), future(4, 22)),
@@ -955,10 +953,10 @@ for lname, title, desc, start, end in EVENTS_DATA:
 
 if event_docs:
     db.events.insert_many(event_docs)
-print(f"   ✓ {len(event_docs)} events created")
+print(f"   {len(event_docs)} events created")
 
-# ── Seed comments ──────────────────────────────────────────────────────────────
-print("💬 Inserting comments …")
+# Seed comments
+print("Inserting comments...")
 COMMENT_DATA = [
     # (landmark_name, rating, text, pre_flagged)
     ("Romanian Athenaeum", 5, "One of the most beautiful concert halls I have ever visited. The acoustics are incredible!", False),
@@ -1011,10 +1009,10 @@ for lname, rating, text, pre_flagged in COMMENT_DATA:
 
 if comment_docs:
     db.comments.insert_many(comment_docs)
-print(f"   ✓ {len(comment_docs)} comments created")
+print(f"   {len(comment_docs)} comments created")
 
-# ── Pending community items (stories + quests awaiting peer review) ────────────
-print("⏳ Inserting pending community items …")
+# Pending community items (stories + quests awaiting peer review)
+print("Inserting pending community items...")
 pending_stories = [
     ("Romanian Athenaeum",   "I once heard a pianist rehearsing alone at midnight - the sound echoed through the empty hall like a ghost performance."),
     ("Stavropoleos Monastery","The monks still hand-copy manuscripts in the library. I watched one work for an hour without looking up once."),
@@ -1083,11 +1081,10 @@ pending_landmark = {
 db.landmarks.insert_one(pending_landmark)
 db.landmarks.create_index([("location", GEOSPHERE)])  # ensure index after insert
 
-print(f"   ✓ {pending_story_count} pending stories, {pending_quest_count} pending quests, 1 pending landmark")
+print(f"   {pending_story_count} pending stories, {pending_quest_count} pending quests, 1 pending landmark")
 
-# ── Summary ────────────────────────────────────────────────────────────────────
-print("\n" + "="*55)
-print("✅  Seed complete!")
+# Summary
+print("\nSeed complete!")
 print(f"   Users:     {db.users.count_documents({})}")
 print(f"   Landmarks: {db.landmarks.count_documents({})}")
 print(f"   Quests:    {db.quests.count_documents({})}")
@@ -1100,4 +1097,3 @@ print()
 for ui, uid in enumerate(user_ids):
     u = USERS_DATA[ui]
     print(f"   {u['name']:<22} pts={user_points[ui]:>4}  quests={user_completed_quests[ui]:>2}  interests={u['interests']}")
-print("="*55)

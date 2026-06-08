@@ -210,7 +210,7 @@ class _QuestScreenState extends ConsumerState<QuestScreen> {
   }
 }
 
-// ── Quest card ────────────────────────────────────────────────────────────────
+// Quest card
 
 class _QuestCard extends StatefulWidget {
   final QuestModel quest;
@@ -284,7 +284,7 @@ class _QuestCardState extends State<_QuestCard> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // ── Header ─────────────────────────────────────────────────────
+          // Header
           Row(children: [
             _TypeBadge(type: q.type),
             const Spacer(),
@@ -323,7 +323,7 @@ class _QuestCardState extends State<_QuestCard> {
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.4)),
 
-          // ── Body depends on state ───────────────────────────────────────
+          // Body depends on state
           if (q.completed) ...[
             const SizedBox(height: 14),
             if (q.type == 'educational' && q.options.isNotEmpty)
@@ -381,7 +381,7 @@ class _QuestCardState extends State<_QuestCard> {
   }
 }
 
-// ── Completion displays ───────────────────────────────────────────────────────
+// Completion displays
 
 class _CompletedOptions extends StatelessWidget {
   final List<String> options;
@@ -493,7 +493,7 @@ class _ProximityLockBanner extends StatelessWidget {
   }
 }
 
-// ── Shared input widgets ──────────────────────────────────────────────────────
+// Shared input widgets
 
 class _MultipleChoice extends StatelessWidget {
   final List<String> options;

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 CultureQuest FL Global Model Pre-training
-==========================================
+
 Trains MLP (22->32->16->1) on prepared dataset and uploads
 warm-start weights to the backend (stored in Redis).
 
@@ -20,7 +20,7 @@ import matplotlib; matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import requests
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# Config
 OUT_DIR       = os.path.join(os.path.dirname(__file__), 'output')
 CHARTS_DIR    = os.path.join(OUT_DIR, 'charts')
 API_BASE      = 'http://localhost:8000/api'
@@ -41,7 +41,7 @@ OUTPUT_DIM = 1
 
 np.random.seed(42)
 
-# ── Model (pure numpy, mirrors Dart implementation) ───────────────────────────
+# Model (pure numpy, mirrors Dart implementation)
 
 def init_weights():
     """Xavier-like initialisation."""
@@ -114,7 +114,7 @@ def weights_to_list(W) -> list:
         W['b3'].tolist(),             # (1,)
     ]
 
-# ── Training loop ─────────────────────────────────────────────────────────────
+# Training loop
 
 def train(X_train, y_train, X_val, y_val):
     W   = init_weights()
@@ -129,7 +129,6 @@ def train(X_train, y_train, X_val, y_val):
 
     print(f"\nTraining MLP {INPUT_DIM}->{H1}->{H2}->1")
     print(f"  Train: {n:,}  Val: {len(y_val):,}  Epochs: {EPOCHS}  BS: {BATCH_SIZE}  LR: {LR_INIT}")
-    print("-" * 60)
 
     t0 = time.time()
     for epoch in range(1, EPOCHS + 1):
@@ -177,7 +176,7 @@ def train(X_train, y_train, X_val, y_val):
 
     return best_W, train_losses, val_losses, out_val, y_val
 
-# ── Charts ────────────────────────────────────────────────────────────────────
+# Charts
 
 def save_training_charts(train_losses, val_losses, y_pred, y_true):
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
@@ -212,7 +211,7 @@ def save_training_charts(train_losses, val_losses, y_pred, y_true):
     plt.close()
     print(f"  Chart saved: {path}")
 
-# ── Upload to backend ─────────────────────────────────────────────────────────
+# Upload to backend
 
 def upload_weights(weights_list: list):
     print("\nUploading pre-trained weights to backend...")
@@ -242,12 +241,10 @@ def upload_weights(weights_list: list):
     print(f"  Round:  {data['round']} (reset)")
     print("  Pre-trained weights are now the global model.")
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# Main
 
 def main():
-    print("=" * 60)
     print("CultureQuest FL Global Model Pre-training")
-    print("=" * 60)
 
     train_path = os.path.join(OUT_DIR, 'train.npz')
     val_path   = os.path.join(OUT_DIR, 'val.npz')
