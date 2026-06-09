@@ -691,7 +691,10 @@ def save_charts(X: np.ndarray, y: np.ndarray, source_counts: dict):
 
     # 3. Dataset source pie
     ax = axes[0,2]
-    ax.pie(list(source_counts.values()), labels=list(source_counts.keys()),
+    _total = sum(source_counts.values()) or 1
+    pie_items = [(k, v) for k, v in source_counts.items() if v / _total >= 0.004]
+    pie_labels, pie_vals = zip(*pie_items) if pie_items else ([], [])
+    ax.pie(pie_vals, labels=pie_labels,
            autopct='%1.1f%%', startangle=140, colors=['#4C72B0','#DD8452','#55A868','#C44E52','#8172B3'])
     ax.set_title('Records by Source')
 

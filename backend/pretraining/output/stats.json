@@ -1,25 +1,25 @@
 {
-  "total": 741588,
-  "train": 593270,
-  "val": 148318,
+  "total": 741618,
+  "train": 593294,
+  "val": 148324,
   "input_dim": 22,
-  "label_mean": 0.7379162907600403,
-  "label_std": 0.1538589894771576,
+  "label_mean": 0.7378569841384888,
+  "label_std": 0.1539359837770462,
   "source_counts": {
     "TSMC2014": 128221,
     "TIST2015": 1271603,
     "ubicomp2013": 13472,
     "Yelp": 1451886,
-    "Seeder": 89,
+    "Seeder": 99,
     "Synthetic-Closed": 2400
   },
   "type_counts": {
     "museum": 17459,
-    "monument": 91014,
+    "monument": 91024,
     "park": 98925,
     "gallery": 17516,
-    "restaurant": 189938,
-    "square": 189938,
+    "restaurant": 189948,
+    "square": 189948,
     "building": 136498,
     "other": 300
   }

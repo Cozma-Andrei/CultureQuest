@@ -56,7 +56,7 @@ Results are written to `backend/federated/results/`.
 | `results/staleness_distribution.png` | Bimodal staleness histogram with fresh and stale zone annotations |
 | `results/per_staleness_loss_delta.png` | Boxplots of per-round loss change split by fresh vs stale client: shows stale updates hurt more without the discount |
 | `results/probe_scores.png` | 3-bar groups, Expected / Initial / Trained: shows how much training moved the model from its untrained state |
-| `results/contextual_probes.png` | isOpen effect (closed vs open), isWeekend effect (weekday vs weekend), and hour-of-day sweep for each interest+type combo |
+| `results/contextual_probes.png` | isOpen effect (closed vs open) and isWeekend effect (weekday vs weekend) for each interest+type combo |
 
 ## Key config (top of script)
 

@@ -23,8 +23,8 @@ to CultureQuest's current architecture.
 ## Why fine-tuning was needed
 
 The pre-trained model showed **mean reversion**: predictions collapsed into
-a narrow band [0.588, 0.852] despite labels spanning [0.10, 1.00].
-R² ≈ 0.025: the model explained only 2.5% of label variance.
+a narrow band [0.595, 0.850] despite labels spanning [0.10, 1.00].
+R² ≈ 0.022: the model explained only 2.2% of label variance.
 
 Two structural causes were identified:
 
@@ -50,7 +50,7 @@ plus 3× oversampling of any existing record with label ≤ 0.40.
 
 Pre-training used LR=0.01 with 0.98 decay per epoch. By epoch 30 the LR
 was 0.00545 and the model effectively stalled: MSE moved from 0.0242 at
-epoch 5 to only 0.0231 at epoch 60 (95% of improvement in first 5 epochs).
+epoch 5 to only 0.0233 at epoch 60 (95% of improvement in first 5 epochs).
 
 **Fix**: Fine-tuning uses LR=0.02 (higher than where pretraining stalled,
 lower than scratch-training's 0.01 to avoid catastrophic forgetting) with
@@ -75,7 +75,7 @@ without aggressively overwriting what was learned.
 - Does not add new information; just corrects the weight each existing
   negative record has in gradient updates
 
-Effect on label distribution: mean shifts from 0.738 down toward 0.70,
+Effect on label distribution: mean shifts from 0.738 down toward 0.65,
 std increases, low-label bin is better populated.
 
 ### Hyperparameters

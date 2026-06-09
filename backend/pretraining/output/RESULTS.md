@@ -1,6 +1,6 @@
 # CultureQuest FL Pre-training Results
 
-**Date**: 2026-06-04  
+**Date**: 2026-06-09  
 **Model**: MLP 22 -> 32 -> 16 -> 1 (1,281 parameters)  
 **Dataset**: TSMC2014 + TIST2015 + ubicomp2013 + Yelp + Seeder + Synthetic-Closed
 
@@ -16,9 +16,9 @@
 | Yelp (reviews) | star ratings balanced | Explicit (0.20-1.00) |
 | Seeder (CultureQuest MongoDB) | comments + aggregates | Explicit (0.20-1.00) |
 | Synthetic closed | generated | Fixed (0.10) |
-| **Total** | **741,588** | |
-| Train (80%) | 593,270 | |
-| Val (20%) | 148,318 | |
+| **Total** | **741,618** | |
+| Train (80%) | 593,294 | |
+| Val (20%) | 148,324 | |
 
 **Label distribution**: mean = 0.738, std = 0.154  
 Range is narrow and skewed positive: most sources only record
@@ -45,11 +45,11 @@ underrepresented after type balancing.
 
 | Metric | Train | Val |
 |--------|-------|-----|
-| MSE (best) | 0.0232 | **0.0231** |
-| RMSE | 0.1524 | **0.1520** |
-| R² (approx.) | ~0.025 | **~0.025** |
+| MSE (best) | 0.0232 | **0.0233** |
+| RMSE | 0.1522 | **0.1525** |
+| R² (approx.) | ~0.022 | **~0.022** |
 
-**Prediction range**: [0.588, 0.852], mean = 0.738
+**Prediction range**: [0.595, 0.850], mean = 0.738
 
 Training time: 76 seconds on CPU.
 
@@ -70,8 +70,8 @@ Training time: 76 seconds on CPU.
 
 ### What is concerning
 
-**R² ≈ 0.025**: the model explains only ~2.5% of label variance.
-The remaining 97.5% is effectively noise from the model's perspective.
+**R² ≈ 0.022**: the model explains only ~2.2% of label variance.
+The remaining 97.8% is effectively noise from the model's perspective.
 This manifests as a narrow prediction range [0.59, 0.85]: the model
 predicts near the mean for almost every input and cannot produce
 confidently low or high scores.
@@ -144,8 +144,8 @@ Continuing from the current weights counts as **fine-tuning**; see below.
 
 | File | Description |
 |------|-------------|
-| `output/train.npz` | Training set (593,270 × 22 features + labels) |
-| `output/val.npz` | Validation set (148,318 × 22) |
+| `output/train.npz` | Training set (593,294 × 22 features + labels) |
+| `output/val.npz` | Validation set (148,324 × 22) |
 | `output/stats.json` | Dataset statistics |
 | `output/pretrained_weights.json` | Best weights (round 0, backed up locally) |
 | `output/charts/dataset_overview.png` | 8-panel dataset analysis |

@@ -270,7 +270,7 @@ def plot_loss(res):
     k = 5
     full = [init_loss] + res['fedasync']['loss']
     ax.plot(np.arange(len(full))[k-1:], _smooth(full, k),
-            '-', linewidth=2, color='C0', label='FedAsync (production)')
+            '-', linewidth=2, color='C0', label='FedAsync')
     ax.set_xlabel('Round'); ax.set_ylabel('BCE loss (test set)')
     ax.set_title('Global Model Loss over Training Rounds')
     ax.legend(); ax.grid(True, alpha=0.3); fig.tight_layout()
@@ -394,7 +394,7 @@ def plot_probes(res):
     _save(fig, 'probe_scores.png')
 
 def plot_contextual_probes(res):
-    """Show how the trained model responds to isOpen, isWeekend, and hour-of-day.
+    """Show how the trained model responds to isOpen and isWeekend.
     These features carry real signal in the training data (see _generate_interaction),
     so the plot shows what contextual patterns the model actually learned."""
     gw = res['fedasync']['weights']
@@ -407,7 +407,7 @@ def plot_contextual_probes(res):
     xlabels = ['gastronomy\n+restaurant', 'art\n+gallery', 'history\n+museum', 'nature\n+park']
     x = np.arange(len(combos)); w = 0.35
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
 
     # isOpen: closed vs open
     ax = axes[0]
@@ -430,18 +430,6 @@ def plot_contextual_probes(res):
     ax.set_ylabel('Predicted engagement'); ax.set_ylim(0, 1.0)
     ax.set_title('isWeekend effect')
     ax.legend(fontsize=9); ax.grid(True, alpha=0.3, axis='y')
-
-    # Hour of day sweep
-    ax = axes[2]
-    hours_h = list(range(8, 23))
-    hours_n = [h / 24.0 for h in hours_h]
-    for (interests, ltype), lbl in zip(combos, xlabels):
-        scores = [fl_predict(gw, _probe_fv(interests, ltype, hour=h).tolist()) for h in hours_n]
-        ax.plot(hours_h, scores, 'o-', linewidth=2, markersize=4, label=lbl.replace('\n', '+'))
-    ax.set_xlabel('Hour of day'); ax.set_ylabel('Predicted engagement')
-    ax.set_xticks([8, 11, 14, 17, 20, 22]); ax.set_ylim(0, 1.0)
-    ax.set_title('Hour-of-day effect')
-    ax.legend(fontsize=9); ax.grid(True, alpha=0.3)
 
     fig.suptitle('Contextual feature effects (trained model)', fontsize=11)
     fig.tight_layout()

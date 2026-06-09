@@ -33,7 +33,7 @@ CultureQuest/
 │   ├── federated/            # FL documentation and simulation script
 │   │   ├── FL.md             # Full FL architecture doc
 │   │   ├── SIMULATE.md       # Simulation script doc
-│   │   └── simulate_fl.py    # FedAsync + clipping robustness simulation
+│   │   └── simulate_fl.py    # FedAsync staleness discount simulation
 │   ├── seed_bucharest.py     # DB seeder (landmarks, users, quests, etc.)
 │   └── requirements.txt
 ├── mobile/
@@ -123,7 +123,7 @@ Input (22) -> W1 (32×22) -> ReLU -> W2 (16×32) -> ReLU -> W3 (1×16) -> Sigmoi
 | **FedAvg local training** (client) | Plain SGD on the local loss for 5 epochs at `lr = 0.01`. The standard FedAvg client procedure: train locally, then upload the resulting weights for the server to merge into the global model. |
 | **Clipped FedAvg** (server) | Delta norm clipped to `max_norm = 1.0` before aggregation. Limits influence of adversarial clients. |
 | **Differential Privacy** (client) | Gaussian noise `N(0, (σ·C)²)` added to weight delta before upload. Mitigates membership inference attacks (Shokri et al., 2017). `σ = 0.1`, `C = 1.0`. |
-| **FedAsync staleness discount** | Implements the staleness discount from FedAsync (Xie et al., *Asynchronous Federated Optimization*, arXiv:1903.03934, 2019). Client uploads include the round number at which they downloaded the global model; the server computes `staleness = current_round − client_round` and discounts the update: `effective_samples = num_samples / (1 + staleness)`. A client 9 rounds behind contributes 1/10th the weight of a fresh one. |
+| **FedAsync staleness discount** | Implements the staleness discount from FedAsync (Xie et al., *Asynchronous Federated Optimization*, arXiv:1903.03934, 2019). Client uploads include the round number at which they downloaded the global model; the server computes `staleness = current_round − client_round` and discounts the update: `n_effective = n_samples / (1 + staleness)`. A client 9 rounds behind contributes 1/10th the weight of a fresh one. |
 | **Aggregation lock** | A Redis `SET NX PX` lock (`fl:agg_lock`, 5 s TTL) wraps the read-aggregate-write cycle in `submit_client_update`. Prevents two simultaneous uploads from reading the same global weights and overwriting each other. Auto-expires on crash. |
 | **Async FL** | One client per round. Server aggregates immediately after each upload. No synchronisation barrier needed. Chosen because client availability is heterogeneous: occasional tourists, daily commuters, and infrequent users cannot be expected to submit simultaneously. Synchronous FL would suffer from the straggler problem: rounds block on the slowest client, or slow/irregular users get dropped and the model becomes biased toward frequent users with good hardware. Async with FedAsync staleness discount is the correct architecture for a general-audience mobile app at any scale. |
 | **Interaction threshold** | Local training triggers automatically after 15 interactions, or manually from the profile screen. |
@@ -151,7 +151,7 @@ Input (22) -> W1 (32×22) -> ReLU -> W2 (16×32) -> ReLU -> W3 (1×16) -> Sigmoi
 
 ## FL simulation script
 
-Compares the FedAsync staleness discount on vs off, and plain FedAvg vs clipped FedAvg under a rogue update, over 100 synthetic rounds starting from the current Redis weights.
+Compares the FedAsync staleness discount on vs off over 600 synthetic rounds starting from the current Redis weights. Stale clients (20% of rounds) train on concept-drifted data to model outdated preferences re-syncing after a long offline period.
 
 ```bash
 # Run inside the backend container (Redis is not exposed to the host)
@@ -161,7 +161,7 @@ docker exec -it culturequest_backend python3 federated/simulate_fl.py
 docker cp culturequest_backend:/app/federated/results backend/federated/results
 ```
 
-Produces `loss_curve.png`, `weight_drift.png`, `fedasync_effect.png`, `probe_scores.png`, `fedasync_discount_curve.png`, `clipping_robustness.png`, and `stats.json`. Pushes the FedAsync run's final weights back to Redis.
+Produces `loss_curve.png`, `weight_drift.png`, `fedasync_effect.png`, `staleness_distribution.png`, `per_staleness_loss_delta.png`, `probe_scores.png`, `contextual_probes.png`, and `stats.json`. Pushes the FedAsync run's final weights back to Redis.
 
 See `backend/federated/SIMULATE.md` for full details.
 
