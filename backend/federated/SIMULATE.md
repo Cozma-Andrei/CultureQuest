@@ -31,9 +31,13 @@ Results are written to `backend/federated/results/`.
 4. Measures baseline loss and probe scores on the fetched weights before any training.
 5. Runs `N_ROUNDS` FL rounds twice, from the same weights and the same client
    sequence: once with the FedAsync staleness discount applied (production
-   behaviour), once with every update weighted equally regardless of staleness.  
-   Each round: pick a random client, generate interactions, train locally,
-   add DP noise, aggregate via `clipped_fedavg` on the server.
+   behaviour), once with every update weighted equally regardless of staleness.
+   Staleness follows a bimodal distribution: 80% fresh (0-2 rounds) and 20%
+   stale (15-30 rounds). Stale clients train on concept-drifted data (70% of
+   labels inverted) to model outdated preferences re-syncing after a long
+   offline period. Each round: pick a random client, sample its staleness,
+   train from the historical snapshot it would have had, add DP noise,
+   aggregate via `clipped_fedavg` on the server.
 6. Sweeps one rogue client update through a range of L2 norms and aggregates
    it with both plain `fedavg` and production `clipped_fedavg`, to measure how
    much drift each allows into the global model.
@@ -49,20 +53,24 @@ Results are written to `backend/federated/results/`.
 | `results/loss_curve.png` | Global Binary Cross-Entropy loss over rounds (production configuration) |
 | `results/weight_drift.png` | L2 norm of the local-global delta each round |
 | `results/fedasync_effect.png` | Loss curves with vs without the FedAsync discount, all else identical: isolates the discount's effect on convergence |
+| `results/staleness_distribution.png` | Bimodal staleness histogram with fresh and stale zone annotations |
+| `results/per_staleness_loss_delta.png` | Boxplots of per-round loss change split by fresh vs stale client: shows stale updates hurt more without the discount |
 | `results/probe_scores.png` | 3-bar groups, Expected / Initial / Trained: shows how much training moved the model from its untrained state |
-| `results/fedasync_discount_curve.png` | The discount function itself, `1 / (1 + staleness)`, and the effective sample count it produces for a typical round |
-| `results/clipping_robustness.png` | Drift caused by one rogue update of growing magnitude, plain FedAvg vs production clipped FedAvg |
+| `results/contextual_probes.png` | isOpen effect (closed vs open), isWeekend effect (weekday vs weekend), and hour-of-day sweep for each interest+type combo |
 
 ## Key config (top of script)
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `N_CLIENTS` | 1000 | Distinct client interest profiles |
-| `N_ROUNDS` | 100 | Total FL rounds per variant |
+| `N_CLIENTS` | 10000 | Distinct client interest profiles |
+| `N_ROUNDS` | 300 | Total server-side aggregation rounds per variant (1 round = 1 device upload) |
 | `INTERACTIONS_PER_ROUND` | 15 | Synthetic interactions per round (matches app threshold) |
 | `LOCAL_EPOCHS` | 5 | SGD passes over local data |
 | `DP_SIGMA` | 0.1 | DP noise scale |
-| `STALENESS_MAX` | 20 | Maximum simulated staleness in rounds (uniform 0-20 per client) |
+| `FRESH_PROB` | 0.80 | Fraction of clients that are recently synced (staleness 0-2) |
+| `FRESH_STALENESS` | (0, 2) | Staleness range for fresh clients |
+| `STALE_STALENESS` | (15, 30) | Staleness range for stale clients (the remaining 20%) |
+| `STALE_LABEL_FLIP_RATE` | 0.70 | Fraction of a stale client's labels inverted to model concept drift |
 | `SEED` | 42 | Controls both client profiles and per-round client selection |
 
 ## Notes

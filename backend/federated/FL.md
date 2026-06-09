@@ -115,41 +115,6 @@ to discount contributions from clients that trained on an outdated snapshot.
 That is a different problem, solved separately by the FedAsync staleness
 discount described later in this document.
 
-### Server aggregation: clipped FedAvg
-
-For async FL (one client per round), coordinate-wise median and trimmed-mean
-are not applicable: there is only one incoming update. Delta norm clipping
-is the standard defence:
-
-```
-delta       = client_weights − global_weights
-scale       = min(1.0, max_norm / ‖delta‖)
-clipped     = global_weights + delta · scale
-new_global  = fedavg([(num_samples, clipped), (virtual_samples, global)])
-```
-
-`max_norm = 1.0`. A malicious client can move any weight coordinate by at
-most `1.0 / virtual_samples`, regardless of how extreme its update is.
-Plain `fedavg` (without clipping) is exercised in the simulation script's
-clipping-robustness sweep, to show exactly how much protection this clipping
-step provides against a single rogue update.
-
-### Differential Privacy
-
-After local training, Gaussian noise is added to the weight delta before upload:
-
-```
-delta_i += N(0, (σ · C)²)    for each weight coordinate i
-```
-
-`σ = 0.1` (`kDPSigma`), `C = 1.0` (`kDPClipNorm`). This provides a
-mathematical bound on membership inference: an adversary querying the global
-model cannot determine whether a specific interaction (e.g. "did this user
-visit the Romanian Athenaeum?") was in any client's training set.
-
-Noise is generated on-device via Box-Muller transform. DP can be disabled
-by setting `kDPEnabled = false` for performance testing.
-
 ### FedAsync staleness discount
 
 A client that downloaded global weights at round 3 and submits at round 50 is
@@ -160,12 +125,12 @@ The discount formula follows FedAsync (Xie et al., *Asynchronous Federated
 Optimization*, arXiv:1903.03934, 2019):
 
 ```
-staleness         = current_round − client_round   (clamped to 0)
-discount          = 1 / (1 + staleness)
-effective_samples = max(1, round(num_samples × discount))
+staleness   = current_round − client_round   (clamped to 0)
+discount    = 1 / (1 + staleness)
+n_effective = max(1, round(n_samples × discount))
 ```
 
-`effective_samples` replaces `num_samples` in the weighted average inside
+`n_effective` replaces `n_samples` in the weighted average inside
 `clipped_fedavg`. A client that is 9 rounds stale contributes 1/10th the
 weight of a fresh one. A fresh client (staleness = 0) is unaffected (discount = 1).
 
@@ -193,6 +158,64 @@ on top of their own drifting local copy while still reporting a `client_round`
 that *looks* fresh, silently bypassing the discount above. The re-fetch
 guarantees `client_round` always honestly reflects the round the weights were
 downloaded from, immediately before that round's local training began.
+
+### Server aggregation: clipped FedAvg
+
+For async FL (one client per round), coordinate-wise median and trimmed-mean
+are not applicable: there is only one incoming update. Delta norm clipping
+is the standard defence:
+
+```
+delta       = client_weights − global_weights
+scale       = min(1.0, max_norm / ‖delta‖)
+clipped     = global_weights + delta · scale
+new_global  = fedavg([(n_effective, clipped), (n_virtual, global)])
+```
+
+FedAvg computes a weighted average over all weight tensors. With a single client
+update, it is a two-term blend between the client's clipped weights and the
+current global weights:
+
+```
+new_w = (n_effective × clipped_w + n_virtual × global_w) / (n_effective + n_virtual)
+```
+
+`n_virtual = max(4 × n_effective, 20)`. These virtual samples represent the
+current global model holding its ground as an anchor. With a 4:1 ratio of
+virtual to effective samples, a single client update shifts the global model
+by at most 20% from where it was; the other 80% is continuity from the
+previous round.
+
+The minimum of 20 virtual samples matters for stale clients. A client at
+staleness 15 has `n_effective = max(1, round(15 / 16)) = 1`, giving
+`n_virtual = max(4, 20) = 20` and a blend weight of `1 / 21 ≈ 5%`. The
+staleness discount already reduced effective samples to 1; the virtual sample
+floor reduces the blend weight a further factor of four compared to what the
+4:1 ratio alone would give. Together they confine stale updates to near-zero
+influence on the global model.
+
+`max_norm = 1.0`. After clipping, the delta has L2 norm at most 1.0. A
+malicious client submitting a maximally adversarial update can shift the global
+model by at most `n_effective / (n_effective + n_virtual)` of that norm. Plain
+`fedavg` (without clipping) is exercised in the simulation script's
+clipping-robustness sweep to show exactly how much protection this provides
+against a single rogue update.
+
+### Differential Privacy
+
+After local training, Gaussian noise is added to the weight delta before upload:
+
+```
+delta_i += N(0, (σ · C)²)    for each weight coordinate i
+```
+
+`σ = 0.1` (`kDPSigma`), `C = 1.0` (`kDPClipNorm`). This provides a
+mathematical bound on membership inference: an adversary querying the global
+model cannot determine whether a specific interaction (e.g. "did this user
+visit the Romanian Athenaeum?") was in any client's training set.
+
+Noise is generated on-device via Box-Muller transform. DP can be disabled
+by setting `kDPEnabled = false` for performance testing.
 
 ### Aggregation lock
 

@@ -9,6 +9,13 @@ class EventCreate(BaseModel):
     end_time: Optional[str] = None
 
 
+class EventUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+
+
 class EventResponse(BaseModel):
     id: str
     landmark_id: str

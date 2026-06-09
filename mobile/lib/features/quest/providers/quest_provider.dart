@@ -85,8 +85,10 @@ class QuestNotifier extends StateNotifier<QuestState> {
         );
       }
 
-      // Refresh landmarks so visitedByMe updates in the landmark sheet
+      // Refresh landmarks so visitedByMe updates in the landmark sheet, and
+      // routes so the newly-visited stop shows up immediately in both tabs
       _ref.read(mapProvider.notifier).fetchAllLandmarks();
+      _ref.read(mapProvider.notifier).refreshRouteProgress();
 
       await _ref.read(authProvider.notifier).refreshUser();
 

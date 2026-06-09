@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import HTTPException
@@ -7,6 +8,19 @@ from app.services.quest_service import seed_quests_for_landmark
 
 _MAX_STORIES = 5
 _MAX_QUESTS = 5
+
+_NEARBY_TEST_REVIEWS = [
+    ("Absolutely loved this spot! The history here is palpable.", 5),
+    ("Great place to stop and reflect. Really peaceful atmosphere.", 5),
+    ("Interesting landmark, though a bit hard to find at first.", 4),
+    ("Nice addition to the city tour. The story behind it is fascinating.", 4),
+    ("Visited on a rainy day — still worth it. Well-maintained.", 4),
+    ("A hidden gem in the city. Brought my kids and they loved it.", 5),
+    ("Decent spot, nothing too spectacular but informative.", 3),
+    ("The surroundings could use some cleanup, but the landmark itself is charming.", 3),
+    ("Came here twice already. Always something new to notice.", 5),
+    ("Good location for a quick visit. Would recommend to tourists.", 4),
+]
 
 
 def _doc_to_landmark(doc: dict) -> LandmarkResponse:
@@ -155,6 +169,7 @@ async def seed_landmarks(db: AsyncIOMotorDatabase, center_lat: float, center_lng
     # Clear existing seed data to avoid duplicates
     await db.landmarks.delete_many({"seeded": True})
     await db.quests.delete_many({"seeded": True})
+    await db.comments.delete_many({"seeded": True})
 
     created = []
     for s in samples:
@@ -188,6 +203,19 @@ async def seed_landmarks(db: AsyncIOMotorDatabase, center_lat: float, center_lng
         landmark = _doc_to_landmark(doc)
         created.append(landmark)
         await seed_quests_for_landmark(db, landmark.id, landmark.name)
+
+        if s["name"] == "Nearby Test Spot":
+            now = datetime.utcnow()
+            for i, (text, rating) in enumerate(_NEARBY_TEST_REVIEWS):
+                await db.comments.insert_one({
+                    "landmark_id": landmark.id,
+                    "text": text,
+                    "rating": rating,
+                    "created_at": (now - timedelta(days=len(_NEARBY_TEST_REVIEWS) - i)).isoformat(),
+                    "flagged": False,
+                    "seeded": True,
+                })
+
     return created
 
 

@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.api.deps import get_current_user, get_db
-from app.models.event import EventCreate, EventResponse
+from app.models.event import EventCreate, EventUpdate, EventResponse
 from app.services.event_service import (
-    create_event, get_events_for_landmark, get_nearby_events, delete_event,
+    create_event, get_events_for_landmark, get_nearby_events, update_event, delete_event,
 )
 
 router = APIRouter()
@@ -29,6 +29,19 @@ async def events_for_landmark(landmark_id: str, db=Depends(get_db)):
 @router.get("/nearby", response_model=list[EventResponse])
 async def nearby_events(lat: float, lng: float, radius_m: int = 2000, db=Depends(get_db)):
     return await get_nearby_events(db, lat, lng, radius_m)
+
+
+@router.patch("/{event_id}", response_model=EventResponse)
+async def edit_event(
+    event_id: str,
+    payload: EventUpdate,
+    user_id: str = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    result = await update_event(db, event_id, user_id, payload)
+    if not result:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return result
 
 
 @router.delete("/{event_id}", status_code=204)

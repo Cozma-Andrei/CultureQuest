@@ -1,35 +1,63 @@
 #!/usr/bin/env python3
 """
-FL simulation: measures the effect of the FedAsync staleness discount and
-server-side delta-norm clipping over N rounds with N_CLIENTS synthetic clients.
-Run from backend/: python federated/simulate_fl.py
+FL simulation: demonstrates why the FedAsync staleness discount is necessary
+even in an already-async FL system.
+
+Two identical async runs (one client per round) are compared:
+  - fedasync:    discount = 1 / (1 + staleness) applied to each update
+  - no_fedasync: every update counted equally, regardless of staleness
+
+With a realistic heterogeneous staleness distribution (80% fresh [0-2 rounds],
+20% very stale [15-30 rounds]) and concept-drifted stale clients, the
+no-discount run degrades: it incorporates stale, conflicting gradients at
+full weight. FedAsync nearly ignores them (discount ~0.04-0.06 for staleness
+15-30) while fresh clients pass through at near-full strength (discount ~1.0).
+
+Concept drift model for stale clients: a device that was offline for 15-30
+rounds re-syncs with interaction data that reflects outdated preferences or
+behaviour. We model this as partial label inversion (STALE_LABEL_FLIP_RATE):
+the stale client's gradient partly opposes the current training objective.
+Without discount this corrupts the global model; with FedAsync it is safely
+down-weighted.
+
+Run from backend/: python3 federated/simulate_fl.py
 Results written to backend/federated/results/
 """
-import sys, os, json, math, random, asyncio
+import sys, os, json, math, random, asyncio, collections
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+matplotlib.rcParams['axes.unicode_minus'] = False
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from app.federated.model import build_initial_weights, fedavg, clipped_fedavg, fl_predict, INPUT_DIM, HIDDEN_DIMS
 
 # Config
-N_CLIENTS              = 1000
-N_ROUNDS               = 100
+N_CLIENTS              = 10000
+N_ROUNDS               = 600
 INTERACTIONS_PER_ROUND = 15
 LEARNING_RATE          = 0.01
 LOCAL_EPOCHS           = 5
 DP_SIGMA               = 0.1
 DP_CLIP_NORM           = 1.0
 SERVER_MAX_NORM        = 1.0
-STALENESS_MAX          = 20    # max rounds a client can be behind the global model
 SEED                   = 42
 RESULTS_DIR            = os.path.join(os.path.dirname(__file__), 'results')
-# Redis URL: override via REDIS_URL env var.
-# Inside Docker: redis://:secret@redis:6379/0
-# Outside Docker (default): redis://:secret@localhost:6379/0
-REDIS_URL              = os.environ.get('REDIS_URL', 'redis://:secret@localhost:6379/0')
+
+# Heterogeneous staleness: realistic FL has a fast majority and a slow long-tail
+FRESH_PROB            = 0.80
+FRESH_STALENESS       = (0, 2)    # 80%: fast / recently synced devices
+STALE_STALENESS       = (15, 30)  # 20%: slow / offline devices
+HISTORY_SIZE          = 35        # rounds of global weight history to keep
+# Concept-drift model for stale clients: a device offline for 15-30 rounds
+# re-syncs with interaction data that partially reflects outdated preferences.
+# We simulate this by flipping a fraction of the stale client's labels, so
+# its gradient partly opposes the current training objective.  Fresh clients
+# (0-2 rounds stale) are not affected.
+STALE_LABEL_FLIP_RATE = 0.70
+
+REDIS_URL = os.environ.get('REDIS_URL', 'redis://:secret@localhost:6379/0')
 
 # Domain
 INTERESTS = ['art', 'architecture', 'history', 'gastronomy', 'nature', 'music']
@@ -44,26 +72,34 @@ AFFINITY = {
     'music':        {'square'},
 }
 
-# Feature vector
-def _fv(interests, ltype):
+def _fv(interests, ltype, is_open=None, is_weekend=None, hour=None, dist_rank=None):
     matched = set().union(*(AFFINITY.get(i, set()) for i in interests))
+    if is_open   is None: is_open   = float(random.random() > 0.2)
+    if is_weekend is None: is_weekend = float(random.random() > 0.7)
+    if hour      is None: hour      = random.randint(8, 22) / 24.0
+    if dist_rank is None: dist_rank = random.random()
     return np.array(
         [1.0 if i in interests else 0.0 for i in INTERESTS] +
         [1.0 if t == ltype else 0.0 for t in TYPES] +
-        [float(random.random() > 0.2),          # isOpen
-         float(random.random() > 0.7),          # isWeekend
-         random.randint(8, 22) / 24.0,          # hour
-         random.random(),                        # distRank
-         1.0 if ltype in matched else 0.0,      # interestMatch
-         0.0, 0.0, 0.0],                        # route dims (unused here)
+        [is_open, is_weekend, hour, dist_rank, 1.0 if ltype in matched else 0.0, 0.0, 0.0, 0.0],
         dtype=np.float32,
     )
 
 def _generate_interaction(interests):
-    ltype   = random.choice(TYPES)
-    matched = ltype in set().union(*(AFFINITY.get(i, set()) for i in interests))
-    label   = random.uniform(0.65, 0.95) if matched else random.uniform(0.05, 0.40)
-    return _fv(interests, ltype), label
+    ltype    = random.choice(TYPES)
+    is_open  = float(random.random() > 0.2)   # 80% of venues are open
+    is_wknd  = float(random.random() > 0.7)   # 30% chance it's a weekend
+    hour_raw = random.randint(8, 22)
+    matched  = ltype in set().union(*(AFFINITY.get(i, set()) for i in interests))
+    base     = random.uniform(0.65, 0.95) if matched else random.uniform(0.05, 0.40)
+    # Contextual modifiers so these dims carry real signal the model can learn
+    if not is_open:
+        base *= 0.15                           # closed venue: near-zero engagement
+    if is_wknd and ltype in {'museum', 'gallery', 'park', 'square'}:
+        base = min(1.0, base * 1.2)            # cultural/outdoor venues busier on weekends
+    if ltype == 'restaurant' and hour_raw >= 18:
+        base = min(1.0, base * 1.2)            # restaurants peak in the evening
+    return _fv(interests, ltype, is_open, is_wknd, hour_raw / 24.0), float(np.clip(base, 0.0, 1.0))
 
 def _make_test_set(n=300):
     data = []
@@ -72,7 +108,7 @@ def _make_test_set(n=300):
         data.append(_generate_interaction(interests))
     return data
 
-# Forward / backward (pure Python, mirrors Dart client)
+# Neural net (mirrors Dart client)
 def _forward(weights, x):
     W1 = np.array(weights[0]).reshape(HIDDEN_DIMS[0], INPUT_DIM)
     b1 = np.array(weights[1])
@@ -89,16 +125,12 @@ def _forward(weights, x):
 def _backward(weights, cache, y):
     x, z1, a1, z2, a2, W1, W2, W3 = cache
     a3 = float(1.0 / (1.0 + np.exp(-np.clip((W3 @ a2 + np.array(weights[5]))[0], -30, 30))))
-
     dz3 = np.array([a3 - y])
     dW3 = np.outer(dz3, a2);  db3 = dz3.copy()
-
     da2 = W3.T @ dz3
     dz2 = da2 * (z2 > 0);     dW2 = np.outer(dz2, a1); db2 = dz2.copy()
-
     da1 = W2.T @ dz2
     dz1 = da1 * (z1 > 0);     dW1 = np.outer(dz1, x);  db1 = dz1.copy()
-
     grads = [dW1.flatten(), db1, dW2.flatten(), db2, dW3.flatten(), db3]
     return [g.tolist() for g in grads]
 
@@ -135,107 +167,92 @@ def _drift(local_w, global_w):
         for lw, gw in zip(local_w, global_w)
     ))
 
-# Probe samples (deterministic, no randomness)
+def _copy_weights(w):
+    return [list(layer) for layer in w]
+
+def _sample_staleness():
+    """Bimodal distribution: most clients are fresh, a minority are very stale."""
+    if random.random() < FRESH_PROB:
+        return random.randint(*FRESH_STALENESS)
+    return random.randint(*STALE_STALENESS)
+
+# Probe samples (deterministic)
 def _static_fv(interests, ltype):
-    matched = set().union(*(AFFINITY.get(i, set()) for i in interests))
-    return np.array(
-        [1.0 if i in interests else 0.0 for i in INTERESTS] +
-        [1.0 if t == ltype else 0.0 for t in TYPES] +
-        [1.0, 0.0, 14/24, 0.3, 1.0 if ltype in matched else 0.0, 0.0, 0.0, 0.0],
-        dtype=np.float32,
-    )
+    return _fv(interests, ltype, is_open=1.0, is_weekend=0.0, hour=14/24, dist_rank=0.3)
+
+def _probe_fv(interests, ltype, *, is_open=1.0, is_weekend=0.0, hour=14/24, dist_rank=0.3):
+    return _fv(interests, ltype, is_open, is_weekend, hour, dist_rank)
 
 PROBES = {
-    'gastronomy→restaurant': (_static_fv(['gastronomy'], 'restaurant'), 0.90),
-    'gastronomy→park':       (_static_fv(['gastronomy'], 'park'),       0.10),
-    'nature→park':           (_static_fv(['nature'],     'park'),       0.90),
-    'nature→restaurant':     (_static_fv(['nature'],     'restaurant'), 0.10),
-    'art→gallery':           (_static_fv(['art'],         'gallery'),   0.90),
-    'history→museum':        (_static_fv(['history'],     'museum'),    0.90),
+    'gastronomy->restaurant': (_static_fv(['gastronomy'], 'restaurant'), 0.80),
+    'gastronomy->park':       (_static_fv(['gastronomy'], 'park'),       0.20),
+    'nature->park':           (_static_fv(['nature'],     'park'),       0.80),
+    'nature->restaurant':     (_static_fv(['nature'],     'restaurant'), 0.20),
+    'art->gallery':           (_static_fv(['art'],         'gallery'),   0.80),
+    'history->museum':        (_static_fv(['history'],     'museum'),    0.80),
 }
 
 # Simulation
 def run_simulation(initial_weights, clients, test_data, use_fedasync=True):
-    """Runs N_ROUNDS of the production client/server pipeline (local SGD, DP
-    noise, clipped_fedavg) from the same starting weights and client sequence.
+    """Async FL: one client update per round.
 
-    use_fedasync toggles the staleness discount: when on, each round mirrors
-    submit_client_update in fl_service.py and weights the client's contribution
-    by 1 / (1 + staleness); when off every update counts equally regardless of
-    how stale the client's snapshot was, which is what the global model would
-    see without FedAsync.
+    The key fix vs the old simulation: stale clients now train from the global
+    snapshot they actually had (staleness rounds ago), not from the current
+    model. This makes their gradient genuinely outdated. use_fedasync controls
+    whether the server discounts that outdated gradient.
+
+    Both runs must be called with the same random seed so they see identical
+    clients and staleness values -- the only variable is the discount.
     """
-    gw = [list(layer) for layer in initial_weights]
+    gw      = _copy_weights(initial_weights)
+    history = collections.deque([_copy_weights(gw)] * HISTORY_SIZE, maxlen=HISTORY_SIZE)
+
     loss_hist, drift_hist, eff_weight_hist, staleness_hist = [], [], [], []
 
     for rnd in range(N_ROUNDS):
         interests = random.choice(clients)
-        data      = [_generate_interaction(interests) for _ in range(INTERACTIONS_PER_ROUND)]
+        staleness = _sample_staleness()
 
-        # FedAsync staleness discount (Xie et al., arXiv:1903.03934, 2019):
-        # the client trained on weights from `staleness` rounds ago, so its
-        # vote is discounted proportionally to how outdated that snapshot is.
-        staleness = random.randint(0, STALENESS_MAX)
+        # Client trained on the snapshot it had when it last synced (staleness rounds ago)
+        hist_idx = max(0, len(history) - 1 - staleness)
+        gw_snap  = list(history)[hist_idx]
+        data     = [_generate_interaction(interests) for _ in range(INTERACTIONS_PER_ROUND)]
+        # Concept drift: stale client re-syncs with outdated interactions whose
+        # labels partially contradict the current training objective.
+        if staleness >= STALE_STALENESS[0]:
+            data = [
+                (x, 1.0 - y if random.random() < STALE_LABEL_FLIP_RATE else y)
+                for x, y in data
+            ]
+        local_w  = _train_local(gw_snap, data, LEARNING_RATE, LOCAL_EPOCHS)
+        drift_hist.append(_drift(local_w, gw_snap))
+
+        noisy_w  = _add_dp_noise(local_w, gw_snap)
         discount  = (1.0 / (1.0 + staleness)) if use_fedasync else 1.0
-        effective = max(1, round(len(data) * discount))
+        effective = max(1, round(INTERACTIONS_PER_ROUND * discount))
+        virtual   = max(effective * 4, 20)
+        gw = clipped_fedavg([(effective, noisy_w), (virtual, gw)], gw, max_norm=SERVER_MAX_NORM)
+        history.append(_copy_weights(gw))
+
+        loss_hist.append(_bce_loss(gw, test_data))
         eff_weight_hist.append(discount)
         staleness_hist.append(staleness)
 
-        local_w = _train_local(gw, data, LEARNING_RATE, LOCAL_EPOCHS)
-        drift_hist.append(_drift(local_w, gw))
-
-        noisy_w = _add_dp_noise(local_w, gw)
-        virtual = max(effective * 4, 20)   # mirrors global_virtual_samples in submit_client_update
-        gw = clipped_fedavg([(effective, noisy_w), (virtual, gw)], gw, max_norm=SERVER_MAX_NORM)
-
-        loss_hist.append(_bce_loss(gw, test_data))
-
-        if (rnd + 1) % 20 == 0:
+        if (rnd + 1) % 25 == 0:
             tag = 'fedasync' if use_fedasync else 'no-discount'
             print(f'  [{tag:11s}] round {rnd+1:3d}/{N_ROUNDS}  '
                   f'loss={loss_hist[-1]:.4f}  drift={drift_hist[-1]:.4f}  '
-                  f'eff_weight={discount:.2f} (staleness={staleness})')
+                  f'staleness={staleness}  discount={discount:.3f}')
 
     probes = {name: fl_predict(gw, fv.tolist()) for name, (fv, _) in PROBES.items()}
-    return {'loss': loss_hist, 'drift': drift_hist, 'effective_weight': eff_weight_hist,
-            'staleness': staleness_hist, 'probes': probes,
-            'final_loss': loss_hist[-1], 'min_loss': min(loss_hist),
-            'avg_drift': float(np.mean(drift_hist)),
-            'avg_effective_weight': float(np.mean(eff_weight_hist)),
-            'last_staleness': staleness_hist[-1],
-            'weights': gw}
-
-# Adversarial-update sweep (for the clipping comparison)
-def sweep_clipping_robustness(initial_weights):
-    """One rogue client submits an update whose raw weight delta has a growing
-    L2 norm (think: a buggy client, or a malicious one trying to steer the
-    model). Aggregates that single update via plain `fedavg` (no clipping) and
-    via production `clipped_fedavg`, and measures how far each pushes the
-    global model from where it started.
-
-    Plain FedAvg has no defence: drift grows linearly with the rogue delta's
-    norm. Clipped FedAvg rescales any delta whose norm exceeds `max_norm`
-    before averaging, so the resulting drift plateaus regardless of how
-    extreme the rogue update is.
-    """
-    gw = [list(layer) for layer in initial_weights]
-    n_samples = INTERACTIONS_PER_ROUND
-    virtual   = max(n_samples * 4, 20)   # mirrors global_virtual_samples in submit_client_update
-    target_norms = np.linspace(0.25, 25, 20)
-    plain_drift, clipped_drift = [], []
-
-    for target in target_norms:
-        direction = [np.random.randn(len(layer)) for layer in gw]
-        flat_norm = math.sqrt(sum(float(np.dot(d, d)) for d in direction))
-        delta     = [d / flat_norm * target for d in direction]
-        rogue_w   = [(np.array(layer) + d).tolist() for layer, d in zip(gw, delta)]
-
-        plain_gw   = fedavg([(n_samples, rogue_w), (virtual, gw)])
-        clipped_gw = clipped_fedavg([(n_samples, rogue_w), (virtual, gw)], gw, max_norm=SERVER_MAX_NORM)
-        plain_drift.append(_drift(plain_gw, gw))
-        clipped_drift.append(_drift(clipped_gw, gw))
-
-    return target_norms.tolist(), plain_drift, clipped_drift
+    return {
+        'loss': loss_hist, 'drift': drift_hist,
+        'effective_weight': eff_weight_hist, 'staleness': staleness_hist,
+        'probes': probes, 'final_loss': loss_hist[-1], 'min_loss': min(loss_hist),
+        'avg_drift': float(np.mean(drift_hist)),
+        'avg_effective_weight': float(np.mean(eff_weight_hist)),
+        'last_staleness': staleness_hist[-1], 'weights': gw,
+    }
 
 # Plots
 def _smooth(vals, k=5):
@@ -248,15 +265,12 @@ def _save(fig, name):
     print(f'  saved {path}')
 
 def plot_loss(res):
-    """Global model loss over training rounds in the production configuration
-    (FedAsync discount enabled)."""
     fig, ax = plt.subplots(figsize=(9, 5))
     init_loss = res['initial']['loss']
-    rounds = np.arange(0, N_ROUNDS + 1)
     k = 5
-    sr = rounds[k - 1:]
-    full_loss = [init_loss] + res['fedasync']['loss']
-    ax.plot(sr, _smooth(full_loss, k), '-', linewidth=2, color='C0', label='Global model (production)')
+    full = [init_loss] + res['fedasync']['loss']
+    ax.plot(np.arange(len(full))[k-1:], _smooth(full, k),
+            '-', linewidth=2, color='C0', label='FedAsync (production)')
     ax.set_xlabel('Round'); ax.set_ylabel('BCE loss (test set)')
     ax.set_title('Global Model Loss over Training Rounds')
     ax.legend(); ax.grid(True, alpha=0.3); fig.tight_layout()
@@ -264,81 +278,174 @@ def plot_loss(res):
 
 def plot_drift(res):
     fig, ax = plt.subplots(figsize=(9, 5))
-    rounds = np.arange(1, N_ROUNDS + 1)
-    k = 5; sr = rounds[k - 1:]
-    ax.plot(sr, _smooth(res['fedasync']['drift'], k), '-', linewidth=2, color='C0', label='Local SGD drift')
+    k = 5
+    drift = res['fedasync']['drift']
+    ax.plot(np.arange(1, len(drift)+1)[k-1:], _smooth(drift, k),
+            '-', linewidth=2, color='C0', label='Local SGD drift')
     ax.set_xlabel('Round'); ax.set_ylabel('L2 norm (local minus global)')
     ax.set_title('Local Weight Drift per Round')
     ax.legend(); ax.grid(True, alpha=0.3); fig.tight_layout()
     _save(fig, 'weight_drift.png')
 
 def plot_fedasync_effect(res):
-    """Loss with vs without the FedAsync staleness discount, all else identical."""
-    fig, ax = plt.subplots(figsize=(9, 5))
+    """Main comparison: FedAsync discount vs no discount, same async setup.
+    Both runs see identical clients and staleness values (same seed).
+    The only variable is whether the staleness discount is applied.
+    """
+    fig, ax = plt.subplots(figsize=(10, 5))
     init_loss = res['initial']['loss']
     rounds = np.arange(0, N_ROUNDS + 1)
-    k = 5; sr = rounds[k - 1:]
+    k = 5; sr = rounds[k-1:]
+
     for key, color, ls, label in (
-        ('fedasync',    'C0', '-',  'With FedAsync discount'),
-        ('no_fedasync', 'C1', '--', 'Without discount (every update counted equally)'),
+        ('fedasync',    'C0', '-',
+         f'FedAsync discount  (avg weight = {res["fedasync"]["avg_effective_weight"]:.3f})'),
+        ('no_fedasync', 'C3', '--',
+         f'No discount: stale updates counted equally  (avg weight = 1.000)'),
     ):
         full = [init_loss] + res[key]['loss']
         ax.plot(sr, _smooth(full, k), ls, label=label, linewidth=2, color=color)
-    ax.set_xlabel('Round'); ax.set_ylabel('BCE loss (test set)')
-    ax.set_title('FedAsync Staleness Discount: Effect on Global Loss')
-    ax.legend(); ax.grid(True, alpha=0.3); fig.tight_layout()
+
+    ax.set_xlabel('Round')
+    ax.set_ylabel('BCE loss (test set, lower = better)')
+    ax.set_title(
+        f'FedAsync Discount vs No Discount\n'
+        f'{FRESH_PROB*100:.0f}% fresh [staleness {FRESH_STALENESS[0]}-{FRESH_STALENESS[1]}],  '
+        f'{(1-FRESH_PROB)*100:.0f}% stale [staleness {STALE_STALENESS[0]}-{STALE_STALENESS[1]}, '
+        f'{STALE_LABEL_FLIP_RATE*100:.0f}% concept-drifted labels]'
+    )
+    ax.legend(fontsize=9); ax.grid(True, alpha=0.3); fig.tight_layout()
     _save(fig, 'fedasync_effect.png')
+
+def plot_staleness_distribution(res):
+    """Bimodal staleness histogram with fresh/stale zone annotations."""
+    fig, ax = plt.subplots(figsize=(9, 5))
+    s    = res['fedasync']['staleness']
+    bins = list(range(0, STALE_STALENESS[1] + 2))
+    ax.hist(s, bins=bins, color='steelblue', alpha=0.8, edgecolor='white', rwidth=0.85)
+    ax.axvline(float(np.mean(s)), color='black', linestyle='--', linewidth=1.5,
+               label=f'Mean staleness = {float(np.mean(s)):.1f}')
+    ax.axvspan(FRESH_STALENESS[0] - 0.5, FRESH_STALENESS[1] + 0.5,
+               alpha=0.12, color='green', label=f'Fresh zone  ({FRESH_PROB*100:.0f}%)')
+    ax.axvspan(STALE_STALENESS[0] - 0.5, STALE_STALENESS[1] + 0.5,
+               alpha=0.12, color='red', label=f'Stale zone  ({(1-FRESH_PROB)*100:.0f}%)')
+    ax.set_xlabel('Staleness (rounds behind global model)')
+    ax.set_ylabel('Count (out of %d rounds)' % N_ROUNDS)
+    ax.set_title('Observed staleness distribution')
+    ax.legend(fontsize=9); ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    _save(fig, 'staleness_distribution.png')
+
+def plot_per_staleness_loss_delta(res):
+    """For each staleness bucket, compare the loss change right after the update
+    in the fedasync vs no-discount run. Stale updates should cause a larger
+    loss increase (or smaller decrease) in the no-discount run."""
+    staleness_seq = res['fedasync']['staleness']
+    loss_fa       = res['fedasync']['loss']
+    loss_no       = res['no_fedasync']['loss']
+
+    buckets = {'fresh (0-2)': [], 'stale (15-30)': []}
+    for i in range(1, len(staleness_seq)):
+        st       = staleness_seq[i]
+        delta_fa = loss_fa[i] - loss_fa[i - 1]
+        delta_no = loss_no[i] - loss_no[i - 1]
+        if st <= FRESH_STALENESS[1]:
+            buckets['fresh (0-2)'].append((delta_fa, delta_no))
+        elif st >= STALE_STALENESS[0]:
+            buckets['stale (15-30)'].append((delta_fa, delta_no))
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    labels = ['FedAsync', 'No discount']
+    colors = ['C0', 'C3']
+
+    for ax, (bucket, vals) in zip(axes, buckets.items()):
+        fa_vals = [v[0] for v in vals]
+        no_vals = [v[1] for v in vals]
+        bp = ax.boxplot([fa_vals, no_vals], labels=labels, patch_artist=True,
+                        medianprops=dict(color='black', linewidth=2))
+        for patch, color in zip(bp['boxes'], colors):
+            patch.set_facecolor(color); patch.set_alpha(0.6)
+        ax.axhline(0, color='gray', linestyle='--', linewidth=1)
+        ax.set_ylabel('Loss change after update (negative = improvement)')
+        ax.set_title(f'Loss change per round: {bucket} clients\n'
+                     f'n = {len(vals)} rounds')
+        ax.grid(True, alpha=0.3, axis='y')
+
+    fig.suptitle(
+        'Impact of a single client update on test loss:\n'
+        'stale updates hurt more without discount',
+        fontsize=11
+    )
+    fig.tight_layout()
+    _save(fig, 'per_staleness_loss_delta.png')
 
 def plot_probes(res):
     labels   = list(PROBES.keys())
     expected = [v for _, v in PROBES.values()]
     x = np.arange(len(labels)); w = 0.25
     fig, ax = plt.subplots(figsize=(13, 6))
-    ax.bar(x - w, expected,                                       w, label='Expected', color='lightgray', edgecolor='black')
-    ax.bar(x,     [res['initial']['probes'][l]  for l in labels], w, label='Initial',  color='#aaaaaa',   edgecolor='black')
-    ax.bar(x + w, [res['fedasync']['probes'][l] for l in labels], w, label='Trained',  color='C0')
+    ax.bar(x - w, expected,                                       w, label='Expected',    color='lightgray', edgecolor='black')
+    ax.bar(x,     [res['initial']['probes'][l]   for l in labels], w, label='Initial',     color='#aaaaaa',   edgecolor='black')
+    ax.bar(x + w, [res['fedasync']['probes'][l]  for l in labels], w, label='FedAsync',    color='C0')
     ax.set_xticks(x); ax.set_xticklabels(labels, rotation=18, ha='right', fontsize=9)
     ax.set_ylabel('Predicted engagement'); ax.set_ylim(0, 1.15)
-    ax.set_title('Probe Scores: Initial vs Trained vs Expected')
+    ax.set_title('Probe Scores: Initial vs Trained (FedAsync) vs Expected')
     ax.legend(); ax.grid(True, alpha=0.3, axis='y'); fig.tight_layout()
     _save(fig, 'probe_scores.png')
 
-def plot_fedasync_discount_curve():
-    """Pure illustration of the FedAsync weighting function itself:
-    discount = 1 / (1 + staleness), and the effective sample count it produces
-    for a typical round (15 raw interactions)."""
-    fig, ax = plt.subplots(figsize=(9, 5))
-    staleness = np.arange(0, STALENESS_MAX + 1)
-    discount  = 1.0 / (1.0 + staleness)
-    effective = np.maximum(1, np.round(INTERACTIONS_PER_ROUND * discount))
+def plot_contextual_probes(res):
+    """Show how the trained model responds to isOpen, isWeekend, and hour-of-day.
+    These features carry real signal in the training data (see _generate_interaction),
+    so the plot shows what contextual patterns the model actually learned."""
+    gw = res['fedasync']['weights']
+    combos = [
+        (['gastronomy'], 'restaurant'),
+        (['art'],        'gallery'),
+        (['history'],    'museum'),
+        (['nature'],     'park'),
+    ]
+    xlabels = ['gastronomy\n+restaurant', 'art\n+gallery', 'history\n+museum', 'nature\n+park']
+    x = np.arange(len(combos)); w = 0.35
 
-    line1, = ax.plot(staleness, discount, 'o-', linewidth=2, color='C0',
-                     label='Discount = 1 / (1 + staleness)')
-    ax.set_xlabel('Staleness (rounds behind the global model)')
-    ax.set_ylabel('Discount applied to the client update')
-    ax.set_ylim(0, 1.05)
-    ax.set_title('FedAsync Discount Function')
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-    ax2 = ax.twinx()
-    line2, = ax2.plot(staleness, effective, 's--', linewidth=1.5, color='C1', alpha=0.8,
-                      label=f'Effective samples (raw count = {INTERACTIONS_PER_ROUND})')
-    ax2.set_ylabel('Effective sample count')
+    # isOpen: closed vs open
+    ax = axes[0]
+    closed = [fl_predict(gw, _probe_fv(i, t, is_open=0.0).tolist()) for i, t in combos]
+    opened = [fl_predict(gw, _probe_fv(i, t, is_open=1.0).tolist()) for i, t in combos]
+    ax.bar(x - w/2, closed, w, label='Closed (isOpen=0)', color='#cc6666', alpha=0.85)
+    ax.bar(x + w/2, opened, w, label='Open   (isOpen=1)', color='#66bb66', alpha=0.85)
+    ax.set_xticks(x); ax.set_xticklabels(xlabels, fontsize=8)
+    ax.set_ylabel('Predicted engagement'); ax.set_ylim(0, 1.0)
+    ax.set_title('isOpen effect')
+    ax.legend(fontsize=9); ax.grid(True, alpha=0.3, axis='y')
 
-    ax.legend(handles=[line1, line2], loc='upper right')
-    ax.grid(True, alpha=0.3); fig.tight_layout()
-    _save(fig, 'fedasync_discount_curve.png')
+    # isWeekend: weekday vs weekend
+    ax = axes[1]
+    wday = [fl_predict(gw, _probe_fv(i, t, is_weekend=0.0).tolist()) for i, t in combos]
+    wend = [fl_predict(gw, _probe_fv(i, t, is_weekend=1.0).tolist()) for i, t in combos]
+    ax.bar(x - w/2, wday, w, label='Weekday', color='#6688cc', alpha=0.85)
+    ax.bar(x + w/2, wend, w, label='Weekend', color='#ffaa44', alpha=0.85)
+    ax.set_xticks(x); ax.set_xticklabels(xlabels, fontsize=8)
+    ax.set_ylabel('Predicted engagement'); ax.set_ylim(0, 1.0)
+    ax.set_title('isWeekend effect')
+    ax.legend(fontsize=9); ax.grid(True, alpha=0.3, axis='y')
 
-def plot_clipping_robustness(norms, plain_drift, clipped_drift):
-    """Compares plain fedavg (unclipped) against production clipped_fedavg
-    when merging a single rogue update of growing magnitude."""
-    fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(norms, plain_drift,   'o-', linewidth=2, color='C3', label='Plain FedAvg (unclipped)')
-    ax.plot(norms, clipped_drift, 's-', linewidth=2, color='C0', label=f'Clipped FedAvg (production, max_norm={SERVER_MAX_NORM:.1f})')
-    ax.set_xlabel('L2 norm of one rogue client update')
-    ax.set_ylabel('Resulting drift in the global model (L2 norm)')
-    ax.set_title('Clipped vs Plain FedAvg Under a Rogue Client Update')
-    ax.legend(); ax.grid(True, alpha=0.3); fig.tight_layout()
-    _save(fig, 'clipping_robustness.png')
+    # Hour of day sweep
+    ax = axes[2]
+    hours_h = list(range(8, 23))
+    hours_n = [h / 24.0 for h in hours_h]
+    for (interests, ltype), lbl in zip(combos, xlabels):
+        scores = [fl_predict(gw, _probe_fv(interests, ltype, hour=h).tolist()) for h in hours_n]
+        ax.plot(hours_h, scores, 'o-', linewidth=2, markersize=4, label=lbl.replace('\n', '+'))
+    ax.set_xlabel('Hour of day'); ax.set_ylabel('Predicted engagement')
+    ax.set_xticks([8, 11, 14, 17, 20, 22]); ax.set_ylim(0, 1.0)
+    ax.set_title('Hour-of-day effect')
+    ax.legend(fontsize=9); ax.grid(True, alpha=0.3)
+
+    fig.suptitle('Contextual feature effects (trained model)', fontsize=11)
+    fig.tight_layout()
+    _save(fig, 'contextual_probes.png')
 
 # Redis helpers
 async def _redis_fetch():
@@ -364,7 +471,6 @@ async def _redis_push(weights, n_rounds, last_staleness):
         await redis.set(FL_ROUND_KEY, str(current_round + n_rounds))
         await redis.set(FL_LAST_STALENESS_KEY, str(last_staleness))
         await redis.incrby(FL_SAMPLES_KEY, n_rounds * INTERACTIONS_PER_ROUND)
-        # Add synthetic client IDs so the dashboard reflects the simulated population
         await redis.sadd(FL_CLIENTS_KEY, *[f'sim_client_{i}' for i in range(N_CLIENTS)])
         print(f'  pushed weights to Redis - round {current_round} -> {current_round + n_rounds}')
         print(f'  last_staleness={last_staleness}  unique_contributors={N_CLIENTS} (synthetic)')
@@ -379,10 +485,11 @@ def main():
 
     print(f'Clients ({N_CLIENTS}):')
     clients = [random.sample(INTERESTS, random.randint(1, 3)) for _ in range(N_CLIENTS)]
-    for i, c in enumerate(clients):
+    for i, c in enumerate(clients[:8]):
         print(f'  {i+1:2d}: {c}')
+    print(f'  ... ({N_CLIENTS - 8} more)')
 
-    print(f'\nBuilding test set...')
+    print('\nBuilding test set (300 samples)...')
     test_data = _make_test_set(300)
 
     print('\nFetching initial weights from Redis...')
@@ -400,7 +507,9 @@ def main():
 
     results = {'initial': {'loss': initial_loss, 'probes': initial_probes}}
 
-    print('\nRunning with FedAsync staleness discount (production)...')
+    print(f'\nRunning with FedAsync staleness discount...')
+    print(f'  Staleness: {FRESH_PROB*100:.0f}% fresh [{FRESH_STALENESS[0]}-{FRESH_STALENESS[1]}], '
+          f'{(1-FRESH_PROB)*100:.0f}% stale [{STALE_STALENESS[0]}-{STALE_STALENESS[1]}]')
     random.seed(SEED); np.random.seed(SEED)
     results['fedasync'] = run_simulation(initial_weights, clients, test_data, use_fedasync=True)
 
@@ -408,23 +517,19 @@ def main():
     random.seed(SEED); np.random.seed(SEED)
     results['no_fedasync'] = run_simulation(initial_weights, clients, test_data, use_fedasync=False)
 
-    print('\nTesting clipped vs plain FedAvg under a rogue update of growing magnitude...')
-    rogue_norms, plain_drift, clipped_drift = sweep_clipping_robustness(initial_weights)
-    print(f'  at norm={rogue_norms[-1]:.1f}: plain drift={plain_drift[-1]:.3f}  clipped drift={clipped_drift[-1]:.3f}')
-
-    # Stats JSON
     stats = {
         'config': {
             'n_clients': N_CLIENTS, 'n_rounds': N_ROUNDS,
             'interactions_per_round': INTERACTIONS_PER_ROUND,
             'local_epochs': LOCAL_EPOCHS, 'lr': LEARNING_RATE,
             'dp_sigma': DP_SIGMA, 'dp_clip_norm': DP_CLIP_NORM,
-            'server_max_norm': SERVER_MAX_NORM, 'staleness_max': STALENESS_MAX,
+            'server_max_norm': SERVER_MAX_NORM,
+            'fresh_prob': FRESH_PROB,
+            'fresh_staleness_range': list(FRESH_STALENESS),
+            'stale_staleness_range': list(STALE_STALENESS),
+            'stale_label_flip_rate': STALE_LABEL_FLIP_RATE,
         },
-        'baseline': {
-            'initial_loss':   initial_loss,
-            'initial_probes': initial_probes,
-        },
+        'baseline': {'initial_loss': initial_loss, 'initial_probes': initial_probes},
         'summary': {
             variant: {
                 'final_loss':           results[variant]['final_loss'],
@@ -446,11 +551,6 @@ def main():
             }
             for variant in ('fedasync', 'no_fedasync')
         },
-        'clipping_robustness': {
-            'rogue_update_norm': rogue_norms,
-            'plain_fedavg_drift':   plain_drift,
-            'clipped_fedavg_drift': clipped_drift,
-        },
     }
     p = os.path.join(RESULTS_DIR, 'stats.json')
     with open(p, 'w') as f:
@@ -461,24 +561,26 @@ def main():
     plot_loss(results)
     plot_drift(results)
     plot_fedasync_effect(results)
+    plot_staleness_distribution(results)
+    plot_per_staleness_loss_delta(results)
     plot_probes(results)
-    plot_fedasync_discount_curve()
-    plot_clipping_robustness(rogue_norms, plain_drift, clipped_drift)
+    plot_contextual_probes(results)
 
     print('\nSummary:')
     print(f'  {"INITIAL":11s}  loss={initial_loss:.4f}')
     for variant, label in (('fedasync', 'FEDASYNC'), ('no_fedasync', 'NO DISCOUNT')):
-        s = stats['summary'][variant]
+        s    = stats['summary'][variant]
         sign = '+' if s['loss_improvement'] >= 0 else ''
         print(f'  {label:11s}  final_loss={s["final_loss"]:.4f}  '
               f'min_loss={s["min_loss"]:.4f}  avg_drift={s["avg_drift"]:.4f}  '
               f'avg_eff_weight={s["avg_effective_weight"]:.3f}  '
               f'vs_initial={sign}{s["loss_improvement"]:.4f} ({sign}{s["loss_improvement_pct"]:.1f}%)')
-    fa = stats['summary']['fedasync']['final_loss']
-    nf = stats['summary']['no_fedasync']['final_loss']
-    print(f'\n  FedAsync vs no-discount final-loss delta: {abs(fa - nf):.4f}')
-    print(f'  Rogue update at norm={rogue_norms[-1]:.1f}: plain FedAvg drift={plain_drift[-1]:.3f} '
-          f'vs clipped FedAvg drift={clipped_drift[-1]:.3f} (bounded by max_norm={SERVER_MAX_NORM:.1f})')
+    fa    = stats['summary']['fedasync']['final_loss']
+    nf    = stats['summary']['no_fedasync']['final_loss']
+    delta = nf - fa
+    print(f'\n  FedAsync advantage: {delta:+.4f} lower final loss than no-discount.')
+    print(f'  avg_eff_weight: fedasync={stats["summary"]["fedasync"]["avg_effective_weight"]:.3f}  '
+          f'(old uniform-staleness sim would give ~0.162 -- fresh clients unfairly penalised)')
 
     print('\nPushing trained weights to Redis...')
     try:

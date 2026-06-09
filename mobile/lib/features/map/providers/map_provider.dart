@@ -9,6 +9,7 @@ import '../../../core/services/local_data_service.dart';
 import '../../auth/providers/auth_provider.dart';
 
 const _proximityMeters = 80.0;
+const _walkingMetersPerMinute = 83; // ~5 km/h, mirrors backend route_service._WALKING_M_PER_MIN
 
 class MapState {
   final Position? position;
@@ -209,9 +210,36 @@ class MapNotifier extends StateNotifier<MapState> {
     }
   }
 
+  /// Recompute a route's per-stop visited flags (and visited_count) from the
+  /// user's locally-tracked visited landmark IDs. Routes can go stale relative
+  /// to quest completions, so this is the single place "visited" is derived -
+  /// mirrors how _annotate() derives visitedByMe for plain landmark lists.
+  RouteWithProgress _withCurrentProgress(RouteWithProgress r, Set<String> visitedIds) {
+    final stops = r.stops
+        .map((s) => RouteStopWithProgress(
+              landmark: s.landmark,
+              visited: visitedIds.contains(s.landmark.id),
+              dwellMinutes: s.dwellMinutes,
+            ))
+        .toList();
+    return RouteWithProgress(
+      id: r.id,
+      name: r.name,
+      stops: stops,
+      totalDistanceM: r.totalDistanceM,
+      totalDurationMinutes: r.totalDurationMinutes,
+      generatedAt: r.generatedAt,
+      visitedCount: stops.where((s) => s.visited).length,
+      isGlobal: r.isGlobal,
+    );
+  }
+
   void _loadLocalRoutes() {
     final stored = _local.getRoutes();
-    final routes = stored.map((j) => RouteWithProgress.fromJson(j)).toList();
+    final visitedIds = _local.getVisitedIds();
+    final routes = stored
+        .map((j) => _withCurrentProgress(RouteWithProgress.fromJson(j), visitedIds))
+        .toList();
     state = state.copyWith(myRoutes: routes, isLoadingRoutes: false);
   }
 
@@ -222,11 +250,31 @@ class MapNotifier extends StateNotifier<MapState> {
   Future<void> fetchGlobalRoutes() async {
     try {
       final res = await _api.get('/routes/global');
+      final visitedIds = _local.getVisitedIds();
       final routes = (res.data as List)
-          .map((j) => RouteWithProgress.fromJson(j as Map<String, dynamic>))
+          .map((j) => _withCurrentProgress(RouteWithProgress.fromJson(j as Map<String, dynamic>), visitedIds))
           .toList();
       state = state.copyWith(globalRoutes: routes);
     } catch (_) {}
+  }
+
+  /// Re-derive visited flags for all known routes from the latest locally-tracked
+  /// visited landmarks (e.g. right after a quest completes) and persist the change.
+  Future<void> refreshRouteProgress() async {
+    final visitedIds = _local.getVisitedIds();
+
+    final mine = state.myRoutes.map((r) => _withCurrentProgress(r, visitedIds)).toList();
+    for (final r in mine) {
+      await _local.updateRoute(_routeToJson(r));
+    }
+    final global = state.globalRoutes.map((r) => _withCurrentProgress(r, visitedIds)).toList();
+    final active = state.activeProgressRoute;
+
+    state = state.copyWith(
+      myRoutes: mine,
+      globalRoutes: global,
+      activeProgressRoute: active != null ? _withCurrentProgress(active, visitedIds) : active,
+    );
   }
 
   Future<void> renameRoute(String routeId, String name) async {
@@ -277,6 +325,77 @@ class MapNotifier extends StateNotifier<MapState> {
     'visited_count': r.visitedCount,
   };
 
+  /// Sum of straight-line distances between consecutive stops, in order -
+  /// mirrors the backend route_service haversine computation, so client-side
+  /// edits produce numbers consistent with freshly-generated routes.
+  double _legsDistanceM(List<LandmarkModel> stops) {
+    var total = 0.0;
+    for (var i = 1; i < stops.length; i++) {
+      total += Geolocator.distanceBetween(
+        stops[i - 1].location.lat, stops[i - 1].location.lng,
+        stops[i].location.lat, stops[i].location.lng,
+      );
+    }
+    return total;
+  }
+
+  int _walkingMinutes(double distanceM) => (distanceM / _walkingMetersPerMinute).round();
+
+  /// Remove a stop from the live Explore preview. The same route is also
+  /// auto-saved as a RouteWithProgress (matching id) in myRoutes, so that
+  /// copy is kept in sync too - otherwise My Routes would show the stop again.
+  Future<void> removeStopFromActiveRoute(String landmarkId) async {
+    final ar = state.activeRoute;
+    if (ar == null || ar.stops.length <= 2) return;
+    final stops = ar.stops.where((s) => s.landmark.id != landmarkId).toList();
+    if (stops.length == ar.stops.length) return;
+    final dist = _legsDistanceM(stops.map((s) => s.landmark).toList());
+    final dwell = stops.fold<int>(0, (sum, s) => sum + s.estimatedDurationMinutes);
+    state = state.copyWith(activeRoute: RouteModel(
+      id: ar.id,
+      stops: stops,
+      totalDistanceM: dist,
+      totalDurationMinutes: dwell + _walkingMinutes(dist),
+    ));
+    await _removeStopFromSavedRoute(ar.id, landmarkId);
+  }
+
+  /// Remove a stop from a saved personal route (My Routes tab).
+  Future<void> removeStopFromProgressRoute(String routeId, String landmarkId) async {
+    await _removeStopFromSavedRoute(routeId, landmarkId);
+  }
+
+  /// Shared by both removal paths: a freshly-generated route is immediately
+  /// auto-saved under the same id, so edits made from either the live preview
+  /// or the saved view must update that one persisted record.
+  Future<void> _removeStopFromSavedRoute(String routeId, String landmarkId) async {
+    RouteWithProgress? updated;
+    final mine = state.myRoutes.map((r) {
+      if (r.id != routeId || r.isGlobal || r.stops.length <= 2) return r;
+      final stops = r.stops.where((s) => s.landmark.id != landmarkId).toList();
+      if (stops.length == r.stops.length) return r;
+      final dist = _legsDistanceM(stops.map((s) => s.landmark).toList());
+      final dwell = stops.fold<int>(0, (sum, s) => sum + s.dwellMinutes);
+      updated = RouteWithProgress(
+        id: r.id, name: r.name, stops: stops,
+        totalDistanceM: dist,
+        totalDurationMinutes: dwell + _walkingMinutes(dist),
+        generatedAt: r.generatedAt,
+        visitedCount: stops.where((s) => s.visited).length,
+        isGlobal: r.isGlobal,
+      );
+      return updated!;
+    }).toList();
+    if (updated == null) return;
+
+    await _local.updateRoute(_routeToJson(updated!));
+    final isActive = state.activeProgressRoute?.id == routeId;
+    state = state.copyWith(
+      myRoutes: mine,
+      activeProgressRoute: isActive ? updated : state.activeProgressRoute,
+    );
+  }
+
   Future<void> generateRoute({int availableMinutes = 300, double flTiebreakerM = 200.0}) async {
     final pos = state.position;
     if (pos == null) return;
@@ -290,17 +409,21 @@ class MapNotifier extends StateNotifier<MapState> {
         'fl_tiebreaker_m': flTiebreakerM,
       });
       final route = RouteModel.fromJson(res.data);
-      // Convert to RouteWithProgress (no stops visited yet) and save locally
+      // Convert to RouteWithProgress, carrying over any stops already visited
+      // (e.g. quests completed before this route was generated), and save locally
+      final visitedIds = _local.getVisitedIds();
+      final stops = route.stops.map((s) => RouteStopWithProgress(
+        landmark: s.landmark,
+        visited: visitedIds.contains(s.landmark.id),
+        dwellMinutes: s.estimatedDurationMinutes,  // preserves type-based time from backend
+      )).toList();
       final withProgress = RouteWithProgress(
         id: route.id,
-        stops: route.stops.map((s) => RouteStopWithProgress(
-          landmark: s.landmark, visited: false,
-          dwellMinutes: s.estimatedDurationMinutes,  // preserves type-based time from backend
-        )).toList(),
+        stops: stops,
         totalDistanceM: route.totalDistanceM,
         totalDurationMinutes: route.totalDurationMinutes,
         generatedAt: res.data['generated_at'] ?? '',
-        visitedCount: 0,
+        visitedCount: stops.where((s) => s.visited).length,
       );
       // Use _routeToJson so dwell_minutes is persisted correctly
       await _local.saveRoute(_routeToJson(withProgress));

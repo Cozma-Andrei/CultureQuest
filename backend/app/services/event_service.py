@@ -4,7 +4,7 @@ from bson.errors import InvalidId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException
 
-from app.models.event import EventCreate, EventResponse
+from app.models.event import EventCreate, EventUpdate, EventResponse
 
 
 def _now() -> datetime:
@@ -129,6 +129,33 @@ async def get_nearby_events(
         if upcoming or ongoing:
             results.append(_doc_to_event(doc, lm_names.get(doc["landmark_id"])))
     return results
+
+
+async def update_event(
+    db: AsyncIOMotorDatabase, event_id: str, user_id: str, payload: EventUpdate
+) -> EventResponse | None:
+    try:
+        oid = ObjectId(event_id)
+    except InvalidId:
+        return None
+    doc = await db.events.find_one({"_id": oid})
+    if not doc:
+        return None
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    is_admin = user.get("is_admin", False) if user else False
+    if not is_admin and doc.get("created_by") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorised to edit this event")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if updates:
+        await db.events.update_one({"_id": oid}, {"$set": updates})
+        doc = await db.events.find_one({"_id": oid})
+
+    try:
+        lm = await db.landmarks.find_one({"_id": ObjectId(doc["landmark_id"])}, {"name": 1})
+    except Exception:
+        lm = None
+    return _doc_to_event(doc, landmark_name=lm.get("name") if lm else None)
 
 
 async def delete_event(db: AsyncIOMotorDatabase, event_id: str, user_id: str) -> bool:

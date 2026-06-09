@@ -1144,119 +1144,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   }
 
   void _showAddEventDialog(String landmarkId, String landmarkName) {
-    final titleCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    DateTime? startDate;
-    DateTime? endDate;
-    bool allDay = false;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setD) => AlertDialog(
-          title: Text('Add Event - $landmarkName'),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Event title', border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              TextField(controller: descCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder())),
-              const SizedBox(height: 4),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('All day'),
-                value: allDay,
-                onChanged: (v) => setD(() { allDay = v; if (v && startDate != null) { endDate = null; } }),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.calendar_today_outlined),
-                title: Text(startDate == null
-                    ? 'Pick start date${allDay ? '' : ' & time'}'
-                    : allDay
-                        ? DateFormat('dd MMM yyyy').format(startDate!)
-                        : DateFormat('dd MMM yyyy HH:mm').format(startDate!)),
-                onTap: () async {
-                  final d = await showDatePicker(context: ctx, initialDate: DateTime.now().add(const Duration(days: 1)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
-                  if (d == null) return;
-                  if (allDay) {
-                    setD(() { startDate = DateTime(d.year, d.month, d.day, 0, 0); endDate = DateTime(d.year, d.month, d.day, 23, 59); });
-                  } else {
-                    final t = await showTimePicker(context: ctx, initialTime: const TimeOfDay(hour: 18, minute: 0));
-                    if (t == null) return;
-                    setD(() => startDate = DateTime(d.year, d.month, d.day, t.hour, t.minute));
-                  }
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.event_outlined),
-                title: Text(endDate == null
-                    ? 'Pick end date (optional)'
-                    : allDay
-                        ? DateFormat('dd MMM yyyy').format(endDate!)
-                        : DateFormat('dd MMM yyyy HH:mm').format(endDate!)),
-                onTap: () async {
-                  final d = await showDatePicker(
-                      context: ctx,
-                      initialDate: startDate ?? DateTime.now().add(const Duration(days: 1)),
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 365)));
-                  if (d == null) return;
-                  if (allDay) {
-                    setD(() => endDate = DateTime(d.year, d.month, d.day, 23, 59));
-                  } else {
-                    final t = await showTimePicker(context: ctx, initialTime: const TimeOfDay(hour: 20, minute: 0));
-                    if (t == null) return;
-                    setD(() => endDate = DateTime(d.year, d.month, d.day, t.hour, t.minute));
-                  }
-                },
-                trailing: endDate != null
-                    ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () => setD(() => endDate = null))
-                    : null,
-              ),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: titleCtrl.text.trim().isEmpty || startDate == null ? null : () async {
-                Navigator.pop(ctx);
-                if (mounted) Navigator.pop(context); // close landmark sheet
-                try {
-                  await ref.read(apiServiceProvider).post(
-                    '/events/?landmark_id=$landmarkId',
-                    data: {
-                      'title': titleCtrl.text.trim(),
-                      'description': descCtrl.text.trim(),
-                      'start_time': startDate!.toIso8601String(),
-                      'end_time': endDate?.toIso8601String(),
-                    },
-                  );
-                  if (mounted) {
-                    final m = ScaffoldMessenger.of(context);
-                    m.clearSnackBars();
-                    m.showSnackBar(SnackBar(
-                      content: const Text('Event added!'),
-                      behavior: SnackBarBehavior.floating,
-                      margin: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(context).size.height * 0.32),
-                    ));
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    final msg = e is DioException ? (e.response?.data['detail'] ?? 'Failed') : 'Failed';
-                    final m = ScaffoldMessenger.of(context); m.clearSnackBars();
-                    m.showSnackBar(SnackBar(content: Text(msg.toString()),
-                        behavior: SnackBarBehavior.floating,
-                        backgroundColor: Theme.of(context).colorScheme.error,
-                        margin: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(context).size.height * 0.32)));
-                  }
-                }
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      ),
+    _showEventDialog(
+      context, ref,
+      landmarkId: landmarkId,
+      landmarkName: landmarkName,
+      onDismiss: () { if (mounted) Navigator.pop(context); },
     );
   }
 
@@ -2412,6 +2304,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
     final theme = Theme.of(context);
     final mapState = widget.mapState;
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final visitedIds = ref.watch(visitedProvider);
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -2466,6 +2359,19 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
                         index: i,
                         isNext: nextIdx == i,
                         onTap: () => widget.onLandmarkTap(route.stops[i].landmark),
+                        onDelete: route.isGlobal ? null : () {
+                          if (route.stops.length <= 2) {
+                            ScaffoldMessenger.of(context)
+                              ..clearSnackBars()
+                              ..showSnackBar(const SnackBar(
+                                content: Text('A route needs at least 2 stops'),
+                                behavior: SnackBarBehavior.floating,
+                              ));
+                            return;
+                          }
+                          ref.read(mapProvider.notifier)
+                              .removeStopFromProgressRoute(route.id, route.stops[i].landmark.id);
+                        },
                       );
                     },
                     childCount: mapState.activeProgressRoute!.stops.length,
@@ -2495,10 +2401,26 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
                 padding: EdgeInsets.fromLTRB(20, 0, 20, 24 + bottomInset),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (ctx, i) => _RouteStopTile(
-                      index: i + 1,
-                      stop: mapState.activeRoute!.stops[i],
-                    ),
+                    (ctx, i) {
+                      final stop = mapState.activeRoute!.stops[i];
+                      return _RouteStopTile(
+                        index: i + 1,
+                        stop: stop,
+                        visited: visitedIds.contains(stop.landmark.id),
+                        onDelete: () {
+                          if (mapState.activeRoute!.stops.length <= 2) {
+                            ScaffoldMessenger.of(context)
+                              ..clearSnackBars()
+                              ..showSnackBar(const SnackBar(
+                                content: Text('A route needs at least 2 stops'),
+                                behavior: SnackBarBehavior.floating,
+                              ));
+                            return;
+                          }
+                          ref.read(mapProvider.notifier).removeStopFromActiveRoute(stop.landmark.id);
+                        },
+                      );
+                    },
                     childCount: mapState.activeRoute!.stops.length,
                   ),
                 ),
@@ -2991,12 +2913,14 @@ class _ProgressStopTile extends StatelessWidget {
   final int index;
   final bool isNext;
   final VoidCallback? onTap;
+  final VoidCallback? onDelete;
   const _ProgressStopTile({
     super.key,
     required this.stop,
     required this.index,
     required this.isNext,
     this.onTap,
+    this.onDelete,
   });
 
   @override
@@ -3040,11 +2964,19 @@ class _ProgressStopTile extends StatelessWidget {
                   child: Text('Next', style: TextStyle(fontSize: 10, color: theme.colorScheme.primary, fontWeight: FontWeight.w600)),
                 ),
             ]),
-            Text(stop.landmark.type, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            Text('${stop.landmark.type} · ~${stop.dwellMinutes} min', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ]),
         ),
         const SizedBox(width: 8),
         if (stop.visited) Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
+        if (onDelete != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: GestureDetector(
+              onTap: onDelete,
+              child: Icon(Icons.delete_outline, size: 18, color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
         if (onTap != null)
           const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.chevron_right, size: 16)),
       ]),
@@ -3132,8 +3064,10 @@ class _RouteHeader extends StatelessWidget {
 class _RouteStopTile extends StatelessWidget {
   final int index;
   final RouteStop stop;
+  final bool visited;
+  final VoidCallback? onDelete;
 
-  const _RouteStopTile({required this.index, required this.stop});
+  const _RouteStopTile({required this.index, required this.stop, this.visited = false, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -3142,14 +3076,41 @@ class _RouteStopTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          CircleAvatar(radius: 14, backgroundColor: theme.colorScheme.primary, child: Text('$index', style: const TextStyle(color: Colors.white, fontSize: 12))),
+          Container(
+            width: 28, height: 28,
+            decoration: BoxDecoration(
+              color: visited ? Colors.green.shade600 : theme.colorScheme.primary,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: visited
+                  ? const Icon(Icons.check, color: Colors.white, size: 14)
+                  : Text('$index', style: const TextStyle(color: Colors.white, fontSize: 12)),
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(stop.landmark.name, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+              Text(stop.landmark.name, style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: visited ? theme.colorScheme.onSurfaceVariant : null,
+              )),
               Text('~${stop.estimatedDurationMinutes} min', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ]),
           ),
+          if (visited)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
+            ),
+          if (onDelete != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: GestureDetector(
+                onTap: onDelete,
+                child: Icon(Icons.delete_outline, size: 18, color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ),
         ],
       ),
     );
@@ -4343,7 +4304,7 @@ class _CommentsSectionState extends ConsumerState<_CommentsSection> {
             }),
           if (comments.length > 3)
             TextButton(
-              onPressed: () { /* TODO: show all */ },
+              onPressed: () => _showAllReviewsSheet(context, comments),
               child: Text('See all ${comments.length} reviews'),
               style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
             ),
@@ -4351,9 +4312,266 @@ class _CommentsSectionState extends ConsumerState<_CommentsSection> {
       },
     );
   }
+
+  void _showAllReviewsSheet(BuildContext context, List<CommentModel> comments) {
+    final theme = Theme.of(context);
+    final myCommentId = ref.read(localDataProvider).getMyCommentId(widget.landmarkId);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.92,
+        builder: (_, sc) => ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          child: Material(
+            color: theme.colorScheme.surface,
+            child: Column(children: [
+              const SizedBox(height: 10),
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(children: [
+                  Icon(Icons.reviews_outlined, size: 20, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text('All Reviews (${comments.length})', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                ]),
+              ),
+              const Divider(height: 16),
+              Expanded(
+                child: ListView.separated(
+                  controller: sc,
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+                  itemCount: comments.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (ctx, i) {
+                    final c = comments[i];
+                    final isOwn = myCommentId != null && myCommentId == c.id;
+                    return Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isOwn
+                            ? theme.colorScheme.primaryContainer.withOpacity(0.3)
+                            : theme.colorScheme.surfaceVariant.withOpacity(0.4),
+                        borderRadius: BorderRadius.circular(10),
+                        border: isOwn ? Border.all(color: theme.colorScheme.primary.withOpacity(0.3)) : null,
+                      ),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Row(children: [
+                          ...List.generate(5, (i) => Icon(
+                            i < c.rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                            color: i < c.rating ? Colors.amber.shade500 : theme.colorScheme.outline,
+                            size: 14,
+                          )),
+                          if (isOwn) ...[
+                            const Spacer(),
+                            Text('Your review', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.w600)),
+                          ],
+                        ]),
+                        const SizedBox(height: 4),
+                        Text(c.text, style: theme.textTheme.bodySmall?.copyWith(height: 1.4)),
+                      ]),
+                    );
+                  },
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // Events section
+
+void _showEventDialog(
+  BuildContext context,
+  WidgetRef ref, {
+  String? landmarkId,
+  String? landmarkName,
+  EventModel? existing,
+  VoidCallback? onDismiss,
+  VoidCallback? onSaved,
+}) {
+  final isEdit = existing != null;
+  final titleCtrl = TextEditingController(text: existing?.title ?? '');
+  final descCtrl = TextEditingController(text: existing?.description ?? '');
+  final existingStart = existing?.startTime;
+  final existingEnd = existing?.endTime;
+  DateTime? startDate = existingStart != null ? DateTime(existingStart.year, existingStart.month, existingStart.day) : null;
+  DateTime? endDate = existingEnd != null ? DateTime(existingEnd.year, existingEnd.month, existingEnd.day) : null;
+  TimeOfDay? startHour = existingStart != null ? TimeOfDay(hour: existingStart.hour, minute: existingStart.minute) : null;
+  TimeOfDay? endHour = existingEnd != null ? TimeOfDay(hour: existingEnd.hour, minute: existingEnd.minute) : null;
+
+  String fmtHour(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  DateTime combine(DateTime date, TimeOfDay? time, {int fbHour = 0, int fbMinute = 0}) =>
+      DateTime(date.year, date.month, date.day, time?.hour ?? fbHour, time?.minute ?? fbMinute);
+
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setD) {
+        final theme = Theme.of(ctx);
+
+        Widget pickerField({
+          required String label,
+          required IconData icon,
+          String? display,
+          required VoidCallback onTap,
+          VoidCallback? onClear,
+        }) {
+          return InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(children: [
+                Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Text(label, style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, height: 1.2)),
+                  const SizedBox(height: 1),
+                  Text(display ?? '-', style: const TextStyle(fontSize: 13)),
+                ])),
+                if (onClear != null) ...[
+                  const SizedBox(width: 4),
+                  GestureDetector(onTap: onClear, child: Icon(Icons.clear, size: 14, color: theme.colorScheme.onSurfaceVariant)),
+                ],
+              ]),
+            ),
+          );
+        }
+
+        return AlertDialog(
+        title: Text(isEdit ? 'Edit Event' : 'Add Event - $landmarkName'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: titleCtrl, onChanged: (_) => setD(() {}), decoration: const InputDecoration(labelText: 'Event title', border: OutlineInputBorder())),
+            const SizedBox(height: 12),
+            TextField(controller: descCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Description (optional)', border: OutlineInputBorder())),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: pickerField(
+                label: 'Start date *',
+                icon: Icons.calendar_today_outlined,
+                display: startDate == null ? null : DateFormat('dd MMM yyyy').format(startDate!),
+                onTap: () async {
+                  final d = await showDatePicker(
+                    context: ctx,
+                    initialDate: startDate ?? DateTime.now().add(const Duration(days: 1)),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (d == null) return;
+                  setD(() => startDate = DateTime(d.year, d.month, d.day));
+                },
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: pickerField(
+                label: 'Start time',
+                icon: Icons.access_time,
+                display: startHour == null ? null : fmtHour(startHour!),
+                onClear: startHour != null ? () => setD(() => startHour = null) : null,
+                onTap: () async {
+                  final t = await showTimePicker(context: ctx, initialTime: startHour ?? const TimeOfDay(hour: 18, minute: 0));
+                  if (t == null) return;
+                  setD(() => startHour = t);
+                },
+              )),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: pickerField(
+                label: 'End date',
+                icon: Icons.event_outlined,
+                display: endDate == null ? null : DateFormat('dd MMM yyyy').format(endDate!),
+                onClear: endDate != null ? () => setD(() => endDate = null) : null,
+                onTap: () async {
+                  final d = await showDatePicker(
+                    context: ctx,
+                    initialDate: endDate ?? startDate ?? DateTime.now().add(const Duration(days: 1)),
+                    firstDate: startDate ?? DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (d == null) return;
+                  setD(() => endDate = DateTime(d.year, d.month, d.day));
+                },
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: pickerField(
+                label: 'End time',
+                icon: Icons.access_time,
+                display: endHour == null ? null : fmtHour(endHour!),
+                onClear: endHour != null ? () => setD(() => endHour = null) : null,
+                onTap: () async {
+                  final t = await showTimePicker(context: ctx, initialTime: endHour ?? const TimeOfDay(hour: 20, minute: 0));
+                  if (t == null) return;
+                  setD(() => endHour = t);
+                },
+              )),
+            ]),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: titleCtrl.text.trim().isEmpty || startDate == null ? null : () async {
+              final start = combine(startDate!, startHour);
+              final end = (endDate == null && endHour == null)
+                  ? null
+                  : combine(endDate ?? startDate!, endHour, fbHour: 23, fbMinute: 59);
+              final data = {
+                'title': titleCtrl.text.trim(),
+                'description': descCtrl.text.trim(),
+                'start_time': start.toIso8601String(),
+                'end_time': end?.toIso8601String(),
+              };
+              Navigator.pop(ctx);
+              onDismiss?.call();
+              try {
+                if (isEdit) {
+                  await ref.read(apiServiceProvider).patch('/events/${existing.id}', data: data);
+                } else {
+                  await ref.read(apiServiceProvider).post('/events/?landmark_id=$landmarkId', data: data);
+                }
+                onSaved?.call();
+                if (context.mounted) {
+                  final m = ScaffoldMessenger.of(context);
+                  m.clearSnackBars();
+                  m.showSnackBar(SnackBar(
+                    content: Text(isEdit ? 'Event updated!' : 'Event added!'),
+                    behavior: SnackBarBehavior.floating,
+                    margin: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(context).size.height * 0.32),
+                  ));
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  final msg = e is DioException ? (e.response?.data['detail'] ?? 'Failed') : 'Failed';
+                  final m = ScaffoldMessenger.of(context); m.clearSnackBars();
+                  m.showSnackBar(SnackBar(content: Text(msg.toString()),
+                      behavior: SnackBarBehavior.floating,
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                      margin: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(context).size.height * 0.32)));
+                }
+              }
+            },
+            child: Text(isEdit ? 'Save' : 'Add'),
+          ),
+        ],
+        );
+      },
+    ),
+  );
+}
 
 class _EventsSection extends ConsumerStatefulWidget {
   final String landmarkId;
@@ -4417,23 +4635,37 @@ class _EventsSectionState extends ConsumerState<_EventsSection> {
               child: Text('No upcoming events', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
             )
           else
-            ...events.map((e) => _EventTile(event: e, theme: theme)),
+            ...events.map((e) => _EventTile(event: e, theme: theme, onChanged: () => setState(() { _future = widget.fetchEvents(); }))),
         ]);
       },
     );
   }
 }
 
-class _EventTile extends StatelessWidget {
+class _EventTile extends ConsumerWidget {
   final EventModel event;
   final ThemeData theme;
-  const _EventTile({required this.event, required this.theme});
+  final VoidCallback? onChanged;
+  const _EventTile({required this.event, required this.theme, this.onChanged});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authProvider).user;
+    final canEdit = user?.isAdmin == true || user?.id == event.createdBy;
     final color = event.isOngoing ? Colors.green.shade700 : Colors.orange.shade700;
     final badge = event.isOngoing ? 'Happening now' : 'Upcoming';
-    final dateStr = DateFormat('dd MMM, HH:mm').format(event.startTime.toLocal());
+    final startLocal = event.startTime.toLocal();
+    final endLocal = event.endTime?.toLocal();
+    final dateStr = DateFormat('dd MMM, HH:mm').format(startLocal);
+    final sameDay = endLocal != null &&
+        endLocal.day == startLocal.day &&
+        endLocal.month == startLocal.month &&
+        endLocal.year == startLocal.year;
+    final endStr = endLocal == null
+        ? null
+        : sameDay
+            ? DateFormat('HH:mm').format(endLocal)
+            : DateFormat('dd MMM, HH:mm').format(endLocal);
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(12),
@@ -4451,6 +4683,13 @@ class _EventTile extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(child: Text(event.title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold))),
+          if (canEdit) ...[
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: () => _showEventDialog(context, ref, existing: event, onSaved: onChanged),
+              child: Icon(Icons.edit_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ],
         ]),
         const SizedBox(height: 4),
         if (event.description.isNotEmpty)
@@ -4460,10 +4699,8 @@ class _EventTile extends StatelessWidget {
           Icon(Icons.access_time, size: 13, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 4),
           Text(dateStr, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          if (event.endTime != null) ...[
-            Text(' – ${DateFormat('HH:mm').format(event.endTime!.toLocal())}',
-                style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          ],
+          if (endStr != null)
+            Text(' - $endStr', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         ]),
       ]),
     );
@@ -4583,7 +4820,7 @@ class _NearbyEventsSheetState extends ConsumerState<_NearbyEventsSheet> {
                                     ]),
                                   ),
                                 ),
-                              _EventTile(event: e, theme: theme),
+                              _EventTile(event: e, theme: theme, onChanged: _load),
                             ]);
                           },
                         ),
