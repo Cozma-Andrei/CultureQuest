@@ -52,10 +52,12 @@ Pre-training used LR=0.01 with 0.98 decay per epoch. By epoch 30 the LR
 was 0.00545 and the model effectively stalled: MSE moved from 0.0242 at
 epoch 5 to only 0.0233 at epoch 60 (95% of improvement in first 5 epochs).
 
-**Fix**: Fine-tuning uses LR=0.02 (higher than where pretraining stalled,
-lower than scratch-training's 0.01 to avoid catastrophic forgetting) with
-0.995 decay (much slower). This gives the model room to escape the plateau
-without aggressively overwriting what was learned.
+**Fix**: Fine-tuning uses LR=0.02, higher than both where pretraining stalled
+(~0.0055) and pretraining's own initial LR (0.01), giving the model room to
+escape the plateau. Catastrophic forgetting is avoided not by keeping the LR
+low, but by warm-starting from the pretrained weights and using a much slower
+decay (0.995 vs 0.980) over fewer epochs (40 vs 60), which limits total drift
+from the starting point.
 
 ---
 
@@ -82,7 +84,7 @@ std increases, low-label bin is better populated.
 
 | Parameter | Pretraining | Fine-tuning | Reason |
 |-----------|------------|-------------|--------|
-| Initial LR | 0.010 | **0.020** | Escape plateau; still below scratch LR |
+| Initial LR | 0.010 | **0.020** | Higher than scratch LR; escapes plateau, forgetting avoided via warm start + slower decay |
 | LR decay | 0.980 / epoch | **0.995 / epoch** | Slower decay, more epochs at useful LR |
 | Epochs | 60 | **40** | Fewer needed since weights are already close |
 | Early stop patience | 10 | **12** | Slightly more tolerance for slow improvement |

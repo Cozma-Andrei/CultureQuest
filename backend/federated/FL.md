@@ -15,13 +15,13 @@ model. No individual visit, rating, or route ever leaves the device.
 A small MLP with sigmoid output, predicting engagement probability in [0, 1]:
 
 ```
-Input (22,)
+Input (22)
     |
-    W1 (32 × 22) + b1 (32,)    ->ReLU  ->  (32,)
+    W1 (32 × 22) + b1 (32)  ->  ReLU     ->  (32)
     |
-    W2 (16 × 32) + b2 (16,)  ->  ReLU  ->  (16,)
+    W2 (16 × 32) + b2 (16)  ->  ReLU     ->  (16)
     |
-    W3 (1  × 16) + b3  (1,)  ->  Sigmoid  ->  scalar [0, 1]
+    W3 (1  × 16) + b3 (1)   ->  Sigmoid  ->  scalar [0, 1]
 
 Total parameters: 1,281
 ```
@@ -420,7 +420,7 @@ time-of-day effects, isOpen penalty). Add a small personal last layer
 
 ```
 Global backbone (shared, FedAvg):   22 -> 32 -> 16
-Personal head   (local, on-device):         16 -> 1
+Personal head   (local, on-device):       16 -> 1
 ```
 
 The global model provides a population-level prior; the personal head learns
