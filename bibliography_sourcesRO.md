@@ -23,6 +23,8 @@ Asociază fiecare intrare din Bibliografia din `structureRO.md` (tabelele
 | Li, Sahu, Talwalkar & Smith 2020 - FL: Challenges, Methods and Future Directions | `li2020challenges` | `Federated Learning.zip` -> `Federated_Learning_Challenges_Methods_and_Future_Directions.pdf` |
 | Zhang et al. 2021 - A survey on federated learning | `zhang2021survey` | `Federated Learning.zip` -> `1-s2.0-S0950705121000381-main.pdf` |
 | Li, Fan, Tse & Lin 2020 - A review of applications in FL | `li2020applications` | `Federated Learning.zip` -> `1-s2.0-S0360835220305532-main.pdf` |
+| Adomavicius & Tuzhilin 2005 - Toward the Next Generation of Recommender Systems | `adomavicius2005recommender` | nu este în arhiva locală |
+| Gavalas et al. 2014 - Mobile recommender systems in tourism | `gavalas2014mobile` | nu este în arhiva locală |
 | Arivazhagan et al. 2019 - Federated Learning with Personalization Layers (FedPer) | `arivazhagan2019fedper` | nu este în arhiva locală |
 | Bonawitz et al. 2017 - SecAgg | `bonawitz2017secagg` | nu este în arhiva locală |
 | Nguyen et al. 2022 - FedBuff | `nguyen2022fedbuff` | nu este în arhiva locală |
@@ -32,8 +34,8 @@ Asociază fiecare intrare din Bibliografia din `structureRO.md` (tabelele
 Intrările "nu este în arhiva locală" sunt articole cunoscute (FedAvg,
 FedAsync, FedProx, SCAFFOLD, FedDyn, SecAgg, FedPer, membership inference,
 NbAFL, FedBuff, taxonomia HFL/VFL/FTL, design de sisteme FL de producție,
-DP-FedAvg) - pot fi găsite pe arXiv/Google Scholar folosind citarea de mai
-sus.
+DP-FedAvg, sisteme de recomandare clasice, recomandare turistică mobilă) - pot
+fi găsite pe arXiv/Google Scholar folosind citarea de mai sus.
 
 ## Seturi de Date
 
