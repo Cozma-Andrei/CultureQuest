@@ -1,0 +1,101 @@
+erDiagram
+    USERS {
+        ObjectId _id PK
+        string email
+        string password_hash
+        string name
+        string interests "array InterestCategory"
+        int points
+        int completed_quests
+        bool is_admin
+        datetime created_at
+    }
+
+    LANDMARKS {
+        ObjectId _id PK
+        string name
+        string type
+        GeoJSON location "Point, index 2dsphere"
+        string description
+        string categories "array"
+        string stories "array embedded de string-uri"
+        float rating
+        int rating_sum
+        int rating_count
+        int visit_count
+        bool has_active_quest
+        string status "approved/pending/rejected"
+        string submitted_by FK
+    }
+
+    QUESTS {
+        ObjectId _id PK
+        string landmark_id FK
+        string type
+        string title
+        string description
+        int points
+        string options "array"
+        int correct_option_index
+        string status "approved/pending"
+        string submitted_by FK
+    }
+
+    ROUTES {
+        ObjectId _id PK
+        string user_id FK
+        bool is_global
+        string name
+        string stop_ids "array ordonat, FK -> LANDMARKS"
+        string dwell_minutes "array, opțional"
+        int total_distance_m
+        int total_duration_minutes
+        string generated_at
+    }
+
+    EVENTS {
+        ObjectId _id PK
+        string landmark_id FK
+        string title
+        string description
+        string start_time
+        string end_time
+        string created_by FK
+    }
+
+    COMMENTS {
+        ObjectId _id PK
+        string landmark_id FK
+        string text
+        int rating "1-5"
+        string created_at
+        bool flagged
+        string flag_source
+    }
+
+    STORIES {
+        ObjectId _id PK
+        string landmark_id FK
+        string submitted_by FK
+        string text
+        string status "pending/approved/rejected"
+    }
+
+    VISITS {
+        ObjectId _id PK
+        string user_id FK
+        string landmark_id FK
+    }
+
+    USERS ||--o{ LANDMARKS : submitted_by
+    USERS ||--o{ QUESTS : submitted_by
+    USERS ||--o{ STORIES : submitted_by
+    USERS ||--o{ EVENTS : created_by
+    USERS ||--o{ ROUTES : user_id
+    USERS ||--o{ VISITS : user_id
+    LANDMARKS ||--o{ QUESTS : landmark_id
+    LANDMARKS ||--o{ EVENTS : landmark_id
+    LANDMARKS ||--o{ COMMENTS : landmark_id
+    LANDMARKS ||--o{ STORIES : landmark_id
+    LANDMARKS ||--o{ VISITS : landmark_id
+    LANDMARKS }o--o{ ROUTES : stop_ids

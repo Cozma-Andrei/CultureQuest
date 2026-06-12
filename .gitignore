@@ -43,3 +43,4 @@ mobile/assets/models/*.tflite
 *.toc
 style*.md
 thesis*.md
+node_modules
