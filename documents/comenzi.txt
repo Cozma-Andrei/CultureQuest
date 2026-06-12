@@ -1,0 +1,4 @@
+scholar
+tr -d '\000-\010\013\014\016-\037' < input.txt > output.tex
+./node_modules/.bin/mmdc -i db.mmd -o db.svg
+dot -Tsvg culturequest_db_diagram.dot -o culturequest_db_diagram.svg

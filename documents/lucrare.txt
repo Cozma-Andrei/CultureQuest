@@ -1,0 +1,53 @@
+E recomandat să scrieți capitolul de introducere după ce ați scris restul lucrării, și nu atunci când începeți să scrieți lucrarea.
+
+Folosiți diateza activă când spuneți ce ați făcut și ce decizii ați luat: „we chose to“, „we designed“, „we implemented“, „we surveyed“, „we evaluated“. Nu folosiți diateza pasivă, pentru că nu este afirmativă, pare deresponsabilizantă: „X was designed“, „a survey was conducted“, „the following were evaluated“.
+
+Evitați exprimarea informală/colocvială de forma „we can see in the picture“, „we will move to the next chapter“. Folosiți „In the picture above we present“ sau „The picture above shows“.
+
+Evitați folosirea exprimărilor de forma:
+„This thesis aims to“
+„In this thesis we want to“
+
+Când folosiți pentru prima oară un acronim în text detaliați despre ce este vorba. De exemplu: „ISA (Instruction Set Architecture)“, „TCP (Transmission Control Protocol)“, „SQL (Standard Query Language)“.
+
+CITARI!!!
+Referințele se pun direct legate de textul referit (de exemplu „KVM [1] uses“ …). Nu este recomandat să spuneți „as stated in [12]“ sau „as described in [11]“.
+
+Afirmațiile de forma „are numerous“, „have grown exponentially“, „are among the most used“, „are an important topic“ trebuie să fie acoperite cu citări.
+
+Nu copiați sau traduceți elemente mai mari de un paragraf. Dacă este util un paragraf sau o propoziție puneți între ghilimele și citați sursa.
+
+Dacă reformulați idei sau creați un paragraf rezumat al unor idei folosind cuvintele voastre, precizați cu citare (referință bibliografică) sau cu notă de subsol sursa sau sursele de unde ați preluat ideile.
+
+Puneți referințele direct în text în zona aferentă; nu este nevoie de precizări explicite de forma „mai multe aici[1]“.
+
+FIGURI!!!
+Folosiți figuri, diagrame și tabele oriunde posibili. O figură face cât o mie de cuvinte și face mai ușor de înțeles textul.
+
+Ca figuri, folosiți, pe cât posibil, figuri în format vectorial (PDF, EPS, SVG pentru LaTeX sau direct în Office).
+Dacă nu puteți folosi figuri în format vectorial, folosiți, pe cât posibil, figuri în format PNG (lossless compression), în loc de format JPEG (lossy compression).
+
+O figură nu va niciodata in document o pagină intreaga ci doar 1/3 sau maxim 1/2 pagină. Restul paginii trebuie sa fie dedicata explicației acesteia.
+
+COD!!!
+De regulă, un snippet va avea 15-30 de linii de cod și liniile vor fi numerotate. Veți explica, la fel ca într-o imagine rolul snippet-ului și anumite linii de cod importante.
+Folosiți un font monospace pentru snippet-uri de cod.
+Adăugați caption-uri sub snippet-uri de cod de forma: „Listing 1: Sample Algorithm“.
+În măsura în care sunt greu vizibile, încadrați snippet-urile într-un chenar sau puneți o culoare de fundal (un gri deschis, de exemplu).
+În LaTeX, pentru snippet-uri de cod puteți folosi pachetul listings.
+
+TABELE!!!
+In loc de a spune 100 ms, 1000ms, 10000 ms, spune 0.1s, 1s, 10s.
+Figurile care nu sunt făcute de autorul articolului trebuie citate (fie referință bibliografică, fie notă de subsol (footnote)).
+În LaTeX, pentru tabele folosiți pachetul booktabs.
+
+ANEXE!!!
+Anexele sunt opționale (adică, la fel ca P.S.-ul într-un e-mail, de obicei nu veți avea nevoie de ele și nu vor apărea într-un document). Ce poate intra în anexe:
+Exemplu de fișier de configurare sau compilare.
+Un set de tabele mai mari.
+Un set de screenshot-uri.
+
+CAPITOLE!!
+Nu începeți o secțiune direct după un titlu de capitol. După un titlul de capitol spuneți despre ce este vorba în acel capitol, apoi începeți titlul secțiunii și descrieți acea secțiune.
+Fiecare capitol trebuie să înceapă cu o prezentare a acelui capitol. Să-i fie clar cititorul ce va găsi în acel capitol, să nu-l surprindă prezența sau succesiunea unor secțiuni.
+Încheiați fiecare capitol cu un sumar al capitolului, a ceea ce ați prezentat și a relevanței celor prezentate; în mod ideal, dacă se poate și se leagă, faceți referire la capitolul următor.
