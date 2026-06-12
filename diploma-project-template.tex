@@ -154,11 +154,14 @@ COMPUTER SCIENCE AND ENGINEERING DEPARTMENT\\}
 %%
 %%   Campurile aferente rezumatului
 %%
-\newcommand{\AbstractRO}{Sinopsisul proiectului are rol de introducere, conținând atât o descriere pe scurt a problemei abordate cât și o enumerare sumară a rezultatelor și a concluziilor. Se recomandă ca sinopsisul să fie redactat într-un limbaj accesibil unei persoane nefamiliarizate cu domeniul, dar în același timp destul de specific pentru a oferi rapid o vedere de ansamblu asupra proiectului prezentat.
-Sinopsisul proiectului va fi redactat atât în română cât și în engleză. Ca dimensiunea recomandată aceasta secțiune va avea maxim 200 de cuvinte pentru fiecare variantă. Împreună, ambele variante se vor încadra într-o singură pagină.}
+\newcommand{\AbstractRO}{CultureQuest este o platformă mobilă de explorare urbană bazată pe proximitate, oferind recomandări personalizate legate de obiectivele turistice și recreative dintr-un oraș, fără ca datele utilizatorului să părăsească dispozitivul. Problema pe care o tratez este că aplicațiile de tip \textit{city-guide} oferă aceleași sugestii tuturor, indiferent de interese, pentru că personalizarea ar presupune salvarea centralizată
+a istoricului de interacțiuni cu obiectivele sau monitorizarea traseului, ceea ce ridică probleme din punctul de vedere al confidențialității. Pentru a evita acest compromis, am implementat o aplicație Flutter în care datele sunt salvate doar local, interacțiunile vizibile altor utilizatori precum recenziile sunt anonime și adăugate strict de vizitatori, iar rutele turistice generate sunt individualizate prin intermediul unei rețele neurale de tip
+perceptron multi-strat (MLP, \textit{Multi-Layer Perceptron}). Modelul global inițial este pre-antrenat pe seturi de date publice, iar acesta este modificat și îmbunătățit prin tehnici de învățare federată (FL, \textit{Federated Learning}) rulate asincron pe dispozitivele clienților. Recomandările de rute combină scorul oferit de model pentru o atracție turistică cu proximitatea acesteia, iar un sistem de misiuni gamificate încurajează explorarea și
+colectarea de noi date. Printr-o simulare care include mai multe acțiuni - mai exact 600 - se confirmă funcționarea fluxului FL în mod corespunzător.}
 
-\newcommand{\AbstractEN}{The abstract has an introductory role and should engulf both a brief description of the issue at hand, as well as an overview of the obtained results and conclusions. The abstract should be formulated such that even somebody that is unfamiliar with the projects’ domain can grasp the objectives of the thesis while, at the same time, retaining a specificity level offering a bird’s eye view of the project.
-The projects’ abstract will be elaborated in both Romanian and English. The recommended size for this section is limited to 200 words for each version. Together, both versions will fit in one page.}
+\newcommand{\AbstractEN}{CultureQuest is a proximity-based mobile urban exploration platform, offering personalized recommendations for tourist and recreational attractions in a city, without the user's data leaving the device. The problem I address is that city-guide type applications offer the same suggestions to everyone regardless of interests, because personalization would typically require centrally storing a user's interaction history with
+these attractions or tracking their route, both of which raise privacy concerns. To avoid this trade-off, I developed a Flutter application where data is saved only locally, interactions visible to other users such as reviews are anonymous and can only be added by actual visitors, and the generated tourist routes are personalized through a multi-layer perceptron (MLP) neural network. The initial global model is pre-trained on public datasets,
+and it is modified and improved through federated learning (FL) techniques run asynchronously on the client devices. Route recommendations combine the model's score for a tourist attraction with its proximity, while a gamified quest system encourages exploration and data collection. A simulation that includes multiple client actions - 600, to be exact - confirms that the FL flow is working properly.}
 
 %%
 %%   Campurile aferente paginii de multumiri
@@ -305,7 +308,7 @@ Un paragraf în care fiecare dintre secțiunile următoare este prezentată în 
 
 \subsection{Serviciul client FL}
 
-\subsection{Adăugare de zgomot pentru asigurarea DP}
+\subsection{Adăugarea de zgomot pentru asigurarea DP}
 
 \subsection{Bufferul local de interacțiuni și persistența datelor}
 
@@ -319,7 +322,7 @@ Un paragraf în care fiecare dintre secțiunile următoare este prezentată în 
 
 \subsection{Serviciul de agregare}
 
-\subsection{Puncte de acces API}
+\subsection{Punctele de acces API}
 
 \subsection{Sistemul de recenzii și moderarea conținutului}
 

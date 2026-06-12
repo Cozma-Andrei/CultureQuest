@@ -34,7 +34,9 @@
   stimulente gamificate (quest-uri).
 - **2.2 Cerințe funcționale** - hartă cu obiective din apropiere, generare de
   rute, sistem de quest-uri, evaluări/recenzii, profil + sincronizare FL,
-  controale de confidențialitate.
+  controale de confidențialitate, rol de administrator pentru moderarea și
+  aprobarea conținutului generat de utilizatori (obiective, povești,
+  quest-uri, recenzii semnalate).
 - **2.3 Cerințe non-funcționale** - confidențialitate pe dispozitiv (nicio
   dată brută nu părăsește telefonul), reziliență offline (obiective stocate
   în cache), cost redus de antrenare pe dispozitiv (MLP mic), scalabilitatea
@@ -101,7 +103,10 @@
   durată de vizitare (dwell time) scalată în funcție de scorul FL.
 - **4.6 Proiectarea elementelor de gamificare** - sistemul de quest-uri și
   etichetele de engagement (deschiderea fișei obiectivului, începerea
-  navigării, finalizarea quest-ului, evaluări).
+  navigării, finalizarea quest-ului, evaluări); quest-urile trimise de
+  utilizatori obișnuiți rămân în starea "pending" până la aprobarea unui
+  administrator, în timp ce cele create de administrator sau de creatorul
+  obiectivului devin active imediat.
 - **4.7 Hartă și navigare** - geofencing, rotirea hărții pe baza
   busolei/GPS-ului.
 - **4.8 Arhitectura de confidențialitate** - ce rămâne pe dispozitiv vs. ce
@@ -112,7 +117,7 @@
   interfață includ o captură de ecran reprezentativă din aplicație)
   - 5.1.1 Serviciul client FL - forward pass + backpropagation manuală în
     Dart, limitare (clipping)
-  - 5.1.2 Adăugare de zgomot pentru asigurarea DP (zgomot Gaussian generat
+  - 5.1.2 Adăugarea de zgomot pentru asigurarea DP (zgomot Gaussian generat
     prin transformata Box-Muller)
   - 5.1.3 Bufferul local de interacțiuni și persistența datelor (cache
     bazat pe SharedPreferences, persistă la închiderea aplicației)
@@ -126,11 +131,15 @@
 - **5.2 Implementarea serviciilor *backend***
   - 5.2.1 Serviciul de agregare (`fedavg`, `clipped_fedavg`, reducerea în
     funcție de vechime, lock Redis)
-  - 5.2.2 Puncte de acces API (preluare/actualizare model, status)
+  - 5.2.2 Punctele de acces API (preluare/actualizare model, status)
   - 5.2.3 Sistemul de recenzii și moderarea conținutului - endpoint-uri de
     comentarii/evaluări pe obiective (agregarea `rating_sum`/`rating_count`);
     moderare prin OpenAI Moderation API, cu fallback local pe o listă de
-    cuvinte interzise când API-ul nu este disponibil
+    cuvinte interzise când API-ul nu este disponibil; coadă de revizuire
+    pentru administratori - obiective, povești și quest-uri trimise de
+    utilizatori rămân în starea "pending" până la aprobare/respingere, iar
+    comentariile semnalate de moderarea AI ajung într-o listă separată pentru
+    revizuire manuală (aprobare sau ștergere)
 - **5.3 Fluxul etapei de pre-antrenare** - pregătirea seturilor de date
   (Foursquare TSMC2014/TIST2015, ubicomp2013, Yelp, date sintetice;
   construcția etichetelor); antrenarea de la zero (MLP, SGD, scăderea ratei de
