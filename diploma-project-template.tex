@@ -26,6 +26,7 @@
 \counterwithout{equation}{chapter} % no chapter number in equation labels
 
 \usepackage{booktabs} % for much better looking tables
+\usepackage[section]{placeins} % don't let tables/figures float past a \section boundary
 \usepackage{url} % Useful for inserting web links nicely
 \usepackage[bookmarks,unicode,hidelinks]{hyperref}
 
@@ -99,6 +100,7 @@ COMPUTER SCIENCE AND ENGINEERING DEPARTMENT\\}
 \linespread{1.2}
 \setlength\parindent{0pt}
 \setlength\parskip{.28cm}
+\raggedbottom
 
 %% Abstract macro
 \newcommand{\AbstractPage}{
@@ -159,8 +161,8 @@ a istoricului de interacțiuni cu obiectivele sau monitorizarea traseului, ceea 
 perceptron multi-strat (MLP, \textit{Multi-Layer Perceptron}). Modelul global inițial este pre-antrenat pe seturi de date publice, iar acesta este modificat și îmbunătățit prin tehnici de învățare federată (FL, \textit{Federated Learning}) rulate asincron pe dispozitivele clienților. Recomandările de rute combină scorul oferit de model pentru o atracție turistică cu proximitatea acesteia, iar un sistem de misiuni gamificate încurajează explorarea și
 colectarea de noi date. Printr-o simulare care include mai multe acțiuni - mai exact 600 - se confirmă funcționarea fluxului FL în mod corespunzător.}
 
-\newcommand{\AbstractEN}{CultureQuest is a proximity-based mobile urban exploration platform, offering personalized recommendations for tourist and recreational attractions in a city, without the user's data leaving the device. The problem I address is that city-guide type applications offer the same suggestions to everyone regardless of interests, because personalization would typically require centrally storing a user's interaction history with
-these attractions or tracking their route, both of which raise privacy concerns. To avoid this trade-off, I developed a Flutter application where data is saved only locally, interactions visible to other users such as reviews are anonymous and can only be added by actual visitors, and the generated tourist routes are personalized through a multi-layer perceptron (MLP) neural network. The initial global model is pre-trained on public datasets,
+\newcommand{\AbstractEN}{CultureQuest is a proximity-based mobile urban exploration platform, offering personalized recommendations for tourist and recreational attractions in a city, without the user's data leaving the device. The problem I address is that city-guide type applications offer the same suggestions to everyone regardless of interests, because personalization would require centrally storing a user's interaction history with
+these attractions or tracking their route, both of which raise privacy concerns. To avoid this trade-off, I developed a Flutter application where data is saved only locally, interactions visible to other users such as reviews are anonymous and can only be added by actual visitors and the generated tourist routes are personalized through a multi-layer perceptron (MLP) neural network. The initial global model is pre-trained on public datasets,
 and it is modified and improved through federated learning (FL) techniques run asynchronously on the client devices. Route recommendations combine the model's score for a tourist attraction with its proximity, while a gamified quest system encourages exploration and data collection. A simulation that includes multiple client actions - 600, to be exact - confirms that the FL flow is working properly.}
 
 %%
@@ -228,21 +230,63 @@ Descriere pe scurt a rezultatelor obținute, eventual de ce acestea sunt importa
 \section{Structura lucrării}
 Un paragraf în care fiecare dintre secțiunile următoare este prezentată în 1-2 fraze, punând accentul pe elementele cele mai semnificative din fiecare secțiune.
 
-\chapter{Analiza Cerințelor / Motivație}
+\chapter{Analiza Cerințelor}
 
-% TODO: paragraf de prezentare a capitolului
+Capitolul de față detaliază cerințele care reies din obiectivele stabilite la 1.3: cine sunt utilizatorii și ce cazuri de utilizare trebuie acoperite (2.1), ce funcționalități rezultă de aici (2.2), ce constrângeri non-funcționale se impun (2.3) și ce rămâne, totuși, în afara domeniului de aplicare (2.4). Toate aceste cerințe stau la baza deciziilor de proiectare din Capitolul 4, fiind verificate ulterior în evaluarea din Capitolul 6.
 
 \section{Utilizatori țintă și cazuri de utilizare}
 
+Utilizatorul principal al aplicației este un turist sau un localnic care explorează un oraș (sau o zonă a acestuia), cu dorința de a vizita obiective turistice sau culturale din proximitate, adaptate intereselor proprii. Primul caz de utilizare este cel de generare de rute și suport pe parcursul urmării acestora, în care utilizatorul vede pe hartă poziția sa curentă, locurile de interes din apropiere și primește o rută care combină preferințele sale cu acestea. Mai mult, interacțiunile cu aplicația - vizite, misiuni (\textit{quest-uri}) finalizate, recenzii - determină ajustarea, prin FL, a modelului de pe dispozitiv (și, implicit, și a celui global), fără ca istoricul brut al interacțiunilor să ajungă pe server. Un al doilea caz de utilizare este cel de contribuție de conținut, în care utilizatorul poate propune obiective noi, povești, misiuni sau recenzii, toate acestea necesitând aprobarea de către alte persoane care folosesc aplicația sau de către un administrator. Prin conturile de tip administrator, relevante mai ales pentru 2.2, se aprobă sau se respinge conținutul propus de utilizatorii obișnuiți.
+
 \section{Cerințe funcționale}
+
+Pornind de la cazurile de utilizare din secțiunea anterioară, cerințele funcționale au fost sintetizate în Tabela~\ref{tab:cerinte-functionale}, fiecare cu o descriere și secțiunile din Capitolele 4-6 unde cerința este tratată. Primul grup (de la FR-1 la FR-4) sumarizează bucla principală de explorare: afișarea pe hartă a obiectivelor turistice din proximitate, generarea rutei care combină scorul modelului cu distanța față de poziția curentă, \textit{quest-urile} disponibile la obiectivele vizitate și posibilitatea de a adăuga sau vedea recenzii.
+
+Al doilea grup (de la FR-5 la FR-7) ține de personalizare și administrare: FR-5 descrie fluxul procesului FL (primirea parametrilor modelului de la server, urmată de antrenarea locală, fără ca istoricul interacțiunilor să ajungă pe server), FR-6 descrie controalele de confidențialitate (zgomot DP pe actualizări, vizibilitate asupra datelor), iar FR-7 descrie rolul de administrator (prin care conținutul propus este aprobat sau respins). Această grupare anticipează structura Capitolului 4: proiectarea FL și arhitectura de confidențialitate.
+
+\begin{table}[th]\footnotesize\linespread{1}
+\centering
+\caption{Cerințe funcționale}
+\label{tab:cerinte-functionale}
+\begin{tabular}{l >{\raggedright\arraybackslash}p{7cm} >{\raggedright\arraybackslash}p{2.8cm}}
+\textbf{ID} & \textbf{Descriere} & \textbf{Secțiune} \\\hline
+FR-1 & Obiective din proximitate pe hartă. & 4.7, 5.1.4, 6.1 \\\hline
+FR-2 & Rute personalizate: scor model (MLP) și proximitate. & 4.5, 5.1.5, 6.1 \\\hline
+FR-3 & \textit{Quest-uri} la obiectivele vizitate; puncte și progres. & 4.6, 5.1.6, 6.1 \\\hline
+FR-4 & Adăugare/vizualizare recenzii pentru obiective. & 5.2.3, 6.1 \\\hline
+FR-5 & Sincronizare model și antrenare locală, fără date colectate pe server. & 4.4, 5.1.1-.3, 5.2.1, 6.2 \\\hline
+FR-6 & Zgomot DP aplicat pe actualizări; vizibilitate asupra datelor trimise. & 4.8, 5.1.2, 6.3 \\\hline
+FR-7 & Administrator: aprobă sau respinge conținut propus (obiective, povești, \textit{quest-uri}, recenzii). & 5.2.3, 6.1 \\\hline
+\end{tabular}
+\end{table}
 
 \section{Cerințe non-funcționale}
 
+La fel ca în secțiunea 2.2, cerințele non-funcționale au fost sintetizate în Tabela~\ref{tab:cerinte-nonfunctionale}, cu aceeași structură (descriere și secțiunile din Capitolele 4-6 unde sunt tratate). Primul grup (de la NFR-1 la NFR-3) are legătură cu constrângerile impuse pe dispozitiv: NFR-1 cere ca nicio informație privată despre utilizator (exceptând lista de interese) să nu părăsească telefonul, NFR-2 cere ca obiectivele turistice să rămână disponibile și fără conexiune la internet, iar NFR-3 cere ca antrenarea locală să nu fie complexă din punct de vedere computațional pentru un telefon obișnuit (ceea ce a motivat alegerea unui model MLP de dimensiuni reduse).
+
+Al doilea grup ține de partea de \textit{backend}: NFR-4 impune ca serviciul de agregare să suporte actualizări asincrone primite de la mai mulți clienți (fără conflicte între runde), iar NFR-5 impune ca utilizatorii să primească recomandări utile încă de la început (printr-un model global pre-antrenat \cite{bonawitz2019towards} și din caracteristici bazate pe lista de arii de interes asociată fiecărui obiectiv, până când procesul FL își face efectul).
+
+\begin{table}[th]\footnotesize\linespread{1}
+\centering
+\caption{Cerințe non-funcționale}
+\label{tab:cerinte-nonfunctionale}
+\begin{tabular}{l >{\raggedright\arraybackslash}p{7cm} >{\raggedright\arraybackslash}p{2.8cm}}
+\textbf{ID} & \textbf{Descriere} & \textbf{Secțiune} \\\hline
+NFR-1 & Confidențialitate: nicio interacțiune a utilizatorului nu părăsește dispozitivul. & 4.8, 5.1.2-.3, 6.3 \\\hline
+NFR-2 & Reziliență offline: obiective turistice stocate în \textit{cache} local. & 5.1.4, 6.1 \\\hline
+NFR-3 & Cost redus de antrenare pe dispozitiv (model MLP compact). & 4.4.1, 5.1.1, 6.2.1 \\\hline
+NFR-4 & Scalabilitatea \textit{backend-ului} la actualizările asincrone. & 4.4.6, 5.2.1, 6.2.2 \\\hline
+NFR-5 & \textit{Cold start}: recomandări utile pentru utilizatori folosind modelul pre-antrenat. & 4.4.1, 5.3, 6.2.1 \\\hline
+\end{tabular}
+\end{table}
+
 \section{Domeniul de aplicare al proiectului}
 
-% TODO: rezumat capitol + tranziție spre Capitolul 3
+Cerințele funcționale și non-funcționale stabilite anterior delimitează domeniul de aplicare al proiectului: aplicația mobilă cu recomandări de rute turistice, pornind de la pre-antrenarea globală și fiind îmbunătățite prin FL. Rămâne în afara domeniului de aplicare personalizarea suplimentară la nivel de utilizator prin straturi separate ale modelului MLP (\textit{personal head}), care nu ar fi trimise către server, rezultând într-o arhitectură de tip FedPer \cite{arivazhagan2019fedper}, propusă ca direcție de lucrări viitoare, dar neimplementată în versiunea curentă.
 
-\chapter{Studiu de Piață / Soluții Existente}
+Având stabilite cerințele și limitele proiectului, Capitolul 3 trece în revistă soluțiile existente pentru explorare urbană (Google Maps, TripAdvisor, alte aplicații de tip \textit{city-guide}) și realizează o analiză comparativă între abordările centralizate și cele bazate pe FL pentru recomandări.
+
+\chapter{Soluții Existente}
 
 % TODO: paragraf de prezentare a capitolului
 
@@ -359,59 +403,6 @@ Un paragraf în care fiecare dintre secțiunile următoare este prezentată în 
 \section{Concluzii generale}
 
 \section{Direcții de cercetare și lucrări viitoare}
-
-\chapter*{Bibliografie}\addcontentsline{toc}{chapter}{Bibliografie}  
-% * <marios.choudary@gmail.com> 2018-02-28T12:07:48.730Z:
-% 
-% > BIBLIOGRAFIE
-% Am adaugat un paragraf cu cateva detalii despre folosirea citarilor bibliografice in Latex, despre folosirea lui "\cite" si despre posibilitatea folosirii bibliografiei si direct in fisierul Latex.
-% 
-% ^.
-
-\begin{itemize}
-	\item 	NU utilizați referințe la Wikipedia sau alte surse fără autor asumat.
-	\item 	Pentru referințe la articole relevante accesibile în web (descrise prin URL) se va nota la bibliografie și data accesării.
-	\item 	Mai multe detalii despre citarea referințelor din internet se pot regăsi la:
-	\begin{itemize}
-		\item	\url{http://www.writinghelp-central.com/apa-citation-internet.html}
-		\item	\url{http://www.webliminal.com/search/search-web13.html}
-	\end{itemize}
-	\item 	Note de subsol se utilizează dacă referiți un link mai puțin semnificativ o singură dată; Dacă nota este citată de mai multe ori, atunci utilizați o referință bibliografică.
-	\item 	Dacă o imagine este introdusă în text și nu este realizată de către autorul lucrării, trebuie citată sursa ei (ca notă de subsol sau referință - este de preferat utilizarea unei note de subsol).
-	\item 	Referințele se pun direct legate de text (de exemplu ``KVM [1] uses'', ``as stated by Popescu and Ionescu [12]'', etc.). Nu este recomandat să folosiți formulări de tipul ``[1] uses'', ``as stated in [12]'', ``as described in [11]'' etc..
-	\item 	Afirmațiile de forma ``are numerous'', ``have grown exponentially'', ``are among the most used'', ``are an important topic'' trebuie să fie acoperite cu citări, date concrete si analize comparative.
-	\begin{itemize}
-		\item	Mai ales în capitolele de introducere, ``state of the art'', ``related work'' sau ``background'' trebuie să vă argumentați afirmațiile prin citări. Fiți autocritici și gândiți-vă dacă afirmațiile au nevoie de citări, chiar și cele pe care le considerați evidente.
-		\item	Cea mai mare parte dintre citări vor fi în capitolele de introducere ``state of the art'', ``related work'' sau ``background''.
-	\end{itemize}
-	\item 	Toate intrările bibliografice trebuie citate în text. Nu le adăugați pur și simplu la final.
-	\item 	Nu copiați sau traduceți niciodată din surse de informație de orice tip (online, offline, cărți, etc.). Dacă totuși doriți să oferiți, prin excepție, un citat celebru - de maxim 1 frază- utilizați ghilimele și evident menționați sursa. .
-	\item 	Dacă reformulați idei sau creați un paragraf rezumat al unor idei folosind cuvintele voastre, precizați cu citare (referință bibliografică) sau cu notă de subsol sursa sau sursele de unde ați preluat ideile.
-\end{itemize}
-
-Trebuie respectat un singur standard de trimiteri bibliografice (citare), dintre următoarele alternative:
-\begin{itemize}
-	\item APA (\url{http://pitt.libguides.com/c.php?g=12108\&p=64730})
-	\item IEEE (\url{https://ieee-dataport.org/sites/default/files/analysis/27/IEEE\%20Citation\%20Guidelines.pdf}) 
-	\item Harvard (\url{https://libweb.anglia.ac.uk/referencing/harvard.htm})
-	\item Cu numerotarea referințelor în ordine alfabetică sau în ordinea apariției în text (de exemplu, stilul cu numere folosit de unele publicații ACM - \url{https://www.acm.org/publications/authors/reference-formatting}) 
-\end{itemize}
-
-În Latex este foarte ușor să folosiți referințe într-un mod corect și unitar, fie prin adăugarea unei secțiuni
-\verb!\begin{thebibliography}!
-(vezi la sfârșitul acestei secțiuni), fie printr-un fișier separat de tip bib, folosind comanda
-\verb!\bibliography{}!,
-așa cum procedăm mai jos prin folosirea fișierului ``bibliography.bib''. În orice caz, în Latex va trebui să folosiți comanda
-\verb!\cite{}!
-pentru a adăuga referințe, iar această comandă trebuie folosită direct în text, acolo unde vreți sa apară citația, ca în exemplele următoare:
-\begin{itemize}
-	\item Articol jurnal: ~\cite{article};
-	\item Articol conferință:~\cite{proc};
-	\item Carte: ~\cite{book};
-	\item Weblink: ~\cite{silva};
-\end{itemize}
-
-\textbf{Important}: în această secțiune de obicei apar doar intrările bibliografice (adică doar listarea referințelor). Citarea lor prin comanda cite și explicații legate de ele trebuie facute în secțiunile anterioare. Citarea de mai sus a fost facută aici doar pentru exemplificare.
 
 % Asa se specifica folosirea unui fisier cu referinte bibliografice:
 \bibliographystyle{plain}

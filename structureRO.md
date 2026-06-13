@@ -33,7 +33,7 @@ arhitectură din 4.1; la 1.5, un grafic din 6.2.2 (ex. `loss_curve.png`).
 - **1.6 Structura lucrării** - rezumat de 1-2 propoziții pentru fiecare
   capitol de mai jos.
 
-## Capitolul 2 - Analiza Cerințelor / Motivație
+## Capitolul 2 - Analiza Cerințelor
 - **2.1 Utilizatori țintă și cazuri de utilizare** - turist/localnic care
   explorează un oraș și dorește sugestii personalizate de obiective, rute și
   stimulente gamificate (quest-uri).
@@ -61,7 +61,7 @@ arhitectură din 4.1; la 1.5, un grafic din 6.2.2 (ex. `loss_curve.png`).
   - *Resurse:* opțional, tabel scurt pe două coloane "Inclus / Exclus din
     domeniul de aplicare".
 
-## Capitolul 3 - Studiu de Piață / Soluții Existente
+## Capitolul 3 - Soluții Existente
 - **3.1 Aplicații existente pentru explorare urbană** - Google Maps,
   TripAdvisor, aplicații de tip city-guide; modul în care acestea
   personalizează (sau nu) și modelul lor de colectare a datelor.
@@ -157,9 +157,9 @@ ecuații care justifică deciziile; fără listinguri de cod (codul efectiv merg
       efectivă e cod, vezi 5.1.1).
   - 4.4.3 Agregare asincronă și reducerea în funcție de vechime (FedAsync:
     `n_effective = n_samples/(1+staleness)`)
-    - *Resurse:* Figură - grafic nou, mic, al factorului de reducere în
-      funcție de vechime (`1/(1+staleness)`), pentru a justifica vizual
-      formula.
+    - *Resurse:* Ecuația factorului de reducere în funcție de vechime
+      (`1/(1+staleness)`) + Figură - grafic nou, mic, al acestei funcții,
+      pentru a justifica vizual formula.
   - 4.4.4 Agregare cu limitare (*Gradient Clipping*) (limitarea normei
     delta-ului împotriva actualizărilor adversariale/extreme)
     - *Resurse:* Ecuația limitării normei L2; opțional o schiță "înainte/după

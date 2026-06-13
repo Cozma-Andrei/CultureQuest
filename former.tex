@@ -191,3 +191,54 @@ Criterii pentru calificativul \textit{Bine}:
 \begin{itemize}
 	\item	Concluziile sunt corelate cu conținutul lucrării, și se oferă o imagine precisa asupra relevantei și calității rezultatelor obținute în cadrul proiectului. 
 \end{itemize}
+
+\chapter*{Bibliografie}\addcontentsline{toc}{chapter}{Bibliografie}  
+% * <marios.choudary@gmail.com> 2018-02-28T12:07:48.730Z:
+% 
+% > BIBLIOGRAFIE
+% Am adaugat un paragraf cu cateva detalii despre folosirea citarilor bibliografice in Latex, despre folosirea lui "\cite" si despre posibilitatea folosirii bibliografiei si direct in fisierul Latex.
+% 
+% ^.
+
+\begin{itemize}
+	\item 	NU utilizați referințe la Wikipedia sau alte surse fără autor asumat.
+	\item 	Pentru referințe la articole relevante accesibile în web (descrise prin URL) se va nota la bibliografie și data accesării.
+	\item 	Mai multe detalii despre citarea referințelor din internet se pot regăsi la:
+	\begin{itemize}
+		\item	\url{http://www.writinghelp-central.com/apa-citation-internet.html}
+		\item	\url{http://www.webliminal.com/search/search-web13.html}
+	\end{itemize}
+	\item 	Note de subsol se utilizează dacă referiți un link mai puțin semnificativ o singură dată; Dacă nota este citată de mai multe ori, atunci utilizați o referință bibliografică.
+	\item 	Dacă o imagine este introdusă în text și nu este realizată de către autorul lucrării, trebuie citată sursa ei (ca notă de subsol sau referință - este de preferat utilizarea unei note de subsol).
+	\item 	Referințele se pun direct legate de text (de exemplu ``KVM [1] uses'', ``as stated by Popescu and Ionescu [12]'', etc.). Nu este recomandat să folosiți formulări de tipul ``[1] uses'', ``as stated in [12]'', ``as described in [11]'' etc..
+	\item 	Afirmațiile de forma ``are numerous'', ``have grown exponentially'', ``are among the most used'', ``are an important topic'' trebuie să fie acoperite cu citări, date concrete si analize comparative.
+	\begin{itemize}
+		\item	Mai ales în capitolele de introducere, ``state of the art'', ``related work'' sau ``background'' trebuie să vă argumentați afirmațiile prin citări. Fiți autocritici și gândiți-vă dacă afirmațiile au nevoie de citări, chiar și cele pe care le considerați evidente.
+		\item	Cea mai mare parte dintre citări vor fi în capitolele de introducere ``state of the art'', ``related work'' sau ``background''.
+	\end{itemize}
+	\item 	Toate intrările bibliografice trebuie citate în text. Nu le adăugați pur și simplu la final.
+	\item 	Nu copiați sau traduceți niciodată din surse de informație de orice tip (online, offline, cărți, etc.). Dacă totuși doriți să oferiți, prin excepție, un citat celebru - de maxim 1 frază- utilizați ghilimele și evident menționați sursa. .
+	\item 	Dacă reformulați idei sau creați un paragraf rezumat al unor idei folosind cuvintele voastre, precizați cu citare (referință bibliografică) sau cu notă de subsol sursa sau sursele de unde ați preluat ideile.
+\end{itemize}
+
+Trebuie respectat un singur standard de trimiteri bibliografice (citare), dintre următoarele alternative:
+\begin{itemize}
+	\item APA (\url{http://pitt.libguides.com/c.php?g=12108\&p=64730})
+	\item IEEE (\url{https://ieee-dataport.org/sites/default/files/analysis/27/IEEE\%20Citation\%20Guidelines.pdf}) 
+	\item Harvard (\url{https://libweb.anglia.ac.uk/referencing/harvard.htm})
+	\item Cu numerotarea referințelor în ordine alfabetică sau în ordinea apariției în text (de exemplu, stilul cu numere folosit de unele publicații ACM - \url{https://www.acm.org/publications/authors/reference-formatting}) 
+\end{itemize}
+
+În Latex este foarte ușor să folosiți referințe într-un mod corect și unitar, fie prin adăugarea unei secțiuni
+\verb!\begin{thebibliography}!
+(vezi la sfârșitul acestei secțiuni), fie printr-un fișier separat de tip bib, folosind comanda
+\verb!\bibliography{}!,
+așa cum procedăm mai jos prin folosirea fișierului ``bibliography.bib''. În orice caz, în Latex va trebui să folosiți comanda
+\verb!\cite{}!
+pentru a adăuga referințe, iar această comandă trebuie folosită direct în text, acolo unde vreți sa apară citația, ca în exemplele următoare:
+\begin{itemize}
+	\item Articol jurnal: ~\cite{article};
+	\item Articol conferință:~\cite{proc};
+	\item Carte: ~\cite{book};
+	\item Weblink: ~\cite{silva};
+\end{itemize}
