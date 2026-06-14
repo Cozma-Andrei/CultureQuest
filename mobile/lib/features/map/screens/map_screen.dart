@@ -1702,10 +1702,49 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     );
   }
 
+  /// Small pill showing the on-device personalization score as a coarse
+  /// low/medium/high match category.
+  Widget _matchBadge(ThemeData theme, double score) {
+    late String label;
+    late Color color;
+    late IconData icon;
+    switch (matchLevelForScore(score)) {
+      case MatchLevel.low:
+        label = 'Low match';
+        color = Colors.grey.shade600;
+        icon = Icons.star_border;
+        break;
+      case MatchLevel.medium:
+        label = 'Medium match';
+        color = Colors.orange.shade700;
+        icon = Icons.star_half;
+        break;
+      case MatchLevel.high:
+        label = 'High match';
+        color = Colors.green.shade700;
+        icon = Icons.star;
+        break;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
+
   void _showLandmarkSheet(LandmarkModel stale) {
     final all = ref.read(mapProvider).allLandmarks;
     final l = all.where((x) => x.id == stale.id).firstOrNull ?? stale;
     final theme = Theme.of(context);
+    final matchScore = ref.read(flProvider.notifier).matchScore(l);
     setState(() => _selectedLandmarkId = l.id);
     // Weakest positive signal: user was curious enough to open the sheet
     ref.read(flProvider.notifier).recordEngagement(l, flLabelSheetOpened);
@@ -1739,6 +1778,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 Text('${l.visitCount}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
               ],
             ]),
+            if (matchScore != null) ...[
+              const SizedBox(height: 8),
+              _matchBadge(theme, matchScore),
+            ],
             const SizedBox(height: 12),
             Text(l.description, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             if (l.openingHours != null && l.openingHours!.isNotEmpty) ...[
@@ -1992,6 +2035,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
 
   void _showProximitySheet(LandmarkModel l) {
     final theme = Theme.of(context);
+    final matchScore = ref.read(flProvider.notifier).matchScore(l);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -2050,6 +2094,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                 ]),
               ),
             ]),
+            if (matchScore != null) ...[
+              const SizedBox(height: 10),
+              _matchBadge(theme, matchScore),
+            ],
             const SizedBox(height: 16),
             Text('About', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),

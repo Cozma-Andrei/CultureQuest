@@ -219,6 +219,27 @@ class FLClientService {
     return res.data as Map<String, dynamic>;
   }
 
+  // Inference
+
+  /// Forward pass only, with the current weights - used to show a
+  /// personalization "match" indicator for a landmark. Does not touch
+  /// `_buffer` or run backprop.
+  double predictScore(List<double> features) {
+    final w1 = _reshape(_weights[0], 32, _inputDim);
+    final b1 = _weights[1];
+    final w2 = _reshape(_weights[2], 16, 32);
+    final b2 = _weights[3];
+    final w3 = _reshape(_weights[4], 1, 16);
+    final b3 = _weights[5];
+
+    final z1 = _matVec(w1, features, b1);
+    final a1 = z1.map(_relu).toList();
+    final z2 = _matVec(w2, a1, b2);
+    final a2 = z2.map(_relu).toList();
+    final z3 = _matVec(w3, a2, b3);
+    return _sigmoid(z3[0]);
+  }
+
   // MLP forward + backprop
 
   // Local training: plain SGD on the local loss for a few epochs, the

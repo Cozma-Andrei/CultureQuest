@@ -19,6 +19,16 @@ const flLabelQuestCompleted   = 0.9;
 
 const _autoRoundThreshold = 15;
 
+/// Coarse low/medium/high category for a raw [0,1] FL personalization score,
+/// shown to the user as a "match" label on a landmark's popup.
+enum MatchLevel { low, medium, high }
+
+MatchLevel matchLevelForScore(double score) {
+  if (score < 0.4) return MatchLevel.low;
+  if (score < 0.7) return MatchLevel.medium;
+  return MatchLevel.high;
+}
+
 class FLState {
   final int round;
   final bool isTraining;
@@ -134,6 +144,15 @@ class FLNotifier extends StateNotifier<FLState> with WidgetsBindingObserver {
     );
     _client.recordEngagement(landmark.id, f, label);
     _updateState();
+  }
+
+  /// On-device personalization score for [landmark] in [0,1], or null if the
+  /// global model weights haven't been fetched yet.
+  double? matchScore(LandmarkModel landmark) {
+    if (!_client.hasWeights) return null;
+    final mapState = _ref.read(mapProvider);
+    final rank = _relativeRank(landmark, mapState.position, mapState.landmarks);
+    return _client.predictScore(_features(landmark, relativeDistanceRank: rank));
   }
 
   /// Explicit star rating: overrides any engagement label for this landmark.

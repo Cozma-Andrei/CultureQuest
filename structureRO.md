@@ -110,7 +110,10 @@ arhitectură din 4.1; la 1.5, un grafic din 6.2.2 (ex. `loss_curve.png`).
       documentația OSRM (`footnotesRO.md`).
   - 3.5.4 Perceptron multi-strat (MLP, *Multi-Layer Perceptron*) - propriu
     vs. TFLite/PyTorch Mobile (dimensiunea modelului, fără dependență de
-    runtime)
+    runtime). Modelul nu este interogat doar la antrenare, ci și pentru
+    afișare: o trecere înainte (*forward pass*) per obiectiv, de fiecare dată
+    când utilizatorul deschide fișa unui obiectiv. Asta întărește alegerea
+    unei implementări proprii, ușoare.
     - *Resurse:* Tabel comparativ MLP propriu vs. TFLite vs. PyTorch Mobile,
       pe coloane: dimensiune model, dependențe de runtime, compatibilitate
       cross-platform (Flutter) - tabel decizional, justifică direct alegerea
@@ -146,11 +149,18 @@ ecuații care justifică deciziile; fără listinguri de cod (codul efectiv merg
     completă a `db.svg` (toate câmpurile) merge în Anexe.*
 - **4.4 Proiectarea sistemului FL**
   - 4.4.1 Arhitectura modelului (MLP 22 -> 32 -> 16 -> 1, ieșire sigmoid,
-    detalierea vectorului de caracteristici)
+    detalierea vectorului de caracteristici); ieșirea (scor în [0,1]) este
+    calculată separat pentru fiecare obiectiv din apropiere - același model,
+    dar cu un vector de caracteristici diferit per obiectiv - și convertită
+    într-o categorie de potrivire (scăzută/medie/ridicată), afișată pe fișa
+    obiectivului.
     - *Resurse:* Figură - diagramă a arhitecturii MLP (straturi 22->32->16->1,
       activare, ieșire sigmoid). Tabel - cele 22 de caracteristici de intrare,
       grupate pe categorii (sursă: blocul de comentarii deja existent în
       `backend/app/federated/model.py:4-29`, de transformat în tabel).
+      Pragurile scor -> categorie:
+      `mobile/lib/features/federated/providers/fl_provider.dart:24-29`
+      (`matchLevelForScore`).
   - 4.4.2 Antrenarea locală (procedura client FedAvg: 5 epoci locale, coborâre
     pe gradient stocastică - Stochastic Gradient Descent, SGD)
     - *Resurse:* Ecuația actualizării SGD (fără listing - implementarea
@@ -176,7 +186,9 @@ ecuații care justifică deciziile; fără listinguri de cod (codul efectiv merg
       agregare, eliberare) pentru a justifica ordinea.
 - **4.5 Fluxul de generare a rutelor** - filtrare cu scor FL x 0.8 +
   proximitate x 0.2, criteriu de departajare pe baza potrivirii intereselor,
-  durată de vizitare (dwell time) scalată în funcție de scorul FL.
+  durată de vizitare (dwell time) scalată în funcție de scorul FL; același
+  scor per obiectiv stă și la baza categoriei de potrivire afișate pe fișa
+  obiectivului (4.4.1).
   - *Resurse:* Figură - diagramă de flux cu **săgeți numerotate** (1: filtrare
     candidați, 2: scor FL x0.8 + proximitate x0.2, 3: departajare după
     interese, 4: scalare dwell time, 5: rută finală). Notă: blend-ul de scor
@@ -196,6 +208,10 @@ ecuații care justifică deciziile; fără listinguri de cod (codul efectiv merg
     de engagement (sursă: `mobile/lib/features/federated/providers/
     fl_provider.dart:12-18` - sheetOpened=0.3, questAttempted=0.5,
     questCompleted=0.9, plus eticheta din evaluări).
+  - *Notă terminologie:* "etichetele de engagement" de aici sunt țintele de
+    antrenare (ce ar trebui să prezică modelul) - nu trebuie confundate cu
+    categoria de potrivire (scăzută/medie/ridicată) din 4.4.1, care este
+    ieșirea modelului, afișată utilizatorului.
 - **4.7 Hartă și navigare** - geofencing, rotirea hărții pe baza
   busolei/GPS-ului.
   - *Resurse:* opțional, schiță mică a zonelor de geofencing (cercuri
@@ -221,20 +237,22 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
 - **5.1 Implementarea aplicației mobile** (subsecțiunile orientate spre
   interfață includ o captură de ecran reprezentativă din aplicație)
   - 5.1.1 Serviciul client FL - forward pass + backpropagation manuală în
-    Dart, limitare (clipping)
+    Dart, limitare (clipping); aceeași trecere înainte este reutilizată, fără
+    backpropagation, în `predictScore` (`fl_client_service.dart:227-241`),
+    pentru a calcula scorul de potrivire afișat pe fișa unui obiectiv (4.4.1)
     - *Resurse:* **Listing 1** - `mobile/lib/features/federated/services/
-      fl_client_service.dart` (forward pass ~243-249 + backprop/clipping
-      ~251-281; selectează ~25-30 linii din 251-281). Justifică decizia de
+      fl_client_service.dart` (forward pass ~264-270 + backprop/clipping
+      ~272-302; selectează ~25-30 linii din 272-302). Justifică decizia de
       implementare manuală în Dart (fără framework ML) și limitarea
-      gradientului. *Varianta completă a `_trainLocally` (227-291, 65 linii)
+      gradientului. *Varianta completă a `_trainLocally` (248-312, 65 linii)
       -> Anexe.*
   - 5.1.2 Adăugarea de zgomot pentru asigurarea DP (zgomot Gaussian generat
     prin transformata Box-Muller)
     - *Resurse:* **Listing 2** - `_addDPNoise`,
-      `fl_client_service.dart:327-344` (~18 linii, încadrare perfectă în
+      `fl_client_service.dart:348-365` (~18 linii, încadrare perfectă în
       15-30). Justifică decizia de Local-DP client-side (serverul nu vede
       niciodată o actualizare curată). Transformata Box-Muller
-      (`_gaussian`, 347-352) - notă de subsol, conform `footnotesRO.md`
+      (`_gaussian`, 368-373) - notă de subsol, conform `footnotesRO.md`
       (5.1.2).
   - 5.1.3 Bufferul local de interacțiuni și persistența datelor (cache
     bazat pe SharedPreferences, persistă la închiderea aplicației)
@@ -378,7 +396,9 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
 - **7.1 Concluzii generale** - obiectivele revizuite în raport cu ce a fost
   livrat.
   - *Resurse:* opțional, tabel scurt "obiectiv (din 1.3) -> rezultat obținut
-    -> secțiune relevantă", ca recapitulare - nu introduce date noi.
+    -> secțiune relevantă", ca recapitulare - nu introduce date noi. Pentru
+    obiectivul (b) din 1.3, cele două rezultate vizibile sunt ruta generată
+    (4.5) și categoria de potrivire afișată pe fișa obiectivului (4.4.1).
 - **7.2 Direcții de cercetare și lucrări viitoare** - "personal head" per
   utilizator, agregare de tip buffer (FedBuff) dacă participarea clienților se
   grupează în timp, schimbări de model/arhitectură mai ample, colectare de
@@ -440,7 +460,7 @@ ocupă mai mult de o pagină și ar întrerupe firul textului dacă ar fi inline
     4.3); în text rămâne doar versiunea simplificată/la nivel înalt.
 - **Fragmente de cod extinse**
   - `_trainLocally` complet,
-    `mobile/lib/features/federated/services/fl_client_service.dart:227-291`
+    `mobile/lib/features/federated/services/fl_client_service.dart:248-312`
     (65 linii) - varianta extinsă a Listing-ului 1 din 5.1.1 (forward pass +
     backpropagation + clipping, integral).
   - opțional, `proximity_service.dart` complet (66 linii) - varianta extinsă
@@ -456,8 +476,9 @@ ocupă mai mult de o pagină și ar întrerupe firul textului dacă ar fi inline
 - **Capturi de ecran suplimentare**
   - Fluxul de onboarding (`onboarding_screen.dart`, `interests_screen.dart`).
   - Ecranele de autentificare (`login_screen.dart`, `register_screen.dart`).
-  - Panoul de administrare (`_AdminSubmissionsSheet`,
-    `map_screen.dart:3573-3806`) - cele 5 tab-uri de moderare.
+  - Panoul de administrare (`_AdminSubmissionsSheet` +
+    `_AdminSubmissionsSheetState`, `map_screen.dart:3621-4249`) - cele 5
+    tab-uri de moderare.
   - Stări alternative/cazuri limită neprezentate în 5.1 (ex. ecran offline,
     erori de rețea).
 - **Fișiere de configurare/build**
