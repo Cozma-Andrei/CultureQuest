@@ -63,12 +63,12 @@ arhitectură din 4.1; la 1.5, un grafic din 6.2.2 (ex. `loss_curve.png`).
 
 ## Capitolul 3 - Soluții Existente
 - **3.1 Aplicații existente pentru explorare urbană** - Google Maps,
-  TripAdvisor, aplicații de tip city-guide; modul în care acestea
+  TripAdvisor, GetYourGuide, Organic Maps; modul în care acestea
   personalizează (sau nu) și modelul lor de colectare a datelor.
-  - *Resurse:* Tabel comparativ Google Maps / TripAdvisor / city-guide generic
-    / CultureQuest, pe coloane: personalizare, model de colectare a datelor,
-    ML on-device, gamificare. Sursele pentru rândurile altor aplicații sunt
-    notele de subsol din `footnotesRO.md` (3.1).
+  - *Resurse:* Tabel comparativ Google Maps / TripAdvisor / GetYourGuide /
+    Organic Maps / CultureQuest, pe coloane: personalizare, model de
+    colectare a datelor, ML on-device, gamificare. Sursele pentru rândurile
+    altor aplicații sunt notele de subsol din `footnotesRO.md` (3.1).
 - **3.2 Analiză comparativă între abordările centralizate și învățarea
   federată (FL, *Federated Learning*) pentru recomandări** - filtrare
   colaborativă/bazată pe conținut cu date stocate pe server vs. FL;
@@ -401,8 +401,9 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
     (4.5) și categoria de potrivire afișată pe fișa obiectivului (4.4.1).
 - **7.2 Direcții de cercetare și lucrări viitoare** - "personal head" per
   utilizator, agregare de tip buffer (FedBuff) dacă participarea clienților se
-  grupează în timp, schimbări de model/arhitectură mai ample, colectare de
-  date FL de la utilizatori reali la scară mare.
+  grupează în timp, posibilitatea de a posta poze pentru obiective (extensie a
+  sistemului de recenzii/moderare, 5.2.3), colectare de date FL de la
+  utilizatori reali la scară mare.
 
 ---
 
@@ -435,7 +436,7 @@ bibtex și locațiile surselor se află în `bibliography_sourcesRO.md`.
 | Adomavicius, G., & Tuzhilin, A. (2005). Toward the Next Generation of Recommender Systems: A Survey of the State-of-the-Art and Possible Extensions. *IEEE Transactions on Knowledge and Data Engineering*, 17(6), 734-749. | Survey fundamental al sistemelor de recomandare - clasifică abordările în filtrare bazată pe conținut, filtrare colaborativă și hibride; fundamentează analiza comparativă dintre abordările centralizate de recomandare și FL. | 3.2 |
 | Gavalas, D., Konstantopoulos, C., Mastakas, K., & Pantziou, G. (2014). Mobile recommender systems in tourism. *Journal of Network and Computer Applications*, 39, 319-333. | Context pentru apariția și funcționarea aplicațiilor mobile de explorare/turism de tip city-guide (Google Maps, TripAdvisor) și pentru personalizarea bazată pe context/locație. | 1.1, 3.1 |
 | Arivazhagan, M. G., Aggarwal, V., Singh, A. K., & Choudhary, S. (2019). Federated Learning with Personalization Layers. *arXiv:1912.00818*. | FedPer - împarte modelul în straturi de bază comune (agregate la nivel federat prin FedAvg) și straturi de personalizare locale (păstrate pe dispozitiv, niciodată încărcate); arhitectura propusă pentru "personal head"-ul din lucrările viitoare. | 2.4, 7.2 |
-| Bonawitz, K., Ivanov, V., Kreuter, B., Marcedone, A., McMahan, H. B., Patel, S., Ramage, D., Segal, A., & Seth, K. (2017). Practical Secure Aggregation for Privacy-Preserving Machine Learning. *ACM CCS 2017*. | SecAgg - discutat ca protocol complementar, neimplementat încă (serverul vede doar suma actualizărilor). | 4.8, 7.2 |
+| Bonawitz, K., Ivanov, V., Kreuter, B., Marcedone, A., McMahan, H. B., Patel, S., Ramage, D., Segal, A., & Seth, K. (2017). Practical Secure Aggregation for Privacy-Preserving Machine Learning. *ACM CCS 2017*. | SecAgg - discutat ca protocol complementar, neimplementat încă (serverul vede doar suma actualizărilor). | 4.8 |
 | Nguyen, J., Malik, K., Zhan, H., Yousefpour, A., Rabbat, M., Malek, M., & Huba, D. (2022). Federated Learning with Buffered Asynchronous Aggregation (FedBuff). *arXiv:2106.06639*. | Agregare asincronă cu buffer - considerată o cale de mijloc între FedAvg sincron și varianta complet asincronă; marcată ca lucrare viitoare. | 3.3, 7.2 |
 
 ### B. Seturi de Date

@@ -33,6 +33,11 @@ Nicio notă de subsol anticipată - conținut specific proiectului.
     adaugă data accesării).
   - TripAdvisor - pagina despre cum funcționează recomandările/politica de
     confidențialitate (verifică URL-ul exact și adaugă data accesării).
+  - GetYourGuide - pagina despre cum funcționează recomandările/politica de
+    confidențialitate (verifică URL-ul exact și adaugă data accesării).
+  - Organic Maps - pagina oficială/depozitul de cod, privind politica de
+    confidențialitate ("no tracking, no data collection") (verifică URL-ul
+    exact și adaugă data accesării).
   - Notă: acestea acoperă și lacuna 1.1/3.1 identificată în auditul de
     bibliografie - sunt dovada citată pentru "personalizarea presupune
     încărcarea istoricului pe server".
@@ -102,7 +107,7 @@ clienților întârziați" (straggler problem, 6.4) e acoperită de referințe
 bibliografice (vezi auditul).
 
 ## Capitolul 7 - Concluzii
-Nicio notă de subsol anticipată - FedPer/FedBuff/SecAgg (7.2) au deja
+Nicio notă de subsol anticipată - FedPer/FedBuff (7.2) au deja
 referințe bibliografice.
 
 ## Anexe

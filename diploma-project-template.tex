@@ -157,13 +157,13 @@ COMPUTER SCIENCE AND ENGINEERING DEPARTMENT\\}
 %%
 %%   Campurile aferente rezumatului
 %%
-\newcommand{\AbstractRO}{CultureQuest este o platformă mobilă de explorare urbană bazată pe proximitate, oferind recomandări personalizate legate de obiectivele turistice și recreative dintr-un oraș, fără ca datele utilizatorului să părăsească dispozitivul. Problema pe care o tratez este că aplicațiile de tip \textit{city-guide} oferă aceleași sugestii tuturor, indiferent de interese, pentru că personalizarea ar presupune salvarea centralizată
+\newcommand{\AbstractRO}{CultureQuest este o platformă mobilă de explorare urbană bazată pe proximitate, oferind recomandări personalizate legate de obiectivele turistice și recreative dintr-un oraș, fără ca datele utilizatorului să părăsească dispozitivul. Problema pe care o tratez este că aplicațiile de tip \textit{city-guide} fie oferă aceleași sugestii tuturor, indiferent de interese, fie personalizează recomandările prin salvarea centralizată
 a istoricului de interacțiuni cu obiectivele sau monitorizarea traseului, ceea ce ridică probleme din punctul de vedere al confidențialității. Pentru a evita acest compromis, am implementat o aplicație Flutter în care datele sunt salvate doar local, interacțiunile vizibile altor utilizatori precum recenziile sunt anonime și adăugate strict de vizitatori, iar rutele turistice generate sunt individualizate prin intermediul unei rețele neurale de tip
 perceptron multi-strat (MLP, \textit{Multi-Layer Perceptron}). Modelul global inițial este pre-antrenat pe seturi de date publice, iar acesta este modificat și îmbunătățit prin tehnici de învățare federată (FL, \textit{Federated Learning}) rulate asincron pe dispozitivele clienților. Recomandările de rute combină scorul oferit de model pentru o atracție turistică cu proximitatea acesteia, iar un sistem de misiuni gamificate încurajează explorarea și
 colectarea de noi date. Printr-o simulare care include mai multe acțiuni - mai exact 600 - se confirmă funcționarea fluxului FL în mod corespunzător.}
 
-\newcommand{\AbstractEN}{CultureQuest is a proximity-based mobile urban exploration platform, offering personalized recommendations for tourist and recreational attractions in a city, without the user's data leaving the device. The problem I address is that city-guide type applications offer the same suggestions to everyone regardless of interests, because personalization would require centrally storing a user's interaction history with
-these attractions or tracking their route, both of which raise privacy concerns. To avoid this trade-off, I developed a Flutter application where data is saved only locally, interactions visible to other users such as reviews are anonymous and can only be added by actual visitors and the generated tourist routes are personalized through a multi-layer perceptron (MLP) neural network. The initial global model is pre-trained on public datasets,
+\newcommand{\AbstractEN}{CultureQuest is a proximity-based mobile urban exploration platform, offering personalized recommendations for tourist and recreational attractions in a city, without the user's data leaving the device. The problem I address is that city-guide type applications either offer the same suggestions to all users, regardless of interests, or personalize recommendations by centrally storing a user's interaction history with
+landmarks or by tracking their route, both of which raise privacy concerns. To avoid this trade-off, I developed a Flutter application where data is saved only locally, interactions visible to other users such as reviews are anonymous and can only be added by actual visitors and the generated tourist routes are personalized through a multi-layer perceptron (MLP) neural network. The initial global model is pre-trained on public datasets,
 and it is modified and improved through federated learning (FL) techniques run asynchronously on the client devices. Route recommendations combine the model's score for a tourist attraction with its proximity, while a gamified quest system encourages exploration and data collection. A simulation that includes multiple client actions - 600, to be exact - confirms that the FL flow is working properly.}
 
 %%
@@ -306,9 +306,33 @@ Având stabilite cerințele și limitele proiectului, Capitolul 3 trece în revi
 
 \chapter{Soluții Existente}
 
-% TODO: paragraf de prezentare a capitolului
+Înainte de proiectarea propriu-zisă a soluției, acest capitol analizează contextul în care se înscrie CultureQuest. Aplicațiile de explorare urbană existente oferă un grad bun de personalizare a recomandărilor, însă acestea se bazează pe sisteme centralizate de colectare a datelor (3.1), de unde și comparația cu abordările bazate pe FL (3.2) și cu stadiul actual al cercetării din domeniu, folosit pentru a poziționa CultureQuest în cadrul soluțiilor FL (3.3). Pe baza acestei analize, capitolul explică de ce o parte dintre cele mai cunoscute variante de algoritmi FL nu se potrivesc \textit{design-ului} asincron al platformei (3.4) și justifică restul tehnologiilor folosite în implementare (3.5).
 
 \section{Aplicații existente pentru explorare urbană}
+
+Platformele mobile de recomandare pentru turiști \cite{gavalas2014mobile} oferă un anumit nivel de personalizare bazat pe istoricul de activitate al utilizatorului, stocat și procesat pe serverele furnizorului. Google Maps generează, de exemplu, recomandări pe baza istoricului de locații, a căutărilor și a evaluărilor asociate contului Google\footnote{Google, pagina oficială despre recomandările personalizate. \url{https://support.google.com/websearch/answer/17025248?hl=en} (accesat 19.06.2026).}. TripAdvisor merge pe o logică asemănătoare, prin faptul că sugestiile de obiective și restaurante sunt adaptate pe baza recenziilor citite, a căutărilor anterioare și a locațiilor vizitate, tot prin contul de utilizator, procesat central\footnote{TripAdvisor, pagina oficială despre funcționarea recomandărilor/politica de confidențialitate. \url{https://tripadvisor.mediaroom.com/US-privacy-policy} (accesat 19.06.2026).}. În ambele cazuri, personalizarea funcționează doar pentru că acest istoric de interacțiuni ajunge să fie analizat pe server, nu pe dispozitivul utilizatorului.
+
+Pe lângă aceste platforme axate pe navigare, există și aplicații specializate în activități turistice legate de rezervări, precum GetYourGuide, care recomandă tururi cu ghizi, bilete și experiențe pe baza destinației căutate și a istoricului de căutări sau rezervări al utilizatorului, tot stocat și procesat central\footnote{GetYourGuide, pagina oficială despre cum funcționează recomandările și politica de confidențialitate. \url{https://www.getyourguide.com/c/privacy-policy} (accesat 19.06.2026).}. Spre deosebire de Google Maps sau TripAdvisor, accentul este pus pe activități plătite și predefinite, nu pe explorarea liberă a orașului, așa că nu există rute generate dinamic în funcție de poziția utilizatorului. Dincolo de aceste diferențe, toate trei se bazează pe același principiu - ML centralizat, antrenat pe date de la un număr mare de utilizatori.
+
+La polul opus se situează aplicațiile axate pe confidențialitate, precum Organic Maps, un proiect \textit{open-source} bazat pe date de la OpenStreetMap, fără cont de utilizator și fără colectare de date\footnote{Organic Maps, pagina oficială - „no tracking, no data collection”. \url{https://organicmaps.app/privacy/} (accesat 19.06.2026).}. Aici personalizarea nu există, iar toți utilizatorii dintr-o zonă văd același set de obiective, indiferent de interese, pentru că nu există niciun istoric din care acestea să poată fi accesate. Între cele două extreme - fie personalizare cu date colectate central, fie confidențialitate fără personalizare - se situează CultureQuest, unde scorul de personalizare este calculat prin FL, fără ca datele brute să părăsească dispozitivul. Toate aceste cazuri sunt adunate în tabelul~\ref{tab:apps-comparativ}.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Comparație între aplicații existente de explorare urbană și CultureQuest}
+\label{tab:apps-comparativ}
+\begin{tabular}{lllll}
+\toprule
+Aplicație & Personalizare & Colectare date & ML local & Gamificare \\
+\midrule
+Google Maps & Da & Centralizat & Nu & Nu \\
+TripAdvisor & Da & Centralizat & Nu & Limitată \\
+GetYourGuide & Da & Centralizat & Nu & Nu \\
+Organic Maps & Nu & Fără & Nu & Nu \\
+CultureQuest & Da & Local & Da & Da \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Analiză comparativă între abordările centralizate și învățarea federată pentru recomandări}
 
