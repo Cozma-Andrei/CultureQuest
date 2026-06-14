@@ -41,6 +41,6 @@ mobile/assets/models/*.tflite
 *.out
 *.synctex.gz
 *.toc
-style*.md
-thesis*.md
+# style*.md
+# thesis*.md
 node_modules
