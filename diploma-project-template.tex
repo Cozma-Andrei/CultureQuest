@@ -6,6 +6,7 @@
 \usepackage[utf8]{inputenc} % pentru suport diacritice
 \usepackage[romanian]{babel} % setări pentru limba română 
 \renewcommand\familydefault{\sfdefault} % sans serif
+\addto\captionsromanian{\renewcommand{\tablename}{Tabelul}}
 
 \usepackage[margin=2.54cm]{geometry}	% dimensiuni pagină și margini
 \usepackage{graphicx} % support the \includegraphics command and options
@@ -191,59 +192,76 @@ and it is modified and improved through federated learning (FL) techniques run a
 
 
 \chapter{Introducere}\pagestyle{fancy}
-% * <marios.choudary@gmail.com> 2018-02-28T11:38:18.106Z:
-% 
-% > INTRODUCERE
-% Am scos de aici referintele la font pentru a nu mai fi dependenti de Calibri. Personal, nici nu sunt sigur ca ajuta prea mult aceasta recomandare si mi se pare bun font-ul default din Latex (Computer Modern). Daca sunteti de-acord, va rog sa stergeti liniile comentate de mai jos, precum si cele referitoare la fontul Calibri din restul documentului.
-% 
-% ^.
-Parametrii de formatare recomandați pentru lucrare: 
-\begin{itemize}
- %\item Font recomandat: Calibri; Dimensiune font: 12; 
- \item Dimensiune font: 12; 
- \item Spațiere între linii: 1,5; Spațiere după paragraf: 8pt;
- \item Stil: Justified;
- \item Dimensiune pagină: A4; Margini: 2,54cm/ 2,54cm/ 2,54cm/ 2,54cm;
- %\item Heading1: Calibri, 14, bold, all caps;
- %\item Heading2: Calibri, 14, bold;
- %\item Heading3: Calibri, 12. 
- %\item Font pentru formule: Cambria Math, 12.
- \item Heading1: 14, bold, all caps;
- \item Heading2: 14, bold;
- \item Heading3: 12. 
- \item Font size pentru formule: 12.
-\end{itemize}
-În cadrul introducerii, este necesară abordarea următoarelor puncte care reprezintă de fapt familiarizarea cititorului (comisia, alți colegi sau experți în domeniu) cu tema proiectului, soluția propusa și cuprinsul/structura lucrării. Deși introducerea poate conține și unele elemente mai generale, se recomandă păstrarea unui limbaj tehnic, specific audienței care va citi lucrarea.
 
-În cadrul capitolelor următoare, veți regăsi o serie notații de forma \dezvoltare, \cercetare. Acest tip de formatare este utilizat exclusiv în acest template pentru a marca sfaturi și cerințe specifice pentru lucrări de diploma cu specific diferit. În pregătirea documentului vostru, nu veți utiliza aceste marcaje. 
-Elementele pe care trebuie să le abordați în introducere sunt descrise în cadrul subcapitolelor de mai jos. 
+Acest capitol prezintă contextul în care se situează proiectul și problema care îl motivează (1.1, 1.2), obiectivele propuse (1.3), o privire de ansamblu asupra soluției dezvoltate (1.4) și a rezultatelor obținute (1.5), precum și modul în care este organizată restul lucrării (1.6).
+
 \section{Context}
-O scurtă introducere a proiectului, motivație, explicație de ce este relevant domeniul proiectului.
-\section{Definirea problemei} 
-Care este problema pe care proiectul o va rezolva.
+
+Telefoanele mobile au devenit, în ultimii ani, principalul instrument prin care utilizatorii interacționează cu mediul din jurul lor, iar aplicațiile mobile bazate pe locație - de la Google Maps, TripAdvisor și GetYourGuide, la diverse aplicații de tip \textit{city-guide} - au devenit principala modalitate prin care turiștii și localnicii descoperă obiective turistice și culturale dintr-un oraș și primesc recomandări din ce în ce mai adaptate propriilor interese \cite{gavalas2014mobile}.
+
+Pentru a oferi recomandări personalizate, aceste aplicații se bazează pe colectarea și procesarea centralizată a istoricului de interacțiuni al utilizatorului - locurile vizitate, recenziile adăugate, timpul petrecut în diverse locații - lucru care ridică probleme de confidențialitate, întrucât utilizatorul pierde controlul asupra modului în care îi sunt folosite și stocate datele legate de comportament.
+
+Învățarea federată (FL, \textit{Federated Learning}) apare ca alternativă la acest model centralizat: modelul este antrenat local, pe dispozitivul utilizatorului, folosind datele acestuia, iar către server sunt trimise doar actualizările rezultate, nu datele brute, pentru a fi agregate într-un model global. FL este deja folosită la scară destul de mare în sisteme de producție \cite{bonawitz2019towards}, ceea ce motivează aplicarea ei și în cadrul acestei platforme, pentru a oferi recomandări de rute turistice fără a compromite confidențialitatea clienților.
+
+\section{Definirea problemei}
+
+Majoritatea aplicațiilor de explorare urbană dezvoltate oferă, în absența unui profil construit din acțiunile turiștilor pe platformă, aceleași rute tuturor, indiferent de interesele fiecăruia, chiar dacă acestea sunt legate de artă, gastronomie, natură sau alte evenimente culturale. Această abordare generică este mai simplă de dezvoltat și de întreținut, însă nu ține cont de faptul că două persoane care vizitează același oraș pot avea preferințe complet diferite în ceea ce privește modul în care doresc să îl exploreze.
+
+Varianta prin care o aplicație devine personalizată presupune, de regulă, ca istoricul de interacțiuni al utilizatorului să fie încărcat și procesat pe un server central, exact tipul de practică care aduce în discuție problemele de confidențialitate menționate mai sus. Utilizatorului i se prezintă, astfel, un compromis: fie acceptă recomandări generice, fie acceptă ca datele sale comportamentale să fie colectate central pentru a primi recomandări adaptate intereselor sale - iar acest compromis este punctul de plecare al proiectului de față.
+
 \section{Obiective}
-Care sunt obiectivele proiectului/soluției/abordării/ideii; Ce creșteri sau evoluții determină rezolvarea proiectului.
-\section{Soluția propusă} 
-Descrierea pe scurt a soluției implementate; ce abordare este propusă (nu detalierea utilitarelor și a tehnologiilor, ci abordarea și ideea propusă de către autor).
+
+Pornind de la acest compromis, proiectul de față își propune să arate că personalizarea și păstrarea confidențialității nu se exclud reciproc, prin trei obiective principale:
+
+\begin{enumerate}[label=(\alph*)]
+\item O aplicație mobilă prin care utilizatorul poate descoperi obiective culturale dintr-un oraș printr-o explorare bazată pe proximitate, cu un sistem de \textit{quest-uri} și puncte obținute pentru interacțiunile pe platformă, care îl încurajează să viziteze locuri noi.
+
+\item Personalizarea recomandărilor de rute pentru fiecare utilizator, fără ca datele acestuia - istoricul de interacțiuni, locațiile vizitate - să părăsească dispozitivul.
+
+\item Implementarea unui flux complet de FL: pre-antrenarea modelului global, ajustarea fină (\textit{fine-tuning}), antrenarea locală prin FedAvg \cite{mcmahan2017fedavg} și agregarea asincronă a actualizărilor primite de la clienți, cu garanții de confidențialitate.
+\end{enumerate}
+
+\section{Soluția propusă}
+
+Soluția dezvoltată este o aplicație mobilă realizată în Flutter, prin care utilizatorul poate vedea pe hartă obiectivele turistice și evenimentele din apropiere. Pe lângă explorare, aplicația oferă un sistem de \textit{quest-uri}, care încurajează vizitarea unor obiective noi, dar și posibilitatea de a lăsa recenzii, povești sau chiar alte \textit{quest-uri} pentru locurile vizitate - tot ce adaugă utilizatorii devine, în timp, parte din imaginea pe care comunitatea o are despre fiecare atracție.
+
+Pentru personalizare, fiecare utilizator are pe dispozitiv un model mic, un perceptron multi-strat (MLP, \textit{Multi-Layer Perceptron}) cu un strat de intrare de 22 de caracteristici, două straturi ascunse (32 și 16 neuroni) și un neuron de ieșire, care reprezintă un scor de recomandare pentru fiecare obiectiv. Pe baza acestui scor, fiecărui obiectiv i se asociază o etichetă care arată cât de recomandat este pentru utilizator, în funcție de interesele acestuia, de ora curentă, de tipul locului etc., iar la generarea rutei, scorul fiecărui obiectiv este combinat cu distanța față de poziția curentă. Modelul global inițial este pre-antrenat cu ajutorul unor seturi de date din mediul online, apoi antrenat pe dispozitiv prin FL, iar \textit{backend-ul} (FastAPI, MongoDB, Redis) coordonează învățarea asincronă.
+
 \section{Rezultatele obținute}
-Descriere pe scurt a rezultatelor obținute, eventual de ce acestea sunt importante față de alte soluții sau studii.
+
+La nivel general, rezultatul este o aplicație Flutter funcțională, care reunește harta cu obiective și evenimente din apropiere, generarea de rute personalizate și sistemul de \textit{quest-uri}. Personalizarea descrisă în secțiunea anterioară este vizibilă direct în aplicație, pentru fiecare obiectiv din apropiere și în cadrul rutelor generate.
+
+Pe partea de FL, modelul de pe dispozitiv pornește de la o variantă a modelului global trecută și prin etapa de \textit{fine-tuning}, iar antrenarea locală se face prin FedAvg. Agregarea pe server este asincronă, cu o reducere în funcție de vechimea (\textit{staleness discount}) actualizărilor venite de la clienți \cite{xie2019fedasync} - o metodă prin care influența lor asupra modelului global este diminuată. O simulare de 600 de runde confirmă funcționarea în parametri buni a fluxului FL.
+
 \section{Structura lucrării}
-Un paragraf în care fiecare dintre secțiunile următoare este prezentată în 1-2 fraze, punând accentul pe elementele cele mai semnificative din fiecare secțiune.
+
+\textbf{Capitolul 1} a introdus, la nivel general, contextul, problema, obiectivele, soluția propusă și rezultatele obținute. Capitolele următoare intră în detaliu pe fiecare dintre aceste aspecte.
+
+\textbf{Capitolul 2} stabilește cerințele aplicației, pornind de la cazurile de utilizare ale unui turist sau localnic care explorează un oraș, și le împarte în cerințe funcționale și non-funcționale. Tot aici se delimitează și domeniul de aplicare al proiectului.
+
+\textbf{Capitolul 3} trece în revistă aplicațiile de explorare urbană existente și modul în care acestea personalizează recomandările, comparând abordările centralizate cu FL. Se poziționează CultureQuest pe baza taxonomiei FL, se explică de ce alte alternative de algoritmi FL nu se potrivesc \textit{design-ului} asincron al platformei și se justifică tehnologiile alese.
+
+\textbf{Capitolul 4} detaliază arhitectura propusă a sistemului. Aici se discută structura aplicației mobile și a serviciilor \textit{backend}, proiectarea modelului MLP și a procesului FL, fluxul de generare a rutelor, elementele de gamificare și arhitectura de confidențialitate.
+
+După proiectare, \textbf{Capitolul 5} trece la implementarea efectivă - serviciul client FL și mecanismul de confidențialitate diferențială, serviciile \textit{backend} de agregare și de moderare a conținutului, etapa de pre-antrenare și \textit{framework-ul} folosit pentru simularea procesului FL.
+
+\textbf{Capitolul 6} evaluează rezultatele obținute - corectitudinea funcțională a aplicației, performanța modelului rezultată din pre-antrenare și din fluxul FL, efectul confidențialității diferențiale și al limitării asupra robusteții - și include o discuție comparativă față de alternativele respinse.
+
+\textbf{Capitolul 7} încheie lucrarea cu o privire de ansamblu asupra obiectivelor stabilite inițial, în raport cu ce a fost dezvoltat și propune direcții viitoare - de exemplu, personalizarea suplimentară per utilizator sau alte tipuri de agregare în ceea ce privește modelul rețelei neurale.
 
 \chapter{Analiza Cerințelor}
 
-Capitolul de față detaliază cerințele care reies din obiectivele stabilite la 1.3: cine sunt utilizatorii și ce cazuri de utilizare trebuie acoperite (2.1), ce funcționalități rezultă de aici (2.2), ce constrângeri non-funcționale se impun (2.3) și ce rămâne, totuși, în afara domeniului de aplicare (2.4). Toate aceste cerințe stau la baza deciziilor de proiectare din Capitolul 4, fiind verificate ulterior în evaluarea din Capitolul 6.
+Capitolul de față detaliază cerințele care reies din obiectivele stabilite la 1.3: cine sunt utilizatorii și ce cazuri de utilizare trebuie acoperite (2.1), ce funcționalități rezultă de aici (2.2), ce constrângeri non-funcționale se impun (2.3) și ce rămâne în afara domeniului de aplicare (2.4). Toate aceste cerințe stau la baza deciziilor de proiectare din Capitolul 4, fiind verificate ulterior în evaluarea din Capitolul 6.
 
 \section{Utilizatori țintă și cazuri de utilizare}
 
-Utilizatorul principal al aplicației este un turist sau un localnic care explorează un oraș - sau o zonă a acestuia - cu dorința de a vizita obiective turistice sau culturale din proximitate, adaptate intereselor proprii. Primul caz de utilizare este cel de generare de rute și suport pe parcursul urmării acestora, în care utilizatorul vede pe hartă poziția sa curentă, locurile de interes din apropiere și primește o rută care combină preferințele sale cu acestea. Mai mult, interacțiunile cu aplicația - vizite, misiuni (\textit{quest-uri}) finalizate, recenzii - determină ajustarea, prin învățare federată (FL, \textit{Federated Learning}), a modelului de pe dispozitiv - și, implicit, și a celui global - fără ca istoricul brut al interacțiunilor să ajungă pe server. Un al doilea caz de utilizare este cel de contribuție de conținut, în care utilizatorul poate propune obiective noi, povești, misiuni sau recenzii, toate acestea necesitând aprobarea de către alte persoane care folosesc aplicația sau de către un administrator. Prin conturile de tip administrator, relevante mai ales pentru 2.2, se aprobă sau se respinge conținutul propus de utilizatorii obișnuiți.
+Utilizatorul principal al aplicației este un turist sau un localnic care explorează un oraș - sau o zonă a acestuia - cu dorința de a vizita obiective turistice sau culturale din proximitate, adaptate intereselor proprii. Primul caz de utilizare este cel de generare de rute și suport pe parcursul urmării acestora, în care utilizatorul vede pe hartă poziția sa curentă, locurile de interes din apropiere și primește o rută care combină preferințele sale cu acestea. Mai mult, interacțiunile cu aplicația - vizite, misiuni (\textit{quest-uri}) finalizate, recenzii - determină ajustarea, prin FL, a modelului de pe dispozitiv - și, implicit, și a celui global - fără ca istoricul brut al interacțiunilor să ajungă pe server. Un al doilea caz de utilizare este cel de contribuție de conținut, în care utilizatorul poate propune obiective noi, povești, misiuni sau recenzii, toate acestea necesitând aprobarea de către alte persoane care folosesc aplicația sau de către un administrator. Prin conturile de tip administrator, relevante mai ales pentru 2.2, se aprobă sau se respinge conținutul propus de utilizatorii obișnuiți.
 
 \section{Cerințe funcționale}
 
-Pornind de la cazurile de utilizare din secțiunea anterioară, cerințele funcționale au fost sintetizate în Tabela~\ref{tab:cerinte-functionale}, fiecare cu o descriere și secțiunile din Capitolele 4-6 unde cerința este tratată. Primul grup (de la \textbf{FR-1} la \textbf{FR-4}) sumarizează bucla principală de explorare: afișarea pe hartă a obiectivelor turistice din proximitate, generarea rutei care combină scorul modelului de tip perceptron multi-strat (MLP, \textit{Multi-Layer Perceptron}) cu distanța față de poziția curentă, \textit{quest-urile} disponibile la obiectivele vizitate și posibilitatea de a adăuga sau vizualiza recenzii.
+Pornind de la cazurile de utilizare din secțiunea anterioară, cerințele funcționale au fost sintetizate în tabelul~\ref{tab:cerinte-functionale}, fiecare cu o descriere și secțiunile din Capitolele 4-6 unde cerința este tratată. Primul grup (de la \textbf{FR-1} la \textbf{FR-4}) sumarizează bucla principală de explorare: afișarea pe hartă a obiectivelor turistice din proximitate, generarea rutei care combină scorul modelului de tip MLP cu distanța față de poziția curentă, \textit{quest-urile} disponibile la obiectivele vizitate și posibilitatea de a adăuga sau vizualiza recenzii.
 
-Al doilea grup (de la \textbf{FR-5} la \textbf{FR-7}) ține de personalizare și administrare: \textbf{FR-5} descrie fluxul procesului FL - primirea parametrilor modelului actualizat de la server, urmată de antrenarea locală, fără ca istoricul interacțiunilor să ajungă pe server, \textbf{FR-6} descrie controalele de confidențialitate - asigurarea confidențialității diferențiale (DP, \textit{Differential Privacy}), vizibilitatea asupra datelor, iar \textbf{FR-7} descrie rolul de administrator - aprobarea sau respingerea conținutului propus. Această grupare anticipează structura Capitolului 4: proiectarea FL și arhitectura de confidențialitate.
-
+Al doilea grup (de la \textbf{FR-5} la \textbf{FR-7}) ține de personalizare și administrare: \textbf{FR-5} descrie fluxul procesului FL - primirea parametrilor modelului actualizat de la server, urmată de antrenarea locală, fără ca istoricul interacțiunilor să ajungă pe server, \textbf{FR-6} descrie controalele de confidențialitate - asigurarea confidențialității diferențiale (DP, \textit{Differential Privacy}), vizibilitatea asupra datelor, iar \textbf{FR-7} descrie rolul de administrator - aprobarea sau respingerea conținutului propus.
 \begin{table}[th]\footnotesize\linespread{1}
 \centering
 \caption{Cerințe funcționale}
@@ -262,7 +280,7 @@ FR-7 & Administrator: aprobă sau respinge conținut propus (obiective, povești
 
 \section{Cerințe non-funcționale}
 
-La fel ca în secțiunea 2.2, cerințele non-funcționale au fost sintetizate în Tabela~\ref{tab:cerinte-nonfunctionale}, cu aceeași structură (descriere și secțiunile din Capitolele 4-6 unde sunt tratate). Primul grup (de la \textbf{NFR-1} la \textbf{NFR-3}) are legătură cu constrângerile impuse pe dispozitiv: \textbf{NFR-1} cere ca nicio informație privată despre utilizator - exceptând lista de interese - să nu părăsească telefonul, \textbf{NFR-2} cere ca obiectivele turistice să rămână disponibile și fără conexiune la internet, iar \textbf{NFR-3} cere ca antrenarea locală să nu fie complexă din punct de vedere computațional pentru un telefon obișnuit - ceea ce a motivat alegerea unui model MLP de dimensiuni reduse.
+La fel ca în secțiunea 2.2, cerințele non-funcționale au fost sintetizate în tabelul~\ref{tab:cerinte-nonfunctionale}, cu aceeași structură (descriere și secțiunile din Capitolele 4-6 unde sunt tratate). Primul grup (de la \textbf{NFR-1} la \textbf{NFR-3}) are legătură cu constrângerile impuse pe dispozitiv: \textbf{NFR-1} cere ca nicio informație privată despre utilizator - exceptând lista de interese - să nu părăsească telefonul, \textbf{NFR-2} cere ca obiectivele turistice să rămână disponibile și fără conexiune la internet, iar \textbf{NFR-3} cere ca antrenarea locală să nu fie complexă din punct de vedere computațional pentru un telefon obișnuit - ceea ce a motivat alegerea unui model MLP de dimensiuni reduse.
 
 Al doilea grup ține de partea de \textit{backend}: \textbf{NFR-4} impune ca serviciul de agregare să suporte actualizări asincrone primite de la mai mulți clienți - fără conflicte între runde, iar \textbf{NFR-5} impune ca utilizatorii să primească recomandări utile încă de la început printr-un model global pre-antrenat \cite{bonawitz2019towards} - și din caracteristici bazate pe ariile de interes asociate fiecărui obiectiv - până când procesul FL își face efectul.
 
