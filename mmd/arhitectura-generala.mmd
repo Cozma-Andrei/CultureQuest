@@ -1,0 +1,10 @@
+flowchart LR
+    M["Aplicație mobilă<br/>(Flutter)"]
+    B["Backend<br/>(FastAPI)"]
+    D[("MongoDB<br/>date persistente")]
+    R[("Redis<br/>stare FL")]
+
+    M -->|"1, 2, 3 cereri"| B
+    B -->|"1, 2 răspunsuri"| M
+    B -->|"1 citire obiective<br/>3 salvare conținut moderat"| D
+    B -->|"1 model FL global<br/>2 agregare FL"| R

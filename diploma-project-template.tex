@@ -194,7 +194,7 @@ and it is modified and improved through federated learning (FL) techniques run a
 
 \chapter{Introducere}\pagestyle{fancy}
 
-Acest capitol prezintă contextul în care se situează proiectul și problema care îl motivează (1.1, 1.2), obiectivele propuse (1.3), o privire de ansamblu asupra soluției dezvoltate (1.4) și a rezultatelor obținute (1.5), precum și modul în care este organizată restul lucrării (1.6).
+Acest capitol prezintă contextul în care se situează proiectul și problema care îl motivează, obiectivele propuse, o privire de ansamblu asupra soluției dezvoltate și a rezultatelor obținute, precum și modul în care este organizată restul lucrării.
 
 \section{Context}
 
@@ -252,7 +252,7 @@ După proiectare, \textbf{Capitolul 5} trece la implementarea efectivă - servic
 
 \chapter{Analiza Cerințelor}
 
-Capitolul de față detaliază cerințele care reies din obiectivele stabilite la 1.3: cine sunt utilizatorii și ce cazuri de utilizare trebuie acoperite (2.1), ce funcționalități rezultă de aici (2.2), ce constrângeri non-funcționale se impun (2.3) și ce rămâne în afara domeniului de aplicare (2.4). Toate aceste cerințe stau la baza deciziilor de proiectare din Capitolul 4, fiind verificate ulterior în evaluarea din Capitolul 6.
+Capitolul de față detaliază cerințele care reies din obiectivele stabilite la 1.3: cine sunt utilizatorii și ce cazuri de utilizare trebuie acoperite, ce funcționalități rezultă de aici, ce constrângeri non-funcționale se impun și ce rămâne în afara domeniului de aplicare. Toate aceste cerințe stau la baza deciziilor de proiectare din Capitolul 4, fiind verificate ulterior în evaluarea din Capitolul 6.
 
 \section{Utilizatori țintă și cazuri de utilizare}
 
@@ -307,7 +307,7 @@ Având stabilite cerințele și limitele proiectului, Capitolul 3 trece în revi
 
 \chapter{Soluții Existente}
 
-Înainte de proiectarea propriu-zisă a soluției, acest capitol analizează contextul în care se înscrie CultureQuest. Aplicațiile de explorare urbană existente oferă un grad bun de personalizare a recomandărilor, însă acestea se bazează pe sisteme centralizate de colectare a datelor (3.1), de unde și comparația cu abordările bazate pe FL (3.2) și cu stadiul actual al cercetării din domeniu, folosit pentru a poziționa CultureQuest în cadrul soluțiilor FL (3.3). Pe baza acestei analize, capitolul explică de ce o parte dintre cele mai cunoscute variante de algoritmi FL nu se potrivesc design-ului asincron al platformei (3.4) și justifică restul tehnologiilor folosite în implementare (3.5).
+Înainte de proiectarea propriu-zisă a soluției, acest capitol analizează contextul în care se înscrie CultureQuest. Aplicațiile de explorare urbană existente oferă un grad bun de personalizare a recomandărilor, însă acestea se bazează pe sisteme centralizate de colectare a datelor, de unde și comparația cu abordările bazate pe FL și cu stadiul actual al cercetării din domeniu, folosit pentru a poziționa CultureQuest în cadrul soluțiilor FL. Pe baza acestei analize, capitolul explică de ce o parte dintre cele mai cunoscute variante de algoritmi FL nu se potrivesc design-ului asincron al platformei și justifică restul tehnologiilor folosite în implementare.
 
 \section{Aplicații existente pentru explorare urbană}
 
@@ -339,11 +339,11 @@ CultureQuest & Da & Local & Da & Da \\
 
 Sistemele de recomandare clasice se bazează, în general, pe filtrarea colaborativă, care recomandă unui utilizator ceea ce au apreciat alți utilizatori cu interese similare, și pe filtrarea bazată pe conținut, care recomandă obiective similare cu cele apreciate deja de același utilizator \cite{adomavicius2005recommender}. În ambele cazuri, determinarea similarităților are nevoie de o bază de date centralizată cu istoricul de activitate al clienților - exact modelul din spatele recomandărilor descrise în secțiunea anterioară pentru aplicațiile menționate. Avantajul e accesul la un volum mare de date eterogene, din care modelul învață tendințe generale utile chiar și pentru utilizatori noi, pe baza unor profiluri asemănătoare existente în sistem. Prețul acestui avantaj este însă tot cel discutat mai sus. Pentru ca modelul să poată face aceste calcule, istoricul de activitate al fiecărui utilizator trebuie să ajungă și să rămână pe server, sub controlul furnizorului.
 
-Învățarea federată (FL, \textit{Federated Learning}) schimbă direcția, astfel încât modelul ajunge la date, nu invers - antrenarea are loc local, pe dispozitivul fiecărui utilizator, iar pe server ajung doar actualizările rezultate ale modelului, nu istoricul de activitate în sine. Datele rămân astfel pe dispozitiv, iar confidențialitatea nu mai depinde de politicile furnizorului, ci de proiectarea protocolului de agregare. Diferența se vede cel mai clar la pornirea la rece (\textit{cold-start}). O aplicație aflată la început nu are încă un model antrenat suficient din cauza unui număr mic de persoane care o folosesc, așa că recomandările vin dintr-un model global pre-antrenat și din caracteristicile bazate pe conținut ale obiectivelor, la fel ca în cazul centralizat - personalizarea prin FL se construiește abia pe măsură ce utilizatorii interacționează cu aplicația.
+FL schimbă direcția, astfel încât modelul ajunge la date, nu invers - antrenarea are loc local, pe dispozitivul fiecărui utilizator, iar pe server ajung doar actualizările rezultate ale modelului, nu istoricul de activitate în sine. Datele rămân astfel pe dispozitiv, iar confidențialitatea nu mai depinde de politicile furnizorului, ci de proiectarea protocolului de agregare. Diferența se vede cel mai clar la pornirea la rece (\textit{cold-start}). O aplicație aflată la început nu are încă un model antrenat suficient din cauza unui număr mic de persoane care o folosesc, așa că recomandările vin dintr-un model global pre-antrenat și din caracteristicile bazate pe conținut ale obiectivelor, la fel ca în cazul centralizat - personalizarea prin FL se construiește abia pe măsură ce utilizatorii interacționează cu aplicația.
 
 \section{Învățare federată: Stadiul actual}
 
-Învățarea federată a apărut ca direcție de cercetare odată cu FedAvg \cite{mcmahan2017fedavg}, ca răspuns direct la problema discutată în secțiunea anterioară - cum poate fi antrenat un model pe datele mai multor clienți, fără ca acestea să fie centralizate pe un server. De atunci, domeniul s-a diversificat, acoperind variante de agregare, metode DP, robustețe la clienți adversariali și scenarii de personalizare \cite{kairouz2021advances}. Pentru a situa CultureQuest în acest cadru, ne putem ghida după două axe de clasificare devenite standard în literatură: tipul de FL, în funcție de cum sunt distribuite datele între clienți, și modul de desfășurare, în funcție de cine sunt clienții și care este comportamentul lor.
+FL a apărut ca direcție de cercetare odată cu FedAvg \cite{mcmahan2017fedavg}, ca răspuns direct la problema discutată în secțiunea anterioară - cum poate fi antrenat un model pe datele mai multor clienți, fără ca acestea să fie centralizate pe un server. De atunci, domeniul s-a diversificat, acoperind variante de agregare, metode DP, robustețe la clienți adversariali și scenarii de personalizare \cite{kairouz2021advances}. Pentru a situa CultureQuest în acest cadru, ne putem ghida după două axe de clasificare devenite standard în literatură: tipul de FL, în funcție de cum sunt distribuite datele între clienți, și modul de desfășurare, în funcție de cine sunt clienții și care este comportamentul lor.
 
 Prima axă, propusă de Yang et al. \cite{yang2019fml}, împarte FL în trei categorii:
 
@@ -435,7 +435,7 @@ Funcționalitatea de rutare se bazează pe OSRM (\textit{Open Source Routing Mac
 
 \subsection{Perceptron multi-strat}
 
-Modelul de recomandare al CultureQuest este un perceptron multi-strat (MLP, \textit{Multi-Layer Perceptron}). Arhitectura este simplă: un număr mic de straturi complet conectate, pornind de la cele 22 de caracteristici asociate obiectivelor turistice și culturale. Pe dispozitiv, modelul nu este folosit doar pentru antrenarea locală, ci și pentru afișare - de fiecare dată când utilizatorul deschide pagina cu informații a unui obiectiv turistic, aplicația face o nouă trecere \textit{forward pass} prin model, ca să calculeze scorul de potrivire afișat pentru turist. Tocmai pentru că rulează la fiecare interacțiune, modelul trebuia să fie o implementare proprie, cât mai ușoară și fără dependențe externe.
+Modelul de recomandare al CultureQuest este un MLP. Arhitectura este simplă: un număr mic de straturi complet conectate, pornind de la cele 22 de caracteristici asociate obiectivelor turistice și culturale. Pe dispozitiv, modelul nu este folosit doar pentru antrenarea locală, ci și pentru afișare - de fiecare dată când utilizatorul deschide pagina cu informații a unui obiectiv turistic, aplicația face o nouă trecere \textit{forward pass} prin model, ca să calculeze scorul de potrivire afișat pentru turist. Tocmai pentru că rulează la fiecare interacțiune, modelul trebuie să fie o implementare proprie, cât mai ușoară și fără dependențe externe.
 
 Alternativele cunoscute pentru rularea unui model de tip rețea neuronală pe dispozitiv sunt TFLite\footnote{Documentația oficială TensorFlow Lite. \url{https://www.tensorflow.org/lite} (accesat 19.06.2026).} și PyTorch Mobile\footnote{PyTorch Mobile este parțial înlocuit de ExecuTorch; documentația oficială ExecuTorch. \url{https://docs.pytorch.org/executorch/stable/index.html} (accesat 19.06.2026).}, ambele \textit{runtime-uri} dedicate, cu propriile formate de model și dependențe native pentru fiecare platformă. Pentru un MLP de dimensiunile celui folosit de CultureQuest, aceste \textit{runtime-uri} ar adăuga o dependență de zeci de \textit{megabytes} doar pentru a executa câteva înmulțiri de matrice, fără avantaje reale vizibile. Implementarea proprie, în Dart, rămâne mai mică, fără dependențe de \textit{runtime} suplimentare, și compatibilă nativ cu Flutter (Tabelul~\ref{tab:mlp-comparativ}).
 
@@ -460,9 +460,20 @@ PyTorch Mobile & Model + runtime (zeci-sute de MB) & Bibliotecă nativă per pla
 
 \chapter{Soluția Propusă}
 
-% TODO: paragraf de prezentare a capitolului
+Acest capitol detaliază proiectarea CultureQuest, cu suportul a câtorva diagrame, tabele și ecuații care justifică deciziile de design. Pornește de la o privire de ansamblu asupra arhitecturii, după care urmează aplicația mobilă și serviciile \textit{backend}, fiecare cu propria diagramă de structură. Cea mai mare parte a capitolului este dedicată proiectării sistemului FL (4.4). Urmează fluxul de generare a rutelor, elementele de gamificare și harta cu navigarea, iar în final capitolul se încheie cu arhitectura de confidențialitate, care descrie deciziile de proiectare legate de separarea datelor între dispozitiv și server.
 
 \section{Prezentare generală a sistemului}
+
+La nivel general, CultureQuest este format din patru componente: aplicația mobilă, scrisă în Flutter, un \textit{backend} FastAPI, o bază de date MongoDB pentru datele persistente și o instanță Redis pentru starea nepersistentă a procesului FL. Figura~\ref{fig:arhitectura-generala} arată comunicarea dintre ele. Aplicația mobilă este singurul punct de legătură dintre utilizator și sistem - toate cererile trec prin \textit{backend}, care, în funcție de tipul de date, citește sau scrie în MongoDB sau în Redis.
+
+Diagrama evidențiază trei fluxuri principale, pe care le-am numerotat cu (1), (2) și (3). Primul (1), cererea de hartă și rute, funcționează astfel: aplicația mobilă trimite poziția curentă, \textit{backend-ul} interoghează baza de date pentru obiectivele din apropiere, le oferă un scor prin intermediul modelului FL global ținut în Redis și calculează, pe baza scorurilor, o rută pe care o trimite înapoi. Al doilea (2), agregarea FL, funcționează similar: dispozitivul trimite actualizarea modelului antrenat local, \textit{backend-ul} o agregă cu ajutorul stării ținute în Redis și trimite înapoi modelul global actualizat. Recenziile, poveștile și \textit{quest-urile} adăugate de utilizatori formează al treilea flux (3), unde acestea trec printr-un pas de moderare înainte să fie salvate în MongoDB.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{pics/arhitectura-generala.pdf}
+\caption{Arhitectura generală a sistemului CultureQuest: aplicația mobilă comunică exclusiv cu \textit{backend-ul}, care citește sau scrie în MongoDB și Redis.}
+\label{fig:arhitectura-generala}
+\end{figure}
 
 \section{Arhitectura aplicației mobile}
 
