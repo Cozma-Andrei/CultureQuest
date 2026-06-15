@@ -419,15 +419,44 @@ CultureQuest & Nu & Reducere în funcție de vechime & Da \\
 
 \section{Tehnologiile utilizate și justificarea acestora}
 
+Alegerea tehnologiilor pentru CultureQuest a fost ghidată de câteva criterii comune: compatibilitate \textit{cross-platform} pentru aplicația mobilă, un ecosistem care se integrează natural cu componenta FL și cu inferența modelului, și, unde a fost posibil, soluții \textit{open-source} care pot fi găzduite local. Secțiunile următoare detaliază aceste alegeri pentru fiecare componentă în parte.
+
 \subsection{Flutter și Riverpod}
+
+Pentru aplicația mobilă, CultureQuest folosește Flutter\footnote{Documentația oficială Flutter. \url{https://flutter.dev} (accesat 19.06.2026).}, cu Riverpod\footnote{Documentația oficială Riverpod. \url{https://riverpod.dev} (accesat 19.06.2026).} pentru gestionarea stării. Flutter permite o singură bază de cod Dart pentru Android și iOS, cu \textit{hot reload} care accelerează dezvoltarea. Alternativele posibile sunt fie React Native, cu un \textit{bridge} JavaScript peste componente native - deci un strat de interoperabilitate suplimentar - fie dezvoltare nativă pe cele două platforme, caz în care logica clientului FL s-ar duplica pentru fiecare platformă. Riverpod oferă un model de gestionare a stării declarativ și testabil, potrivit pentru o aplicație în care starea ecranului curent (hartă, profil, status FL) trebuie sincronizată cu procese care rulează în fundal, precum antrenarea locală a modelului.
 
 \subsection{FastAPI, MongoDB și Redis}
 
+Pe partea de \textit{backend}, CultureQuest folosește FastAPI\footnote{Documentația oficială FastAPI. \url{https://fastapi.tiangolo.com} (accesat 19.06.2026).}, MongoDB\footnote{Documentația oficială MongoDB. \url{https://www.mongodb.com/docs/} (accesat 19.06.2026).} și Redis\footnote{Documentația oficială Redis. \url{https://redis.io/docs/} (accesat 19.06.2026).}. FastAPI este scris în Python, ceea ce permite integrarea directă a serviciilor de agregare FL și a antrenării MLP cu același ecosistem (PyTorch) folosit la pre-antrenare, fără un strat de interoperabilitate între limbaje, iar suportul nativ pentru operații asincrone se potrivește cu un număr mare de clienți care se conectează intermitent, specific design-ului \textit{cross-device}. MongoDB stochează date variabile legate de profiluri de utilizatori, obiective turistice, misiuni, recenzii - mai flexibil decât o schemă de tip relațional, în timp ce Redis acoperă starea efemeră a procesului FL, pentru care un magazin în memorie e suficient și mai rapid decât o bază de date persistentă.
+
 \subsection{Motorul de Rutare OSRM}
+
+Funcționalitatea de rutare se bazează pe OSRM (\textit{Open Source Routing Machine})\footnote{Documentația oficială OSRM. \url{https://project-osrm.org} (accesat 19.06.2026).}, un motor \textit{open-source} care poate fi găzduit local alături de restul serviciilor de \textit{backend}, fără dependența de un API extern plătit. OSRM calculează rute pe rețeaua de drumuri pornind de la date OpenStreetMap și răspunde suficient de rapid pentru a fi folosit interactiv, la fiecare actualizare a poziției utilizatorului în timpul parcurgerii unei rute.
 
 \subsection{Perceptron multi-strat}
 
-% TODO: rezumat capitol + tranziție spre Capitolul 4
+Modelul de recomandare al CultureQuest este un perceptron multi-strat (MLP, \textit{Multi-Layer Perceptron}). Este vorba despre o arhitectură simplă, cu un număr mic de straturi complet conectate, pornind de la cele 22 de caracteristici asociate obiectivelor turistice și culturale. Pe dispozitiv, modelul nu este folosit doar pentru antrenarea locală, ci și pentru afișare: de fiecare dată când utilizatorul deschide fișa unui obiectiv turistic, aplicația face o nouă trecere \textit{forward pass} prin model, pentru a calcula scorul de potrivire afișat. Această utilizare repetată, la fiecare interacțiune, cântărește în alegerea unei implementări proprii, cât mai ușoare și fără dependențe externe.
+
+Alternativele cunoscute pentru rularea unui model de tip rețea neuronală pe dispozitiv sunt TFLite\footnote{Documentația oficială TensorFlow Lite. \url{https://www.tensorflow.org/lite} (accesat 19.06.2026).} și PyTorch Mobile\footnote{PyTorch Mobile este parțial înlocuit de ExecuTorch; documentația oficială ExecuTorch. \url{https://docs.pytorch.org/executorch/stable/index.html} (accesat 19.06.2026).}, ambele \textit{runtime-uri} dedicate, cu propriile formate de model și dependențe native pentru fiecare platformă. Pentru un MLP de dimensiunile celui folosit de CultureQuest, aceste \textit{runtime-uri} ar adăuga o dependență de zeci de \textit{megabytes} doar pentru a executa câteva înmulțiri de matrice, fără avantaje reale, cum ar fi operatori optimizați pentru modele mari sau accelerare hardware. Tabelul~\ref{tab:mlp-comparativ} rezumă această comparație: implementarea proprie, în Dart, rămâne mai mică, fără dependențe de \textit{runtime} suplimentare, și nativ compatibilă cu Flutter.
+
+\clearpage
+\begin{table}[h]
+\centering
+\footnotesize
+\caption{Comparație între implementarea MLP proprie și runtime-urile dedicate (TFLite, PyTorch Mobile) pentru inferență pe dispozitiv.}
+\label{tab:mlp-comparativ}
+\begin{tabular}{|l|p{3cm}|p{3.5cm}|p{2.5cm}|}
+\hline
+\textbf{Implementare} & \textbf{Dimensiune model} & \textbf{Dependențe de runtime} & \textbf{Compatibil cu Flutter} \\
+\hline
+MLP propriu (Dart) & Redusă - doar parametrii modelului & Niciuna & Da, cod nativ Dart \\
+\hline
+TFLite & Model + runtime (zeci de MB) & Bibliotecă nativă per platformă & Da, prin plugin \\
+\hline
+PyTorch Mobile & Model + runtime (zeci-sute de MB) & Bibliotecă nativă per platformă & Da, prin plugin \\
+\hline
+\end{tabular}
+\end{table}
 
 \chapter{Soluția Propusă}
 
@@ -517,17 +546,11 @@ CultureQuest & Nu & Reducere în funcție de vechime & Da \\
 
 \chapter{Concluzii}
 
-a
-
 % TODO: paragraf de prezentare a capitolului
 
 \section{Concluzii generale}
 
-a
-
 \section{Direcții de cercetare și lucrări viitoare}
-
-a
 
 \clearpage
 \phantomsection
