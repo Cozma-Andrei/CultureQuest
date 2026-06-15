@@ -341,7 +341,7 @@ Sistemele de recomandare clasice se bazează, în general, pe filtrarea colabora
 
 Învățarea federată (FL, \textit{Federated Learning}) schimbă direcția, astfel încât modelul ajunge la date, nu invers - antrenarea are loc local, pe dispozitivul fiecărui utilizator, iar pe server ajung doar actualizările rezultate ale modelului, nu istoricul de activitate în sine. Datele rămân astfel pe dispozitiv, iar confidențialitatea nu mai depinde de politicile furnizorului, ci de proiectarea protocolului de agregare. Diferența se vede cel mai clar la pornirea la rece (\textit{cold-start}). O aplicație aflată la început nu are încă un model antrenat suficient din cauza unui număr mic de persoane care o folosesc, așa că recomandările vin dintr-un model global pre-antrenat și din caracteristicile bazate pe conținut ale obiectivelor, la fel ca în cazul centralizat - personalizarea prin FL se construiește abia pe măsură ce utilizatorii interacționează cu aplicația.
 
-\section{Învățarea federată: Stadiul actual}
+\section{Învățare federată: Stadiul actual}
 
 Învățarea federată a apărut ca direcție de cercetare odată cu FedAvg \cite{mcmahan2017fedavg}, ca răspuns direct la problema discutată în secțiunea anterioară - cum poate fi antrenat un model pe datele mai multor clienți, fără ca acestea să fie centralizate pe un server. De atunci, domeniul s-a diversificat, acoperind variante de agregare, metode DP, robustețe la clienți adversariali și scenarii de personalizare \cite{kairouz2021advances}. Pentru a situa CultureQuest în acest cadru, ne putem ghida după două axe de clasificare devenite standard în literatură: tipul de FL, în funcție de cum sunt distribuite datele între clienți, și modul de desfășurare, în funcție de cine sunt clienții și care este comportamentul lor.
 
@@ -429,7 +429,7 @@ Pentru aplicația mobilă, CultureQuest folosește Flutter\footnote{Documentați
 
 Pe partea de \textit{backend}, CultureQuest folosește FastAPI\footnote{Documentația oficială FastAPI. \url{https://fastapi.tiangolo.com} (accesat 19.06.2026).}, MongoDB\footnote{Documentația oficială MongoDB. \url{https://www.mongodb.com/docs/} (accesat 19.06.2026).} și Redis\footnote{Documentația oficială Redis. \url{https://redis.io/docs/} (accesat 19.06.2026).}. FastAPI este scris în Python, ceea ce permite integrarea directă a serviciilor de agregare FL și a antrenării MLP cu același ecosistem (PyTorch) folosit la pre-antrenare, fără un strat de interoperabilitate între limbaje, iar suportul nativ pentru operații asincrone se potrivește cu un număr mare de clienți care se conectează intermitent, specific design-ului \textit{cross-device}. MongoDB stochează date variabile legate de profiluri de utilizatori, obiective turistice, misiuni, recenzii - mai flexibil decât o schemă de tip relațional, în timp ce Redis acoperă starea efemeră a procesului FL, pentru care un magazin în memorie e suficient și mai rapid decât o bază de date persistentă.
 
-\subsection{Motorul de Rutare OSRM}
+\subsection{Motorul de rutare OSRM}
 
 Funcționalitatea de rutare se bazează pe OSRM (\textit{Open Source Routing Machine})\footnote{Documentația oficială OSRM. \url{https://project-osrm.org} (accesat 19.06.2026).}, un motor \textit{open-source} care poate fi găzduit local alături de restul serviciilor de \textit{backend}, fără dependența de un API extern plătit. OSRM calculează rute pe rețeaua de drumuri pornind de la date OpenStreetMap și răspunde suficient de rapid pentru a fi folosit interactiv, la fiecare actualizare a poziției utilizatorului în timpul parcurgerii unei rute.
 
@@ -474,7 +474,7 @@ PyTorch Mobile & Model + runtime (zeci-sute de MB) & Bibliotecă nativă per pla
 
 \subsection{Antrenarea locală}
 
-\subsection{Agregare asincronă și reducerea în funcție de vechime}
+\subsection{Agregarea asincronă și reducerea în funcție de vechime}
 
 \subsection{Limitarea gradienților}
 
@@ -486,7 +486,7 @@ PyTorch Mobile & Model + runtime (zeci-sute de MB) & Bibliotecă nativă per pla
 
 \section{Proiectarea elementelor de gamificare}
 
-\section{Hartă și navigare}
+\section{Harta și navigarea}
 
 \section{Arhitectura de confidențialitate}
 
@@ -581,7 +581,7 @@ PyTorch Mobile & Model + runtime (zeci-sute de MB) & Bibliotecă nativă per pla
 
 \begin{appendices}
 
-\chapter{Extrase de cod} % Introduce o nouă anexă
+\chapter{Extrase de Cod} % Introduce o nouă anexă
 
 \end{appendices}
 \end{document}
