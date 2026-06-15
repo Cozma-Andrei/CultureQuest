@@ -244,9 +244,9 @@ Pe partea de FL, modelul de pe dispozitiv pornește de la o variantă a modelulu
 
 \textbf{Capitolul 4} detaliază arhitectura propusă a sistemului. Aici se discută structura aplicației mobile și a serviciilor \textit{backend}, proiectarea modelului MLP și a procesului FL, fluxul de generare a rutelor, elementele de gamificare și arhitectura de confidențialitate.
 
-După proiectare, \textbf{Capitolul 5} trece la implementarea efectivă - serviciul client FL și mecanismul de confidențialitate diferențială, serviciile \textit{backend} de agregare și de moderare a conținutului, etapa de pre-antrenare și \textit{framework-ul} folosit pentru simularea procesului FL.
+După proiectare, \textbf{Capitolul 5} trece la implementarea efectivă - serviciul client FL și mecanismul de confidențialitate diferențială (DP, \textit{Differential Privacy}), serviciile \textit{backend} de agregare și de moderare a conținutului, etapa de pre-antrenare și \textit{framework-ul} folosit pentru simularea procesului FL.
 
-\textbf{Capitolul 6} evaluează rezultatele obținute - corectitudinea funcțională a aplicației, performanța modelului rezultată din pre-antrenare și din fluxul FL, efectul confidențialității diferențiale și al limitării asupra robusteții - și include o discuție comparativă față de alternativele respinse.
+\textbf{Capitolul 6} evaluează rezultatele obținute - corectitudinea funcțională a aplicației, performanța modelului rezultată din pre-antrenare și din fluxul FL, efectul DP și al limitării asupra robusteții - și include o discuție comparativă față de alternativele respinse.
 
 \textbf{Capitolul 7} încheie lucrarea cu o privire de ansamblu asupra obiectivelor stabilite inițial, în raport cu ce a fost dezvoltat și propune direcții viitoare - de exemplu, personalizarea suplimentară per utilizator sau alte tipuri de agregare în ceea ce privește modelul rețelei neurale.
 
@@ -262,7 +262,7 @@ Utilizatorul principal al aplicației este un turist sau un localnic care explor
 
 Pornind de la cazurile de utilizare din secțiunea anterioară, cerințele funcționale au fost sintetizate în tabelul~\ref{tab:cerinte-functionale}, fiecare cu o descriere și secțiunile din Capitolele 4-6 unde cerința este tratată. Primul grup (de la \textbf{FR-1} la \textbf{FR-4}) sumarizează bucla principală de explorare: afișarea pe hartă a obiectivelor turistice din proximitate, generarea rutei care combină scorul modelului de tip MLP cu distanța față de poziția curentă, \textit{quest-urile} disponibile la obiectivele vizitate și posibilitatea de a adăuga sau vizualiza recenzii.
 
-Al doilea grup (de la \textbf{FR-5} la \textbf{FR-7}) ține de personalizare și administrare: \textbf{FR-5} descrie fluxul procesului FL - primirea parametrilor modelului actualizat de la server, urmată de antrenarea locală, fără ca istoricul interacțiunilor să ajungă pe server, \textbf{FR-6} descrie controalele de confidențialitate - asigurarea confidențialității diferențiale (DP, \textit{Differential Privacy}), vizibilitatea asupra datelor, iar \textbf{FR-7} descrie rolul de administrator - aprobarea sau respingerea conținutului propus.
+Al doilea grup (de la \textbf{FR-5} la \textbf{FR-7}) ține de personalizare și administrare: \textbf{FR-5} descrie fluxul procesului FL - primirea parametrilor modelului actualizat de la server, urmată de antrenarea locală, fără ca istoricul interacțiunilor să ajungă pe server, \textbf{FR-6} descrie controalele de confidențialitate - asigurarea DP, vizibilitatea asupra datelor, iar \textbf{FR-7} descrie rolul de administrator - aprobarea sau respingerea conținutului propus.
 \begin{table}[th]\footnotesize\linespread{1}
 \centering
 \caption{Cerințe funcționale}
@@ -343,7 +343,7 @@ Sistemele de recomandare clasice se bazează, în general, pe filtrarea colabora
 
 \section{Învățarea federată: Stadiul actual}
 
-Învățarea federată a apărut ca direcție de cercetare odată cu FedAvg \cite{mcmahan2017fedavg}, ca răspuns direct la problema discutată în secțiunea anterioară - cum poate fi antrenat un model pe datele mai multor clienți, fără ca acestea să fie centralizate pe un server. De atunci, domeniul s-a diversificat, acoperind variante de agregare, metode de confidențialitate diferențială, robustețe la clienți adversariali și scenarii de personalizare \cite{kairouz2021advances}. Pentru a situa CultureQuest în acest cadru, ne putem ghida după două axe de clasificare devenite standard în literatură: tipul de FL, în funcție de cum sunt distribuite datele între clienți, și modul de desfășurare, în funcție de cine sunt clienții și care este comportamentul lor.
+Învățarea federată a apărut ca direcție de cercetare odată cu FedAvg \cite{mcmahan2017fedavg}, ca răspuns direct la problema discutată în secțiunea anterioară - cum poate fi antrenat un model pe datele mai multor clienți, fără ca acestea să fie centralizate pe un server. De atunci, domeniul s-a diversificat, acoperind variante de agregare, metode DP, robustețe la clienți adversariali și scenarii de personalizare \cite{kairouz2021advances}. Pentru a situa CultureQuest în acest cadru, ne putem ghida după două axe de clasificare devenite standard în literatură: tipul de FL, în funcție de cum sunt distribuite datele între clienți, și modul de desfășurare, în funcție de cine sunt clienții și care este comportamentul lor.
 
 Prima axă, propusă de Yang et al. \cite{yang2019fml}, împarte FL în trei categorii:
 
