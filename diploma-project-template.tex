@@ -37,6 +37,7 @@
 \usepackage{subfig} % make it possible to include more than one captioned figure/table in a single float
 \usepackage{enumitem}
 \usepackage{tikz}
+\usepackage{pdflscape}
 \setlist{noitemsep}
 
 %%% HEADERS & FOOTERS
@@ -200,9 +201,9 @@ Acest capitol prezintă contextul în care se situează proiectul și problema c
 
 Telefoanele mobile au devenit, în ultimii ani, principalul instrument prin care utilizatorii interacționează cu mediul din jurul lor, iar aplicațiile mobile bazate pe locație - de la Google Maps, TripAdvisor și GetYourGuide, la diverse aplicații de tip \textit{city-guide} - au devenit principala modalitate prin care turiștii și localnicii descoperă obiective turistice și culturale dintr-un oraș și primesc recomandări din ce în ce mai adaptate propriilor interese \cite{gavalas2014mobile}.
 
-Pentru a oferi recomandări personalizate, aceste aplicații se bazează pe colectarea și procesarea centralizată a istoricului de interacțiuni al utilizatorului - locurile vizitate, recenziile adăugate, timpul petrecut în diverse locații - lucru care ridică probleme de confidențialitate, întrucât utilizatorul pierde controlul asupra modului în care îi sunt folosite și stocate datele legate de comportament.
+Pentru a oferi recomandări personalizate, aceste aplicații se bazează pe colectarea și procesarea centralizată a istoricului de interacțiuni al utilizatorului - locurile vizitate, recenziile adăugate, timpul petrecut în diverse locații - lucru care ridică probleme de confidențialitate, întrucât utilizatorul pierde controlul asupra modului în care îi sunt folosite și stocate datele legate de comportament \cite{kairouz2021advances}.
 
-Învățarea federată (FL, \textit{Federated Learning}) apare ca alternativă la acest model centralizat: modelul este antrenat local, pe dispozitivul utilizatorului, folosind datele acestuia, iar către server sunt trimise doar actualizările rezultate, nu datele brute, pentru a fi agregate într-un model global. FL este deja folosită la scară destul de mare în sisteme de producție \cite{bonawitz2019towards}, ceea ce motivează aplicarea ei și în cadrul acestei platforme, pentru a oferi recomandări de rute turistice fără a compromite confidențialitatea clienților.
+Învățarea federată (FL, \textit{Federated Learning}) apare ca alternativă la acest model centralizat: modelul este antrenat local, pe dispozitivul utilizatorului, folosind datele acestuia, iar către server sunt trimise doar actualizările rezultate, nu datele brute, pentru a fi agregate într-un model global. FL este deja folosită la scară destul de mare în sisteme de producție \cite{bonawitz2019towards,zhang2021survey,li2020applications}, ceea ce motivează aplicarea ei și în cadrul acestei platforme, pentru a oferi recomandări de rute turistice fără a compromite confidențialitatea clienților.
 
 \section{Definirea problemei}
 
@@ -215,7 +216,7 @@ Varianta prin care o aplicație devine personalizată presupune, de regulă, ca 
 Pornind de la acest compromis, proiectul de față își propune să arate că personalizarea și păstrarea confidențialității nu se exclud reciproc, prin trei obiective principale:
 
 \begin{enumerate}[label=(\alph*)]
-\item O aplicație mobilă prin care utilizatorul poate descoperi obiective culturale dintr-un oraș printr-o explorare bazată pe proximitate, cu un sistem de \textit{quest-uri} și puncte obținute pentru interacțiunile pe platformă, care îl încurajează să viziteze locuri noi.
+\item O aplicație mobilă prin care utilizatorul poate descoperi obiective culturale dintr-un oraș printr-o explorare bazată pe proximitate, cu un sistem de misiuni(\textit{quest-uri}) și puncte obținute pentru interacțiunile pe platformă, care îl încurajează să viziteze locuri noi.
 
 \item Personalizarea recomandărilor de rute pentru fiecare utilizator, fără ca datele acestuia - istoricul de interacțiuni, locațiile vizitate - să părăsească dispozitivul.
 
@@ -256,7 +257,7 @@ Capitolul de față detaliază cerințele care reies din obiectivele stabilite a
 
 \section{Utilizatori țintă și cazuri de utilizare}
 
-Utilizatorul principal al aplicației este un turist sau un localnic care explorează un oraș - sau o zonă a acestuia - cu dorința de a vizita obiective turistice sau culturale din proximitate, adaptate intereselor proprii. Primul caz de utilizare este cel de generare de rute și suport pe parcursul urmării acestora, în care utilizatorul vede pe hartă poziția sa curentă, locurile de interes din apropiere și primește o rută care combină preferințele sale cu acestea. Mai mult, interacțiunile cu aplicația - vizite, misiuni (\textit{quest-uri}) finalizate, recenzii - determină ajustarea, prin FL, a modelului de pe dispozitiv - și, implicit, și a celui global - fără ca istoricul brut al interacțiunilor să ajungă pe server. Un al doilea caz de utilizare este cel de contribuție de conținut, în care utilizatorul poate propune obiective noi, povești, misiuni sau recenzii, toate acestea necesitând aprobarea de către alte persoane care folosesc aplicația sau de către un administrator. Prin conturile de tip administrator, relevante mai ales pentru 2.2, se aprobă sau se respinge conținutul propus de utilizatorii obișnuiți.
+Utilizatorul principal al aplicației este un turist sau un localnic care explorează un oraș - sau o zonă a acestuia - cu dorința de a vizita obiective turistice sau culturale din proximitate, adaptate intereselor proprii. Primul caz de utilizare este cel de generare de rute și suport pe parcursul urmării acestora, în care utilizatorul vede pe hartă poziția sa curentă, locurile de interes din apropiere și primește o rută care combină preferințele sale cu acestea. Mai mult, interacțiunile cu aplicația - vizite, (\textit{quest-uri}) finalizate, recenzii - determină ajustarea, prin FL, a modelului de pe dispozitiv - și, implicit, și a celui global - fără ca istoricul brut al interacțiunilor să ajungă pe server. Un al doilea caz de utilizare este cel de contribuție de conținut, în care utilizatorul poate propune obiective noi, povești, \textit{quest-uri} sau recenzii, toate acestea necesitând aprobarea de către alte persoane care folosesc aplicația sau de către un administrator. Prin conturile de tip administrator, relevante mai ales pentru 2.2, se aprobă sau se respinge conținutul propus de utilizatorii obișnuiți.
 
 \section{Cerințe funcționale}
 
@@ -427,7 +428,7 @@ Pentru aplicația mobilă, CultureQuest folosește Flutter\footnote{Documentați
 
 \subsection{FastAPI, MongoDB și Redis}
 
-Pe partea de \textit{backend}, CultureQuest folosește FastAPI\footnote{Documentația oficială FastAPI. \url{https://fastapi.tiangolo.com} (accesat 19.06.2026).}, MongoDB\footnote{Documentația oficială MongoDB. \url{https://www.mongodb.com/docs/} (accesat 19.06.2026).} și Redis\footnote{Documentația oficială Redis. \url{https://redis.io/docs/} (accesat 19.06.2026).}. FastAPI este scris în Python, iar asta înseamnă că face posibilă integrarea directă a serviciilor de agregare FL și a antrenării modelului MLP cu ecosistemul PyTorch folosit și la pre-antrenare, din nou, fără introducerea unui strat de complexitate între limbaje. Suportul nativ pentru operații asincrone se potrivește cu un număr mare de clienți conectați intermitent, ceea ce este tipic pentru un sistem \textit{cross-device}. Legat de MongoDB, acesta stochează date variabile - obiective, misiuni, povești, recenzii - într-un mod mai flexibil decât ar permite folosirea unei baze de date relaționale. Redis, la rândul lui, acoperă starea nepersistentă a procesului FL, deoarece stocarea în memorie este suficientă, dar și mai rapidă.
+Pe partea de \textit{backend}, CultureQuest folosește FastAPI\footnote{Documentația oficială FastAPI. \url{https://fastapi.tiangolo.com} (accesat 19.06.2026).}, MongoDB\footnote{Documentația oficială MongoDB. \url{https://www.mongodb.com/docs/} (accesat 19.06.2026).} și Redis\footnote{Documentația oficială Redis. \url{https://redis.io/docs/} (accesat 19.06.2026).}. FastAPI este scris în Python, iar asta înseamnă că face posibilă integrarea directă a serviciilor de agregare FL și a antrenării modelului MLP cu ecosistemul PyTorch folosit și la pre-antrenare, din nou, fără introducerea unui strat de complexitate între limbaje. Suportul nativ pentru operații asincrone se potrivește cu un număr mare de clienți conectați intermitent, ceea ce este tipic pentru un sistem \textit{cross-device}. Legat de MongoDB, acesta stochează date variabile - obiective, \textit{quest-uri}, povești, recenzii - într-un mod mai flexibil decât ar permite folosirea unei baze de date relaționale. Redis, la rândul lui, acoperă starea nepersistentă a procesului FL, deoarece stocarea în memorie este suficientă, dar și mai rapidă.
 
 \subsection{Motorul de rutare OSRM}
 
@@ -476,6 +477,17 @@ Diagrama evidențiază trei fluxuri principale, pe care le-am numerotat cu (1), 
 \end{figure}
 
 \section{Arhitectura aplicației mobile}
+
+Aplicația mobilă este organizată pe module de tip \textit{feature}, unde fiecare funcționalitate principală este asociată unui director propriu cu ecrane și provideri, fără dependențe directe față de alte module. Cele șapte module sunt \textit{map} - pentru hartă și obiectivele de pe aceasta, dar și pentru generare de rute, \textit{auth} - pentru autentificare, \textit{federated} - pentru clientul FL, \textit{onboarding} - pentru alegerea intereselor de către utilizator la instalarea aplicației, \textit{profile} - pentru profilul utilizatorului și statusul procesului FL, \textit{proximity} - pentru partea \textit{geofencing} și detectarea proximității față de obiective) și \textit{quest} - pentru sistemul de misiuni.
+
+Gestionarea stării intră în responsabilitatea Riverpod, care leagă modulele între ele prin provideri declarativi. Aceștia sunt disponibili de la orice nivel al arborelui de \textit{widget-uri}, rezultând avantajul că datele nu mai sunt transmise manual prin constructori. Figura~\ref{fig:arhitectura-mobila} ilustrează arhitectura în trei straturi. Modulele de tip \textit{feature} folosesc provideri Riverpod specializați, care la rândul lor delegă atât cererile către \textit{backend}, cât și operațiile de stocare locală altor servicii dedicate. Providerii partajați arată dependențele funcționale dintre module: \textit{fl\_provider} este utilizat de \textit{map} (pentru scorul de potrivire afișat în cadrul unui obiectiv), de \textit{federated} (pentru statusul agregării FL) și de \textit{profile} (pentru statusul antrenării locale). De asemenea, \textit{proximity\_provider} este partajat de \textit{proximity} și \textit{quest}, cel din urmă depinzând de evenimentele de \textit{geofencing} pentru a permite completarea \textit{quest-urilor} disponibile pentru un obiectiv.
+
+\begin{figure}[h]
+\centering
+\hspace*{-0.4cm}\includegraphics[width=1.05\textwidth]{pics/arhitectura-mobila.pdf}
+\caption{Arhitectura aplicației mobile CultureQuest: modulele de tip \textit{feature} folosesc \textit{providere} Riverpod partajate.}
+\label{fig:arhitectura-mobila}
+\end{figure}
 
 \section{Arhitectura serviciilor \textit{backend}}
 
@@ -591,6 +603,13 @@ Diagrama evidențiază trei fluxuri principale, pe care le-am numerotat cu (1), 
 \chapter*{Anexe}\addcontentsline{toc}{chapter}{Anexe}
 
 \begin{appendices}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{pics/db.pdf}
+\caption{Modelul complet de date al aplicației CultureQuest: colecțiile MongoDB, câmpurile principale și relațiile dintre ele.}
+\label{fig:db}
+\end{figure}
 
 \chapter{Extrase de Cod} % Introduce o nouă anexă
 

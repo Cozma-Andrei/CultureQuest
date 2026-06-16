@@ -1,101 +1,33 @@
-erDiagram
-    USERS {
-        ObjectId _id PK
-        string email
-        string password_hash
-        string name
-        string interests "array InterestCategory"
-        int points
-        int completed_quests
-        bool is_admin
-        datetime created_at
-    }
+flowchart TB
+    subgraph hub[" "]
+        direction LR
+        USERS["USERS<br/>────────────────<br/>_id: ObjectId PK<br/>email: string<br/>password_hash: string<br/>name: string<br/>interests: enum categorii<br/>points: int<br/>completed_quests: int<br/>is_admin: bool<br/>created_at: datetime"]
+        LANDMARKS["LANDMARKS<br/>────────────────<br/>_id: ObjectId PK<br/>name: string<br/>type: string<br/>location: GeoJSON 2dsphere<br/>description: string<br/>categories: array<br/>stories: array string<br/>rating: float<br/>rating_sum / rating_count: int<br/>visit_count: int<br/>has_active_quest: bool<br/>status: approved/pending/rejected<br/>submitted_by: FK"]
+    end
 
-    LANDMARKS {
-        ObjectId _id PK
-        string name
-        string type
-        GeoJSON location "Point, index 2dsphere"
-        string description
-        string categories "array"
-        string stories "array embedded de string-uri"
-        float rating
-        int rating_sum
-        int rating_count
-        int visit_count
-        bool has_active_quest
-        string status "approved/pending/rejected"
-        string submitted_by FK
-    }
+    QUESTS["QUESTS<br/>────────────────<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>submitted_by: FK<br/>type: string<br/>title: string<br/>description: string<br/>points: int<br/>options: array<br/>correct_option_index: int<br/>status: approved/pending"]
 
-    QUESTS {
-        ObjectId _id PK
-        string landmark_id FK
-        string type
-        string title
-        string description
-        int points
-        string options "array"
-        int correct_option_index
-        string status "approved/pending"
-        string submitted_by FK
-    }
+    ROUTES["ROUTES<br/>────────────────<br/>_id: ObjectId PK<br/>user_id: FK<br/>stop_ids: array FK<br/>is_global: bool<br/>name: string<br/>dwell_minutes: array<br/>total_distance_m: int<br/>total_duration_minutes: int<br/>generated_at: string"]
 
-    ROUTES {
-        ObjectId _id PK
-        string user_id FK
-        bool is_global
-        string name
-        string stop_ids "array ordonat, FK -> LANDMARKS"
-        string dwell_minutes "array, opțional"
-        int total_distance_m
-        int total_duration_minutes
-        string generated_at
-    }
+    EVENTS["EVENTS<br/>────────────────<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>created_by: FK<br/>title: string<br/>description: string<br/>start_time: string<br/>end_time: string"]
 
-    EVENTS {
-        ObjectId _id PK
-        string landmark_id FK
-        string title
-        string description
-        string start_time
-        string end_time
-        string created_by FK
-    }
+    COMMENTS["COMMENTS<br/>────────────────<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>text: string<br/>rating: int 1-5<br/>created_at: string<br/>flagged: bool<br/>flag_source: string"]
 
-    COMMENTS {
-        ObjectId _id PK
-        string landmark_id FK
-        string text
-        int rating "1-5"
-        string created_at
-        bool flagged
-        string flag_source
-    }
+    STORIES["STORIES<br/>────────────────<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>submitted_by: FK<br/>text: string<br/>status: pending/approved/rejected"]
 
-    STORIES {
-        ObjectId _id PK
-        string landmark_id FK
-        string submitted_by FK
-        string text
-        string status "pending/approved/rejected"
-    }
+    VISITS["VISITS<br/>────────────────<br/>_id: ObjectId PK<br/>user_id: FK<br/>landmark_id: FK"]
 
-    VISITS {
-        ObjectId _id PK
-        string user_id FK
-        string landmark_id FK
-    }
+    USERS -->|submitted_by| LANDMARKS
+    USERS -->|submitted_by| QUESTS
+    USERS -->|submitted_by| STORIES
+    USERS -->|created_by| EVENTS
+    USERS -->|user_id| ROUTES
+    USERS -->|user_id| VISITS
+    LANDMARKS -->|landmark_id| QUESTS
+    LANDMARKS -->|landmark_id| EVENTS
+    LANDMARKS -->|landmark_id| COMMENTS
+    LANDMARKS -->|landmark_id| STORIES
+    LANDMARKS -->|landmark_id| VISITS
+    LANDMARKS -->|stop_ids| ROUTES
 
-    USERS ||--o{ LANDMARKS : submitted_by
-    USERS ||--o{ QUESTS : submitted_by
-    USERS ||--o{ STORIES : submitted_by
-    USERS ||--o{ EVENTS : created_by
-    USERS ||--o{ ROUTES : user_id
-    USERS ||--o{ VISITS : user_id
-    LANDMARKS ||--o{ QUESTS : landmark_id
-    LANDMARKS ||--o{ EVENTS : landmark_id
-    LANDMARKS ||--o{ COMMENTS : landmark_id
-    LANDMARKS ||--o{ STORIES : landmark_id
-    LANDMARKS ||--o{ VISITS : landmark_id
-    LANDMARKS }o--o{ ROUTES : stop_ids
+    style hub fill:none,stroke:none

@@ -1,0 +1,41 @@
+flowchart TB
+    subgraph F["Module feature"]
+        direction LR
+        MAP["map"]
+        FED["federated"]
+        PROF["profile"]
+        AUTH["auth"]
+        ON["onboarding"]
+        QUEST["quest"]
+        PROX["proximity"]
+    end
+
+    subgraph P["Providere Riverpod"]
+        direction LR
+        FLP["fl_provider\n(model FL, scoruri)"]
+        MAPP["map_provider\n(obiective, rută)"]
+        AUTHP["auth_provider\n(sesiune utilizator)"]
+        PXP["proximity_provider\n(geofencing)"]
+        QP["quest_provider\n(misiuni)"]
+    end
+
+    subgraph S["Servicii"]
+        direction LR
+        FLC["fl_client_service\n(antrenare, inferență)"]
+        APIS["api_service\n(HTTP)"]
+        LDS["local_data_service\n(stocare locală)"]
+    end
+
+    MAP --> FLP & MAPP
+    FED --> FLP
+    PROF --> FLP & AUTHP
+    AUTH --> AUTHP
+    ON --> AUTHP
+    QUEST --> QP & PXP
+    PROX --> PXP
+
+    FLP --> FLC & LDS
+    MAPP --> APIS
+    AUTHP --> APIS
+    QP --> APIS
+    PXP --> APIS
