@@ -491,9 +491,53 @@ Gestionarea stării intră în responsabilitatea Riverpod, care leagă modulele 
 
 \section{Arhitectura serviciilor \textit{backend}}
 
+\textit{Backend-ul} aplicației este implementat cu FastAPI și structurat pe domenii de funcționalitate. Fiecare colecție MongoDB are un grup de rute dedicat și un serviciu de logică de business asociat. Grupurile de rute sunt împărțite în felul următor: un grup pentru autentificarea utilizatorilor (\textit{auth}, cu înregistrare și autentificare pe bază de token JWT), obiectivele turistice și culturale (\textit{landmarks}), misiunile (\textit{quests}), rutele turistice (\textit{routes}), evenimentele (\textit{events}), recenziile (\textit{comments}), validarea comunitară a conținutului (\textit{community}) și schimbul de ponderi FL cu clienții (\textit{federated}).
+
+Modelul de date - a cărui schemă completă este ilustrată în figura~\ref{fig:db} din Anexe - este construit în jurul colecțiilor \textbf{USERS} și \textbf{LANDMARKS}: USERS stochează profilul utilizatorului, format din credențialele acestuia și lista de interese pe care le poate selecta, și care intră ulterior în construirea vectorului de caracteristici pentru modelul FL, iar LANDMARKS reprezintă obiectivele care au drept caracteristică principală locația în format GeoJSON indexată 2dsphere, necesară interogărilor de proximitate. De colecția LANDMARKS sunt legate direct \textbf{QUESTS}, \textbf{EVENTS}, \textbf{COMMENTS}, \textbf{STORIES} și \textbf{VISITS}, dar și \textbf{ROUTES} pentru stocharea rutelor ca secvențe ordonate de referințe către LANDMARKS (fie rute globale pre-generate, fie generate de utilizatorii care doresc să parcurgă un traseu cu obiectivele turistice din apropiere).
+
+Conținutul generat de utilizatori trece printr-un flux de moderare înainte de publicare. \textit{Quest-urile} propuse și poveștile sunt create cu statusul \textit{pending} și devin disponibile altor utilizatori doar după aprobarea de către un administrator sau de către cinci alți utilizatori. Comentariile sunt, însă, publicate imediat, dar pot fi marcate automat prin câmpul \textit{flagged} de modulul de moderare a conținutului, acestea ajungând să fie vizibile conturilor de tip administrator pentru a fi revizuite manual.
+
 \section{Proiectarea sistemului de învățare federată}
 
+Sistemul FL din CultureQuest este proiectat să asocieze un scor de potrivire fiecărui obiectiv și să personalizeze generarea rutelor fără ca datele de interacțiune să părăsească dispozitivul utilizatorului. Fluxul FL este structurat în șase componente: un model MLP de dimensiuni reduse care rulează pe dispozitiv, o procedură de antrenare locală bazată pe FedAvg, un mecanism de agregare asincronă cu reducere pe bază de vechime conform FedAsync, limitarea normei actualizărilor agregate pentru ca modelul să nu fie afectat de contribuțiile extreme, adăugarea de zgomot Gaussian pentru garantarea DP, dar și un mecanism de control al concurenței bazat pe Redis.
+
 \subsection{Arhitectura modelului}
+
+Modelul folosit pentru personalizarea din cadrul aplicației este un MLP cu arhitectura $22 \to 32 \to 16 \to 1$, model ilustrat în figura~\ref{fig:mlp}, în care se descrie faptul că straturile ascunse folosesc funcția de activare ReLU, pe când stratul de ieșire aplică funcția sigmoid, producând un scor continuu în $[0, 1]$ care determină gradul de potrivire dintre profilul utilizatorului și un obiectiv dat. Modelul însumează 1.281 de parametri, acest număr mic de parametri fiind ales deliberat pentru a menține costul computațional redus pe dispozitiv. Acesta rulează atât în antrenare, cât și la fiecare deschidere a fișei unui obiectiv.
+
+Vectorul de intrare de 22 de dimensiuni grupează caracteristicile în patru categorii, iar fiecare caracteristică este detaliată în tabelul~\ref{tab:features}. Primele 14 dimensiuni codifică profilul de interese al utilizatorului și tipul obiectivului în format \textit{one-hot}. Contextul temporal (dimensiunile 14-16) stabilește disponibilitatea obiectivului la momentul interogării, dacă la momentul actual este weekend și mai include ora normalizată la $[0, 1]$. Contextul spațial și de rută (dimensiunile 17-21) includ rangul relativ de distanță față de alte posibile obiective care pot fi alese pentru rută, scorul de potrivire a intereselor și trei caracteristici care sunt active doar în etapa de generare a rutelor.
+
+Același model rulează independent pentru fiecare locație, cu un vector de caracteristici construit specific acesteia, scorul rezultat fiind convertit într-o categorie de potrivire afișată pe fișa obiectivului - \textit{scăzut} pentru scoruri sub 0,4, \textit{mediu} pentru intervalul $[0{,}4,\ 0{,}7)$ și \textit{ridicat} pentru scoruri de cel puțin 0,7.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{pics/mlp.pdf}
+\caption{Arhitectura modelului MLP utilizat pentru personalizare.}
+\label{fig:mlp}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Vectorul de caracteristici de intrare al modelului FL (22 dimensiuni).}
+\label{tab:features}
+\begin{tabular}{cp{3.5cm}p{2cm}p{6cm}}
+\toprule
+\textbf{Dim.} & \textbf{Caracteristică} & \textbf{Tip} & \textbf{Descriere} \\
+\midrule
+0--5  & Interesele utilizatorului  & one-hot       & artă, arhitectură, istorie, gastronomie, natură, muzică \\
+6--13 & Tipul obiectivului         & one-hot       & muzeu, monument, parc, galerie, restaurant, piață, clădire, altele \\
+14    & isOpen                     & binar         & obiectivul este deschis \\
+15    & isWeekend                  & binar         & ziua curentă este sâmbătă sau duminică \\
+16    & oră normalizată            & float $[0,1]$ & ora curentă împărțită la 24 \\
+17    & relativeDistanceRank       & float $[0,1]$ & proporția candidaților mai apropiați; 0 = cel mai apropiat \\
+18    & interestMatchScore         & float $[0,1]$ & proporția categoriilor comune între utilizator și obiectiv \\
+19    & isPartOfRoute              & binar         & obiectivul face parte din ruta curentă \\
+20    & routeStopNormalized        & float $[0,1]$ & poziția opririi în rută; 0 = prima oprire, 1 = ultima \\
+21    & routeLengthNormalized      & float $[0,1]$ & lungimea rutei normalizată la maxim 5 opriri \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \subsection{Antrenarea locală}
 
@@ -580,7 +624,7 @@ Gestionarea stării intră în responsabilitatea Riverpod, care leagă modulele 
 \addcontentsline{toc}{chapter}{Bibliografie}
 
 % Asa se specifica folosirea unui fisier cu referinte bibliografice:
-\bibliographystyle{plain}
+\bibliographystyle{plainurl}
 \bibliography{bibliography}
 
 %% O alta varianta ar fi fost includerea de articole direct in acest fisier

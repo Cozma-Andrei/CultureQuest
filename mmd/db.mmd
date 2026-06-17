@@ -1,21 +1,21 @@
 flowchart TB
     subgraph hub[" "]
         direction LR
-        USERS["USERS<br/>────────────────<br/>_id: ObjectId PK<br/>email: string<br/>password_hash: string<br/>name: string<br/>interests: enum categorii<br/>points: int<br/>completed_quests: int<br/>is_admin: bool<br/>created_at: datetime"]
-        LANDMARKS["LANDMARKS<br/>────────────────<br/>_id: ObjectId PK<br/>name: string<br/>type: string<br/>location: GeoJSON 2dsphere<br/>description: string<br/>categories: array<br/>stories: array string<br/>rating: float<br/>rating_sum / rating_count: int<br/>visit_count: int<br/>has_active_quest: bool<br/>status: approved/pending/rejected<br/>submitted_by: FK"]
+        USERS["USERS<br/>_id: ObjectId PK<br/>email: string<br/>password_hash: string<br/>name: string<br/>interests: enum categorii<br/>points: int<br/>completed_quests: int<br/>is_admin: bool<br/>created_at: datetime"]
+        LANDMARKS["LANDMARKS<br/>_id: ObjectId PK<br/>name: string<br/>type: string<br/>location: GeoJSON 2dsphere<br/>description: string<br/>categories: array<br/>stories: array string<br/>rating: float<br/>rating_sum / rating_count: int<br/>visit_count: int<br/>has_active_quest: bool<br/>status: approved/pending/rejected<br/>submitted_by: FK"]
     end
 
-    QUESTS["QUESTS<br/>────────────────<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>submitted_by: FK<br/>type: string<br/>title: string<br/>description: string<br/>points: int<br/>options: array<br/>correct_option_index: int<br/>status: approved/pending"]
+    QUESTS["QUESTS<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>submitted_by: FK<br/>type: string<br/>title: string<br/>description: string<br/>points: int<br/>options: array<br/>correct_option_index: int<br/>status: approved/pending"]
 
-    ROUTES["ROUTES<br/>────────────────<br/>_id: ObjectId PK<br/>user_id: FK<br/>stop_ids: array FK<br/>is_global: bool<br/>name: string<br/>dwell_minutes: array<br/>total_distance_m: int<br/>total_duration_minutes: int<br/>generated_at: string"]
+    ROUTES["ROUTES<br/>_id: ObjectId PK<br/>user_id: FK<br/>stop_ids: array FK<br/>is_global: bool<br/>name: string<br/>dwell_minutes: array<br/>total_distance_m: int<br/>total_duration_minutes: int<br/>generated_at: string"]
 
-    EVENTS["EVENTS<br/>────────────────<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>created_by: FK<br/>title: string<br/>description: string<br/>start_time: string<br/>end_time: string"]
+    EVENTS["EVENTS<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>created_by: FK<br/>title: string<br/>description: string<br/>start_time: string<br/>end_time: string"]
 
-    COMMENTS["COMMENTS<br/>────────────────<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>text: string<br/>rating: int 1-5<br/>created_at: string<br/>flagged: bool<br/>flag_source: string"]
+    COMMENTS["COMMENTS<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>text: string<br/>rating: int 1-5<br/>created_at: string<br/>flagged: bool<br/>flag_source: string"]
 
-    STORIES["STORIES<br/>────────────────<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>submitted_by: FK<br/>text: string<br/>status: pending/approved/rejected"]
+    STORIES["STORIES<br/>_id: ObjectId PK<br/>landmark_id: FK<br/>submitted_by: FK<br/>text: string<br/>status: pending/approved/rejected"]
 
-    VISITS["VISITS<br/>────────────────<br/>_id: ObjectId PK<br/>user_id: FK<br/>landmark_id: FK"]
+    VISITS["VISITS<br/>_id: ObjectId PK<br/>user_id: FK<br/>landmark_id: FK"]
 
     USERS -->|submitted_by| LANDMARKS
     USERS -->|submitted_by| QUESTS

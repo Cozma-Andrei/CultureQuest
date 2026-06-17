@@ -400,10 +400,16 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
     obiectivul (b) din 1.3, cele două rezultate vizibile sunt ruta generată
     (4.5) și categoria de potrivire afișată pe fișa obiectivului (4.4.1).
 - **7.2 Direcții de cercetare și lucrări viitoare** - "personal head" per
-  utilizator, agregare de tip buffer (FedBuff) dacă participarea clienților se
-  grupează în timp, posibilitatea de a posta poze pentru obiective (extensie a
-  sistemului de recenzii/moderare, 5.2.3), colectare de date FL de la
-  utilizatori reali la scară mare.
+  utilizator, agregare de tip buffer (FedBuff, Nguyen et al. 2022): FedBuff
+  bufferizează $k$ update-uri înainte de agregare, reducând varianța și
+  îmbunătățind anularea zgomotului DP prin mediere, dar presupune că $k$
+  clienți sunt activi simultan - dezavantaj major la participarea rară și
+  neregulată a turiștilor (bufferul riscă să nu se umple zile întregi,
+  blocând evoluția modelului); devine relevant dacă baza de utilizatori
+  crește suficient pentru a garanta un flux continuu de update-uri;
+  posibilitatea de a posta poze pentru obiective (extensie a sistemului de
+  recenzii/moderare, 5.2.3), colectare de date FL de la utilizatori reali
+  la scară mare.
 
 ---
 

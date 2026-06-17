@@ -1,0 +1,14 @@
+flowchart LR
+    I["<b>Intrare</b><br/>22 neuroni<br/>vector caracteristici"]
+    H1["<b>Strat ascuns 1</b><br/>32 neuroni<br/>ReLU"]
+    H2["<b>Strat ascuns 2</b><br/>16 neuroni<br/>ReLU"]
+    O["<b>Ieșire</b><br/>1 neuron<br/>Sigmoid<br/>scor ∈ [0, 1]"]
+
+    I  -->|"W₁ (32×22) + b₁"| H1
+    H1 -->|"W₂ (16×32) + b₂"| H2
+    H2 -->|"W₃ (1×16)  + b₃"| O
+
+    style I  fill:#dbeafe,stroke:#3b82f6
+    style H1 fill:#ede9fe,stroke:#7c3aed
+    style H2 fill:#ede9fe,stroke:#7c3aed
+    style O  fill:#dcfce7,stroke:#16a34a
