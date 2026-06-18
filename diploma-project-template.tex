@@ -507,7 +507,7 @@ Modelul folosit pentru personalizarea din cadrul aplicației este un MLP cu arhi
 
 Vectorul de intrare de 22 de dimensiuni grupează caracteristicile în patru categorii, iar fiecare caracteristică este detaliată în tabelul~\ref{tab:features}. Primele 14 dimensiuni codifică profilul de interese al utilizatorului și tipul obiectivului în format \textit{one-hot}. Contextul temporal (dimensiunile 14-16) stabilește disponibilitatea obiectivului la momentul interogării, dacă la momentul actual este weekend și mai include ora normalizată la $[0, 1]$. Contextul spațial și de rută (dimensiunile 17-21) includ rangul relativ de distanță față de alte posibile obiective care pot fi alese pentru rută, scorul de potrivire a intereselor și trei caracteristici care sunt active doar în etapa de generare a rutelor.
 
-Același model rulează independent pentru fiecare locație, cu un vector de caracteristici construit specific acesteia, scorul rezultat fiind convertit într-o categorie de potrivire afișată pe fișa obiectivului - \textit{scăzut} pentru scoruri sub 0,4, \textit{mediu} pentru intervalul $[0{,}4,\ 0{,}7)$ și \textit{ridicat} pentru scoruri de cel puțin 0,7.
+Același model rulează pentru fiecare locație în parte, cu un vector de caracteristici construit specific acesteia, scorul rezultat fiind convertit într-o categorie de potrivire afișată pe fișa obiectivului - \textit{scăzut} pentru scoruri sub 0,4, \textit{mediu} pentru intervalul $[0{,}4,\ 0{,}7)$ și \textit{ridicat} pentru scoruri mai mari sau egale decât 0,7.
 
 \begin{figure}[h]
 \centering
@@ -554,7 +554,36 @@ w_{t+1} = w_t - \eta \cdot \frac{g_t}{\max\!\left(1,\, \|g_t\|_2\right)}
 
 \subsection{Agregarea asincronă și reducerea în funcție de vechime}
 
+Serverul agregează imediat fiecare actualizare primită, fără a aștepta alți clienți, indiferent dacă este vorba de a aștepta toți utilizatorii sau doar de un grup mai mic, procesul de învățare de pe dispozitiv și apoi agregare reprezentând o rundă. Clientul trimite către server runda la care a descărcat modelul global (\texttt{client\_round}), iar \textit{staleness-ul} reprezintă câte runde au trecut de când clientul a primit modelul actualizat. Factorul de reducere \cite{xie2019fedasync}, prezentat în ecuația~\ref{eq:fedasync}, scalează numărul efectiv de eșantioane. Modelul global este ponderat cu de 4 ori mai multe eșantioane virtuale, astfel încât contribuția unui client să nu poată depăși singur 20\% din agregare.
+
+Funcția de reducere este ilustrată în figura~\ref{fig:fedasync}, unde se observă că la \textit{staleness}=0 clientul contribuie integral, la \textit{staleness}=1 în proporție de 50\%, iar la \textit{staleness}=9 în proporție de doar 10\%. Alegerea folosirii algoritmului se justifică prin următorul caz: dacă doi - sau mai mulți - clienți descarcă modelul global în același timp și unul termină antrenarea mai repede, serverul ajunge la runda următoare înainte ca al doilea să trimită actualizarea. Prin urmare, discountul penalizează proporțional contribuția celui rămas în urmă cu varianta modelului global.
+
+\begin{equation}
+\mathrm{discount}(s) = \frac{1}{1 + s}, \quad n_{\mathrm{eff}} = \max\!\left(1,\ \left\lfloor n \cdot \mathrm{discount}(s) \right\rfloor\right)
+\label{eq:fedasync}
+\end{equation}
+
+\noindent unde $s = \texttt{current\_round} - \texttt{client\_round}$ este vechimea actualizării, $n$ este numărul de eșantioane locale ale clientului, iar $n_{\mathrm{eff}}$ este numărul efectiv folosit la agregare.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.65\textwidth]{pics/fedasync.pdf}
+\caption{Factorul de reducere FedAsync în funcție de \textit{staleness}.}
+\label{fig:fedasync}
+\end{figure}
+
 \subsection{Limitarea gradienților}
+
+Înainte de agregare, serverul calculează variația ponderilor față de modelul global, denumită și delta. Dacă norma L2 a deltei depășește pragul $\tau = 1{,}0$, aceasta este rescalată proporțional conform ecuației~\ref{eq:clipping} \cite{mcmahan2018dpfedavg}, după care actualizarea rescalată este trecută prin agregarea ponderată FedAvg. Pentru un client care antrenează în mod normal, delta are o normă mică și factorul de scalare este 1, deci, actualizarea trece nemodificată. Limitarea intervine doar în cazul în care delta este foarte mare față de ce ar produce o antrenare obișnuită.
+
+Rolul principal al acestui tip de limitare este de a reduce influența actualizărilor extreme. Un client malițios care evaluează totul adversarial \cite{lyu2020threats} produce o deltă cu normă mare, dar aceasta este redusă la $\tau$ înainte de agregare, limitând influența sa pentru fiecare coordonată de pondere, însă limitarea deltei este si o condiție necesară pentru garantarea confidențialității diferențiale din secțiunea următoare.
+
+\begin{equation}
+\tilde{\delta} = \delta \cdot \min\!\left(1,\ \frac{\tau}{\|\delta\|_2}\right)
+\label{eq:clipping}
+\end{equation}
+
+\noindent unde $\delta = w_{\mathrm{client}} - w_{\mathrm{global}}$ este variația ponderilor față de modelul global, $\|\delta\|_2$ este norma sa L2, iar $\tau = 1{,}0$ este pragul de limitare.
 
 \subsection{Confidențialitate diferențială}
 
