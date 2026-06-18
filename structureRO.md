@@ -328,7 +328,11 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
 - **5.4 Framework-ul pentru simularea procesului FL** - simulare sintetică pe
   mai multe runde, comparând reducerea în funcție de vechime din FedAsync
   activată vs. dezactivată, modelarea derivei conceptuale (concept drift)
-  pentru clienții cu date vechi (stale).
+  pentru clienții cu date vechi (stale). Antrenarea în simulare folosește MSE
+  (ca și clientul mobil), dar calitatea modelului global este urmărită cu BCE
+  (`_bce_loss`, `simulate_fl.py:156`) - de menționat distincția și motivul
+  (BCE penalizează mai sever predicțiile confident greșite, mai potrivit pentru
+  evaluarea unui model cu ieșire sigmoid).
   - *Resurse:* **Listing 5** - comutatorul FedAsync + modelarea derivei
     conceptuale, `backend/federated/simulate_fl.py` (~20 linii în jurul
     220-240). Justifică design-ul experimental (cum sunt simulați clienții

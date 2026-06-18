@@ -511,7 +511,7 @@ Același model rulează independent pentru fiecare locație, cu un vector de car
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.75\textwidth]{pics/mlp.pdf}
+\includegraphics[width=0.85\textwidth]{pics/mlp.pdf}
 \caption{Arhitectura modelului MLP utilizat pentru personalizare.}
 \label{fig:mlp}
 \end{figure}
@@ -540,6 +540,17 @@ Același model rulează independent pentru fiecare locație, cu un vector de car
 \end{table}
 
 \subsection{Antrenarea locală}
+
+Procedura de antrenare locală este implementată conform protocolului clientului din FedAvg \cite{mcmahan2017fedavg}. Dispozitivul antrenează modelul pe buffer local de interacțiuni, și trimite ulterior către server doar diferența ponderilor față de modelul global. O rundă de antrenare se declanșează automat după strângerea a 15 interacțiuni în buffer - poate fi inițiată de utilizator dacă au fost strânse cel puțin 8 interacțiuni cu obiectivele - și presupune rularea a 5 epoci complete peste întregul set local.
+
+Optimizarea se realizează prin coborâre pe gradient stocastică (SGD, \textit{Stochastic Gradient Descent}) cu rata de învățare $\eta = 0{,}01$, care este aplicată pentru fiecare eșantion, si pentru funcția de pierdere se folosește eroarea medie pătratică (MSE, \textit{Mean Squared Error}), cu formula actualizărilor ilustrată în ecuația~\ref{eq:sgd}. Gradientul acestor actualizări este limitat la norma L2 unitară, iar dacă norma depășește 1, gradientul este scalat proporțional. Procesul este diferit de limitarea diferenței ponderilor aplicată ulterior în pasul de DP.
+
+\begin{equation}
+w_{t+1} = w_t - \eta \cdot \frac{g_t}{\max\!\left(1,\, \|g_t\|_2\right)}
+\label{eq:sgd}
+\end{equation}
+
+\noindent unde $w_t$ reprezintă ponderile la pasul $t$, $\eta = 0{,}01$ este rata de învățare, $g_t$ este gradientul erorii medii pătratice calculat per eșantion, iar $\|g_t\|_2$ este norma sa L2.
 
 \subsection{Agregarea asincronă și reducerea în funcție de vechime}
 
