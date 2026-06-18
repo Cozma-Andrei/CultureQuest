@@ -645,6 +645,18 @@ Dacă \textit{lock-ul} nu poate fi obținut, serverul mai încearcă de 9 ori, l
 
 \section{Fluxul de generare a rutelor}
 
+Generarea unei rute cuprinde, mai întâi, locația curentă a utilizatorului și se ajunge un traseu ordonat de obiective din proximitate, alcătuit astfel încât să respecte preferințele legate de interese și un buget alocat de maxim 300 de minute. Calculul rulează pe server, în \texttt{route\_service.py}, și este schițat în figura~\ref{fig:route-flow}. În prima etapă se strâng toate obiectivele turistice aflate pe o rază de 10 km și le atribuie un scor inițial care combină scorul FL (în proporție de 80\%) și proximitatea față de locația de start (în proporție de 20\%). Dacă modelul global nu este disponibil în momentul respectiv, locul scorului FL este preluat de o fracție de potrivire a intereselor, fiind dedusă direct din categoriile obiectivului. Primele 10 locații - dacă există în apropiere - cu cel mai mare scor rămân drept candidați - suficiente pentru un traseu de cel mult 5 opriri.
+
+Traseul am ales să fie construit efectiv cu ajutorul unui algoritm de tip vecin cel mai apropiat: la fiecare pas, se alege obiectivul cel mai aproape de poziția curentă, însă cu o corecție care „scurtează" distanța față de candidații ale căror categorii se potrivesc intereselor utilizatorului - permițând unui obiectiv relevant, dar mai îndepărtat, să poată fi ales înaintea unuia neutru din imediata apropiere. Pentru fiecare oprire se estimează și o durată de vizitare. Aceasta pleacă de la un timp de bază specific tipului de obiectiv (de la 15 minute pentru o piață publică până la 70 de minute pentru un muzeu) și este scalată între 75\% și 125\% în funcție de scorul FL al opririi. Scorul FL se calculează cu vectorul de caracteristici menționat anterior, care include și poziția obiectivului în traseu. De altfel, același mecanism de scorare FL se află și în spatele categoriei de potrivire afișate atunci când utilizatorul deschide un obiectiv de pe hartă.
+
+\begin{figure}[h]
+\centering
+\hspace*{2cm}
+\includegraphics[width=1\linewidth]{pics/route-flow.pdf}
+\caption{Fluxul de generare a rutelor}
+\label{fig:route-flow}
+\end{figure}
+
 \section{Proiectarea elementelor de gamificare}
 
 \section{Harta și navigarea}

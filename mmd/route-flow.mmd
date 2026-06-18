@@ -1,0 +1,12 @@
+flowchart TB
+    subgraph sus[" "]
+        direction LR
+        A(["Locație start\npreferințe utilizator"]) -->|"1. obiective în 10 km"| B["Obiective\ndin apropiere"]
+        B -->|"2. FL×0,8 + distanță×0,2"| C["Primii 10\ncandidați"]
+    end
+    subgraph jos[" "]
+        direction LR
+        D["Traseu\ninițial"] -->|"4. scalare durată\ndupă scor FL"| E["Durate de\nvizitare scalate"]
+        E -->|"5. construire rută"| F(["Rută\nfinală"])
+    end
+    C -->|"3. vecin cel mai apropiat\n+ departajare interese"| D
