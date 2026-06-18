@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant A as Client A
+    participant S as Server
+    participant R as Redis
+    participant B as Client B
+
+    A->>R: SET fl:agg_lock token_A NX PX 5000
+    R-->>A: OK (lock obținut)
+
+    B->>R: SET fl:agg_lock token_B NX PX 5000
+    R-->>B: nil (lock ocupat, retry după 0,3s)
+
+    A->>R: GET fl:weights + fl:round
+    R-->>A: model global curent
+
+    Note over A,S: agregare model global
+
+    A->>R: SET fl:weights (model actualizat)
+    A->>R: EVAL script Lua (eliberare lock)
+    R-->>A: lock eliberat
+
+    B->>R: SET fl:agg_lock token_B NX PX 5000
+    R-->>B: OK (lock obținut)
+    B->>R: GET fl:weights + fl:round

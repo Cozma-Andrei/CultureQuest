@@ -264,19 +264,30 @@ Utilizatorul principal al aplicației este un turist sau un localnic care explor
 Pornind de la cazurile de utilizare din secțiunea anterioară, cerințele funcționale au fost sintetizate în tabelul~\ref{tab:cerinte-functionale}, fiecare cu o descriere și secțiunile din Capitolele 4-6 unde cerința este tratată. Primul grup (de la \textbf{FR-1} la \textbf{FR-4}) sumarizează bucla principală de explorare: afișarea pe hartă a obiectivelor turistice din proximitate, generarea rutei care combină scorul modelului de tip MLP cu distanța față de poziția curentă, \textit{quest-urile} disponibile la obiectivele vizitate și posibilitatea de a adăuga sau vizualiza recenzii.
 
 Al doilea grup (de la \textbf{FR-5} la \textbf{FR-7}) ține de personalizare și administrare: \textbf{FR-5} descrie fluxul procesului FL - primirea parametrilor modelului actualizat de la server, urmată de antrenarea locală, fără ca istoricul interacțiunilor să ajungă pe server, \textbf{FR-6} descrie controalele de confidențialitate - asigurarea DP, vizibilitatea asupra datelor, iar \textbf{FR-7} descrie rolul de administrator - aprobarea sau respingerea conținutului propus.
-\begin{table}[th]\footnotesize\linespread{1}
+
+\begin{table}[h]
 \centering
+\footnotesize
 \caption{Cerințe funcționale}
 \label{tab:cerinte-functionale}
-\begin{tabular}{l >{\raggedright\arraybackslash}p{7cm} >{\raggedright\arraybackslash}p{2.8cm}}
-\textbf{ID} & \textbf{Descriere} & \textbf{Secțiune} \\\hline
-FR-1 & Obiective din proximitate pe hartă. & 4.7, 5.1.4, 6.1 \\\hline
-FR-2 & Rute personalizate: scor model MLP și proximitate. & 4.5, 5.1.5, 6.1 \\\hline
-FR-3 & \textit{Quest-uri} la obiectivele vizitate; puncte și progres. & 4.6, 5.1.6, 6.1 \\\hline
-FR-4 & Adăugare și vizualizare recenzii pentru obiective. & 5.2.3, 6.1 \\\hline
-FR-5 & Sincronizare model și antrenare locală, fără date colectate pe server. & 4.4, 5.1.1--5.1.3, 5.2.1, 6.2 \\\hline
-FR-6 & Zgomot DP aplicat pe actualizări; vizibilitate asupra datelor trimise. & 4.8, 5.1.2, 6.3 \\\hline
-FR-7 & Administrator: aprobă sau respinge conținut propus (obiective, povești, \textit{quest-uri}, recenzii). & 5.2.3, 6.1 \\\hline
+\begin{tabular}{|l|p{7cm}|p{2.8cm}|}
+\hline
+\textbf{ID} & \textbf{Descriere} & \textbf{Secțiune} \\
+\hline
+FR-1 & Obiective din proximitate pe hartă. & 4.7, 5.1.4, 6.1 \\
+\hline
+FR-2 & Rute personalizate: scor model MLP și proximitate. & 4.5, 5.1.5, 6.1 \\
+\hline
+FR-3 & \textit{Quest-uri} la obiectivele vizitate; puncte și progres. & 4.6, 5.1.6, 6.1 \\
+\hline
+FR-4 & Adăugare și vizualizare recenzii pentru obiective. & 5.2.3, 6.1 \\
+\hline
+FR-5 & Sincronizare model și antrenare locală, fără date colectate pe server. & 4.4, de la 5.1.1 la 5.1.3, 5.2.1, 6.2 \\
+\hline
+FR-6 & Zgomot DP aplicat pe actualizări; vizibilitate asupra datelor trimise. & 4.8, 5.1.2, 6.3 \\
+\hline
+FR-7 & Administrator: aprobă sau respinge conținut propus (obiective, povești, \textit{quest-uri}, recenzii). & 5.2.3, 6.1 \\
+\hline
 \end{tabular}
 \end{table}
 
@@ -286,17 +297,25 @@ La fel ca în secțiunea 2.2, cerințele non-funcționale au fost sintetizate î
 
 Al doilea grup ține de partea de \textit{backend}: \textbf{NFR-4} impune ca serviciul de agregare să suporte actualizări asincrone primite de la mai mulți clienți - fără conflicte între runde, iar \textbf{NFR-5} impune ca utilizatorii să primească recomandări utile încă de la început printr-un model global pre-antrenat \cite{bonawitz2019towards} - și din caracteristici bazate pe ariile de interes asociate fiecărui obiectiv - până când procesul FL își face efectul.
 
-\begin{table}[th]\footnotesize\linespread{1}
+\begin{table}[h]
 \centering
+\footnotesize
 \caption{Cerințe non-funcționale}
 \label{tab:cerinte-nonfunctionale}
-\begin{tabular}{l >{\raggedright\arraybackslash}p{7cm} >{\raggedright\arraybackslash}p{2.8cm}}
-\textbf{ID} & \textbf{Descriere} & \textbf{Secțiune} \\\hline
-NFR-1 & Confidențialitate: nicio interacțiune a utilizatorului nu părăsește dispozitivul. & 4.8, 5.1.2--5.1.3, 6.3 \\\hline
-NFR-2 & Reziliență offline: obiective turistice stocate în \textit{cache} local. & 5.1.4, 6.1 \\\hline
-NFR-3 & Cost redus de antrenare pe dispozitiv. & 4.4.1, 5.1.1, 6.2.1 \\\hline
-NFR-4 & Scalabilitatea \textit{backend-ului} la actualizările asincrone. & 4.4.6, 5.2.1, 6.2.2 \\\hline
-NFR-5 & \textit{Cold start}: recomandări utile pentru utilizatori folosind modelul pre-antrenat. & 4.4.1, 5.3, 6.2.1 \\\hline
+\begin{tabular}{|l|p{7cm}|p{2.8cm}|}
+\hline
+\textbf{ID} & \textbf{Descriere} & \textbf{Secțiune} \\
+\hline
+NFR-1 & Confidențialitate: nicio interacțiune a utilizatorului nu părăsește dispozitivul. & 4.8, de la 5.1.2 la 5.1.3, 6.3 \\
+\hline
+NFR-2 & Reziliență offline: obiective turistice stocate în \textit{cache} local. & 5.1.4, 6.1 \\
+\hline
+NFR-3 & Cost redus de antrenare pe dispozitiv. & 4.4.1, 5.1.1, 6.2.1 \\
+\hline
+NFR-4 & Scalabilitatea \textit{backend-ului} la actualizările asincrone. & 4.4.6, 5.2.1, 6.2.2 \\
+\hline
+NFR-5 & \textit{Cold start}: recomandări utile pentru utilizatori folosind modelul pre-antrenat. & 4.4.1, 5.3, 6.2.1 \\
+\hline
 \end{tabular}
 \end{table}
 
@@ -320,19 +339,23 @@ La polul opus se situează aplicațiile axate pe confidențialitate, precum Orga
 
 \begin{table}[h]
 \centering
-\small
+\footnotesize
 \caption{Comparație între aplicații existente de explorare urbană și CultureQuest}
 \label{tab:apps-comparativ}
-\begin{tabular}{lllll}
-\toprule
-Aplicație & Personalizare & Colectare date & ML local & Gamificare \\
-\midrule
+\begin{tabular}{|l|l|l|l|l|}
+\hline
+\textbf{Aplicație} & \textbf{Personalizare} & \textbf{Colectare date} & \textbf{ML local} & \textbf{Gamificare} \\
+\hline
 Google Maps & Da & Centralizat & Nu & Nu \\
+\hline
 TripAdvisor & Da & Centralizat & Nu & Limitată \\
+\hline
 GetYourGuide & Da & Centralizat & Nu & Nu \\
+\hline
 Organic Maps & Nu & Fără & Nu & Nu \\
+\hline
 CultureQuest & Da & Local & Da & Da \\
-\bottomrule
+\hline
 \end{tabular}
 \end{table}
 
@@ -507,7 +530,7 @@ Modelul folosit pentru personalizarea din cadrul aplicației este un MLP cu arhi
 
 Vectorul de intrare de 22 de dimensiuni grupează caracteristicile în patru categorii, iar fiecare caracteristică este detaliată în tabelul~\ref{tab:features}. Primele 14 dimensiuni codifică profilul de interese al utilizatorului și tipul obiectivului în format \textit{one-hot}. Contextul temporal (dimensiunile 14-16) stabilește disponibilitatea obiectivului la momentul interogării, dacă la momentul actual este weekend și mai include ora normalizată la $[0, 1]$. Contextul spațial și de rută (dimensiunile 17-21) includ rangul relativ de distanță față de alte posibile obiective care pot fi alese pentru rută, scorul de potrivire a intereselor și trei caracteristici care sunt active doar în etapa de generare a rutelor.
 
-Același model rulează pentru fiecare locație în parte, cu un vector de caracteristici construit specific acesteia, scorul rezultat fiind convertit într-o categorie de potrivire afișată pe fișa obiectivului - \textit{scăzut} pentru scoruri sub 0,4, \textit{mediu} pentru intervalul $[0{,}4,\ 0{,}7)$ și \textit{ridicat} pentru scoruri mai mari sau egale decât 0,7.
+Același model rulează pentru fiecare locație în parte, cu un vector de caracteristici construit specific acesteia, scorul rezultat fiind convertit într-o categorie de potrivire afișată pe fișa obiectivului - \textbf{scăzut} pentru scoruri sub 0,4, \textbf{mediu} pentru intervalul $[0{,}4,\ 0{,}7)$ și \textbf{ridicat} pentru scoruri mai mari sau egale decât 0,7.
 
 \begin{figure}[h]
 \centering
@@ -518,24 +541,33 @@ Același model rulează pentru fiecare locație în parte, cu un vector de carac
 
 \begin{table}[h]
 \centering
-\small
+\footnotesize
 \caption{Vectorul de caracteristici de intrare al modelului FL (22 dimensiuni).}
 \label{tab:features}
-\begin{tabular}{cp{3.5cm}p{2cm}p{6cm}}
-\toprule
+\begin{tabular}{|c|p{3.5cm}|p{2cm}|p{6cm}|}
+\hline
 \textbf{Dim.} & \textbf{Caracteristică} & \textbf{Tip} & \textbf{Descriere} \\
-\midrule
+\hline
 0--5  & Interesele utilizatorului  & one-hot       & artă, arhitectură, istorie, gastronomie, natură, muzică \\
+\hline
 6--13 & Tipul obiectivului         & one-hot       & muzeu, monument, parc, galerie, restaurant, piață, clădire, altele \\
+\hline
 14    & isOpen                     & binar         & obiectivul este deschis \\
+\hline
 15    & isWeekend                  & binar         & ziua curentă este sâmbătă sau duminică \\
+\hline
 16    & oră normalizată            & float $[0,1]$ & ora curentă împărțită la 24 \\
+\hline
 17    & relativeDistanceRank       & float $[0,1]$ & proporția candidaților mai apropiați; 0 = cel mai apropiat \\
+\hline
 18    & interestMatchScore         & float $[0,1]$ & proporția categoriilor comune între utilizator și obiectiv \\
+\hline
 19    & isPartOfRoute              & binar         & obiectivul face parte din ruta curentă \\
+\hline
 20    & routeStopNormalized        & float $[0,1]$ & poziția opririi în rută; 0 = prima oprire, 1 = ultima \\
+\hline
 21    & routeLengthNormalized      & float $[0,1]$ & lungimea rutei normalizată la maxim 5 opriri \\
-\bottomrule
+\hline
 \end{tabular}
 \end{table}
 
@@ -576,18 +608,40 @@ Funcția de reducere este ilustrată în figura~\ref{fig:fedasync}, unde se obse
 
 Înainte de agregare, serverul calculează variația ponderilor față de modelul global, denumită și delta. Dacă norma L2 a deltei depășește pragul $\tau = 1{,}0$, aceasta este rescalată proporțional conform ecuației~\ref{eq:clipping} \cite{mcmahan2018dpfedavg}, după care actualizarea rescalată este trecută prin agregarea ponderată FedAvg. Pentru un client care antrenează în mod normal, delta are o normă mică și factorul de scalare este 1, deci, actualizarea trece nemodificată. Limitarea intervine doar în cazul în care delta este foarte mare față de ce ar produce o antrenare obișnuită.
 
-Rolul principal al acestui tip de limitare este de a reduce influența actualizărilor extreme. Un client malițios care evaluează totul adversarial \cite{lyu2020threats} produce o deltă cu normă mare, dar aceasta este redusă la $\tau$ înainte de agregare, limitând influența sa pentru fiecare coordonată de pondere, însă limitarea deltei este si o condiție necesară pentru garantarea confidențialității diferențiale din secțiunea următoare.
+Rolul principal al acestui tip de limitare este de a reduce influența actualizărilor extreme. Un client malițios care evaluează totul adversarial \cite{lyu2020threats} produce o deltă cu normă mare, dar aceasta este redusă la $\tau$ înainte de agregare, limitând influența sa pentru fiecare coordonată de pondere, însă limitarea deltei este si o condiție necesară pentru garantarea DP din secțiunea următoare.
 
 \begin{equation}
 \tilde{\delta} = \delta \cdot \min\!\left(1,\ \frac{\tau}{\|\delta\|_2}\right)
 \label{eq:clipping}
 \end{equation}
 
-\noindent unde $\delta = w_{\mathrm{client}} - w_{\mathrm{global}}$ este variația ponderilor față de modelul global, $\|\delta\|_2$ este norma sa L2, iar $\tau = 1{,}0$ este pragul de limitare.
+\noindent unde $\delta = w_{\mathrm{client}} - w_{\mathrm{global}}$ este variația ponderilor față de modelul global, $\|\delta\|_2$ este norma sa L2, iar $\tau = 1$ este pragul de limitare.
 
 \subsection{Confidențialitate diferențială}
 
+Perturbarea prin zgomot nu se face central, zgomotul Gaussian fiind adăugat pe dispozitivul clientului, nu pe server, conform mecanismului NbAFL (\textit{Noising before Model Aggregation Federated Learning}) \cite{wei2020nbafl}. Imediat după etapa de antrenare locală, fiecare coordonată a deltei este limitată la intervalul $[-\tau, \tau]$, și abia peste valorile rezultate se suprapune zgomotul. În felul acesta, la server ajung ponderile cu zgomotul deja aplicat, din care actualizarea reală nu mai poate fi reconstituită niciodată.
+
+Limitarea făcută coordonată cu coordonată la acest pas nu trebuie confundată cu limitarea normei L2 discutată la secțiunea anterioară: aceea tratează delta ca pe un singur vector și are rolul de a apăra modelul de actualizările adversariale \cite{lyu2020threats}, pe când cea de față ține sensibilitatea mărginită, condiție care face ca zgomotul adăugat să aibă efect real asupra confidențialității \cite{shokri2017membership}. Cât despre intensitatea lui, valoarea aleasă (0,1) reprezintă un echilibru asumat între confidențialitate și utilitatea modelului, pe care îl analizez în secțiunea de evaluare (Capitolul 6).
+
+\begin{equation}
+\tilde{w} = w_{\mathrm{global}} + \mathrm{clip}(\delta,\ \tau) + \mathcal{N}\!\left(0,\ (\sigma \cdot \tau)^2\right)
+\label{eq:dp}
+\end{equation}
+
+\noindent unde $\delta = w_{\mathrm{trained}} - w_{\mathrm{global}}$ este variația ponderilor, $\tau = 1$ este pragul de limitare, iar $\sigma = 0{,}1$ este multiplicatorul de zgomot.
+
 \subsection{Controlul concurenței}
+
+Citirea modelului global, agregarea și rescrierea lui nu alcătuiesc o operație atomică în mod implicit. Dacă doi clienți trimit actualizări în același timp, se poate ajunge ca ambii să citească modelul la aceeași versiune, să-și calculeze delta fiecare, independent, dar să-și suprascrie reciproc rezultatul agregării. Pentru a preveni acest caz, am implementat pentru server un \textit{lock} Redis bazat pe \texttt{SET NX PX}: un token unic care este scris în Redis sub cheia \texttt{fl:agg\_lock}, doar dacă aceasta nu există deja, ceea ce asigură că un singur client poate intra în etapa de agregare la un moment dat. Eliberarea \textit{lock-ului} se face printr-un script Lua rulat atomic, care mai întâi verifică că token-ul aparține clientului curent pentru a evita ștergerea eronată a unui \textit{lock} deținut de alt client.
+
+Dacă \textit{lock-ul} nu poate fi obținut, serverul mai încearcă de 9 ori, la intervale de câte 0,3 secunde, iar dacă tot nu reușește, întoarce o eroare. \textit{Lock-ul} expiră de la sine după 5 secunde, în cazul în care serverul devine indisponibil în mijlocul agregării și \textit{lock-ul} rămâne blocat. Am redat fluxul întreg în figura~\ref{fig:redis-lock}.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{pics/redis-lock.pdf}
+\caption{Controlul concurenței prin lock Redis.}
+\label{fig:redis-lock}
+\end{figure}
 
 \section{Fluxul de generare a rutelor}
 
