@@ -651,7 +651,7 @@ Traseul am ales să fie construit efectiv cu ajutorul unui algoritm de tip vecin
 
 \begin{figure}[h]
 \centering
-\hspace*{2cm}
+\hspace*{1.5cm}
 \includegraphics[width=1\linewidth]{pics/route-flow.pdf}
 \caption{Fluxul de generare a rutelor}
 \label{fig:route-flow}
@@ -659,7 +659,41 @@ Traseul am ales să fie construit efectiv cu ajutorul unui algoritm de tip vecin
 
 \section{Proiectarea elementelor de gamificare}
 
+Gamificarea se sprijină pe sistemul de \textit{quest-uri} asociate obiectivelor turistice și culturale - sarcini scurte pe care utilizatorul le poate accepta și duce la capăt doar la fața locului, fiind răsplătit cu puncte la completare. Un \textit{quest} poate fi adăugat atât de un administrator sau de o persoană care a creat obiectivul asociat pe hartă - și va fi disponibil imediat altor utilizatori, cât și de o persoană oarecare - în acest caz fiind nevoie ori de aprobarea unui administrator, ori de votul a cinci utilizatori fără rol de administrator. În acest fel, se încurajează contribuirea comunității în cadrul aplicației pentru a crește interactivitatea cu obiectivele, într-un meniu în care pot vedea toate \textit{quest-urile} și poveștile trimise care au nevoie de aprobare. În plus, conform principiului confidențialității pe care se bazează CultureQuest, starea de finalizare a unui \textit{quest} nu ajunge pe server, ci este gestionată exclusiv pe dispozitivul utilizatorului.
+
+Fiecare interacțiune cu un obiectiv lasă în urmă un scor de \textit{engagement} al turistului cu obiectivul, care reprezintă ținta de antrenament a modelului FL pentru acea interacțiune. Valoarea scorului crește odată cu „intensitatea interacțiunii": deschiderea fișei unui obiectiv generează valoarea 0,3, adăugarea la rută a obiectivului sau un răspuns greșit la un \textit{quest} aduce un scor de 0,5, iar un răspuns corect 0,9. Așadar, scorul maxim generat prin aceste interacțiuni va deveni scorul asociat obiectivului, și folosit la etapa de \textit{backpropagation}. Evaluările cu stele sunt convertite după formula $n/5$, producând valori între 0,2 și 1 în funcție de numărul de stele lăsat de utilizator în cadrul recenziei, dar, în acest caz, valoarea rezultată suprascrie orice valoare produsă de interacțiunile anterioare, chiar dacă ar fi mai mare. Setul complet de etichete este redat în tabelul~\ref{tab:engagement}.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\caption{Etichete de \textit{engagement}}
+\label{tab:engagement}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Eveniment} & \textbf{Etichetă} \\
+\hline
+Fișa obiectivului deschisă & 0,3 \\
+\hline
+Obiectiv adăugat la rută & 0,5 \\
+\hline
+\textit{Quest}: răspuns incorect & 0,5 \\
+\hline
+Navigare către obiectiv pornită & 0,6 \\
+\hline
+\textit{Quest} propus de utilizator & 0,80 \\
+\hline
+Poveste trimisă & 0,85 \\
+\hline
+\textit{Quest}: răspuns corect & 0,9 \\
+\hline
+Evaluare cu $n$ stele & $n/5$ \\
+\hline
+\end{tabular}
+\end{table}
+
 \section{Harta și navigarea}
+
+Harta aplicației integrează tehnica de \textit{geofencing}, implementată manual pe baza fluxului de poziții GPS furnizat de pachetul \textit{geolocator}\footnote{Pachet Flutter pentru accesul la localizare GPS. \url{https://pub.dev/packages/geolocator} (accesat 18.06.2026)}. De fiecare dată când poziția se actualizează, serviciul de proximitate recalculează distanțele până la obiectivele din jur și declanșează un eveniment de intrare sau ieșire în momentul în care utilizatorul traversează raza unui obiectiv. Lista obiectivelor monitorizate nu este însă reîncărcată la nesfârșit, ci abia după ce utilizatorul s-a deplasat cu mai mult de 200 de metri. Orientarea hărții este gestionată, la rândul ei, prin două mecanisme: în repaus, pachetul \textit{flutter\_compass}\footnote{Pachet Flutter pentru citirea busolei magnetometrice. \url{https://pub.dev/packages/flutter_compass} (accesat 18.06.2026)} rotește harta după busola magnetometrică și ignoră schimbările sub $2^\circ$ pentru a nu prelua zgomotul senzorului; în modul de navigare activă, harta se rotește după direcția de deplasare raportată de GPS.
 
 \section{Arhitectura de confidențialitate}
 

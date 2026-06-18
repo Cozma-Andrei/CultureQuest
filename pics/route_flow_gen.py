@@ -11,8 +11,8 @@ ax.axis('off')
 
 BOX_W, BOX_H = 1.55, 0.62
 OVAL_W = BOX_W + 0.15
-PURPLE_BG = '#e8e4f0'
-PURPLE_BD = '#8b7bb5'
+PURPLE_BG = '#ececff'
+PURPLE_BD = '#9370db'
 
 def draw_box(ax, cx, cy, text, shape='rect'):
     if shape == 'oval':
