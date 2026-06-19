@@ -653,7 +653,7 @@ Traseul am ales să fie construit efectiv cu ajutorul unui algoritm de tip vecin
 \centering
 \hspace*{1.5cm}
 \includegraphics[width=1\linewidth]{pics/route-flow.pdf}
-\caption{Fluxul de generare a rutelor}
+\caption{Fluxul de generare a rutelor.}
 \label{fig:route-flow}
 \end{figure}
 
@@ -666,7 +666,7 @@ Fiecare interacțiune cu un obiectiv lasă în urmă un scor de \textit{engageme
 \begin{table}[h]
 \centering
 \footnotesize
-\caption{Etichete de \textit{engagement}}
+\caption{Etichete de \textit{engagement}.}
 \label{tab:engagement}
 \begin{tabular}{|l|l|}
 \hline
@@ -693,11 +693,35 @@ Evaluare cu $n$ stele & $n/5$ \\
 
 \section{Harta și navigarea}
 
-Harta aplicației integrează tehnica de \textit{geofencing}, implementată manual pe baza fluxului de poziții GPS furnizat de pachetul \textit{geolocator}\footnote{Pachet Flutter pentru accesul la localizare GPS. \url{https://pub.dev/packages/geolocator} (accesat 18.06.2026)}. De fiecare dată când poziția se actualizează, serviciul de proximitate recalculează distanțele până la obiectivele din jur și declanșează un eveniment de intrare sau ieșire în momentul în care utilizatorul traversează raza unui obiectiv. Lista obiectivelor monitorizate nu este însă reîncărcată la nesfârșit, ci abia după ce utilizatorul s-a deplasat cu mai mult de 200 de metri. Orientarea hărții este gestionată, la rândul ei, prin două mecanisme: în repaus, pachetul \textit{flutter\_compass}\footnote{Pachet Flutter pentru citirea busolei magnetometrice. \url{https://pub.dev/packages/flutter_compass} (accesat 18.06.2026)} rotește harta după busola magnetometrică și ignoră schimbările sub $2^\circ$ pentru a nu prelua zgomotul senzorului; în modul de navigare activă, harta se rotește după direcția de deplasare raportată de GPS.
+Harta aplicației integrează tehnica de \textit{geofencing}, implementată manual pe baza fluxului de poziții GPS furnizat de pachetul \textit{geolocator}\footnote{Pachet Flutter pentru accesul la localizare GPS. \url{https://pub.dev/packages/geolocator} (accesat 19.06.2026)}. De fiecare dată când poziția se actualizează, serviciul de proximitate recalculează distanțele până la obiectivele din jur și declanșează un eveniment de intrare sau ieșire în momentul în care utilizatorul traversează raza unui obiectiv. Lista obiectivelor monitorizate nu este însă reîncărcată la nesfârșit, ci abia după ce utilizatorul s-a deplasat cu mai mult de 200 de metri. Orientarea hărții este gestionată, la rândul ei, prin două mecanisme: în repaus, pachetul \textit{flutter\_compass}\footnote{Pachet Flutter pentru citirea busolei magnetometrice. \url{https://pub.dev/packages/flutter_compass} (accesat 19.06.2026)} rotește harta după busola magnetometrică și ignoră schimbările sub $2^\circ$ pentru a nu prelua zgomotul senzorului; în modul de navigare activă, harta se rotește după direcția de deplasare raportată de GPS.
 
 \section{Arhitectura de confidențialitate}
 
-% TODO: rezumat capitol + tranziție spre Capitolul 5
+Arhitectura de confidențialitate a CultureQuest pornește de la ideea că datele trebuie separate explicit în funcție de locul de stocare. Tot ce ține de comportamentul concret al turistului - obiectivele vizitate, rating-urile date fiecărui obiectiv în parte, \textit{quest-urile} finalizate și rutele salvate - rămân local, pe telefon, prin \textit{SharedPreferences}, în directorul privat al aplicației, în așa fel încât alte aplicații să nu aibă acces la date, fiind o responsabilitate a \textit{sandbox-ului} Android/iOS, iar spre server vin doar informații agregate sau anonimizate. Concret, se incrementează un contor global de vizite pentru fiecare obiectiv în locul primirii identității vizitatorului, respectiv se modifică suma și numărul de rating-uri în locul evaluării de către vizitator. Pe server, totul se rezumă la a se păstra doar datele necesare funcționării aplicației: numele complet, punctajul total, numărul de \textit{quest-uri} completate și interesele selectate. Aceeași logică se aplică și componentei FL: serverul primește doar delta-ul ponderilor obținut după antrenamentul local, peste care s-a adăugat deja zgomot Gaussian. Distribuția completă este redată în tabelul~\ref{tab:privacy}, iar modul în care sunt implementate mecanismele de confidențialitate este detaliat în Capitolul 5.
+
+Arhitectura actuală are însă și o limitare: serverul primește delta-ul fiecărui client în mod individual, așa că se pot distinge, în principiu, contribuțiile individuale. Protocolul de agregare securizată~\cite{bonawitz2017secagg} ar elimina acest risc, făcând ca serverul să vadă doar suma actualizărilor, nu și delta-urile individuale. Numai că SecAgg este incompatibil cu configurația asincronă pe care se bazează platforma. Protocolul cere ca un set fix de clienți să fie activi în același timp pentru schimbul de chei criptografice, ceea ce contravine modelului FedAsync în care clienții se conectează independent, fiecare la momentul lui. Mai mult, discountul de \textit{staleness} aplicat pentru fiecare client la agregare are nevoie de acces la delta-urile individuale, nu doar la suma lor.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\caption{Distribuția datelor în funcție de locul de stocare.}
+\label{tab:privacy}
+\begin{tabular}{|p{4cm}|p{4cm}|p{4.5cm}|}
+\hline
+\textbf{Date locale (SharedPreferences)} & \textbf{Date pe server} & \textbf{Ce nu se stochează pe server server} \\
+\hline
+Lista obiectivelor vizitate & Numele utilizatorului  & Istoricul locației \\
+\hline
+Rating-uri individuale pentru fiecare obiectiv & Puncte totale acumulate & Care obiective au fost vizitate și când \\
+\hline
+\textit{Quest-uri} completate (care și cum) & Număr total de \textit{quest-uri} completate & Rating-urile individuale pentru fiecare obiectiv \\
+\hline
+Rute salvate & Interese selectate & Care \textit{quest-uri} au fost completate \\
+\hline
+Identitatea autorului recenziei & - & Autorul fiecărei recenzii sau povești \\
+\hline
+\end{tabular}
+\end{table}
 
 \chapter{Detalii de Implementare}
 

@@ -218,14 +218,14 @@ ecuații care justifică deciziile; fără listinguri de cod (codul efectiv merg
     concentrice enter/exit) - altfel, se poate baza doar pe captura de ecran
     din 5.1.6.
 - **4.8 Arhitectura de confidențialitate** - ce rămâne pe dispozitiv vs. ce
-  este încărcat pe server; diagramă a fluxului de date.
-  - *Resurse:* Figură - diagramă flux de date (dispozitiv vs. server) cu
-    **săgeți numerotate** pentru pașii de confidențialitate (1: date brute
-    rămân local, 2: se extrag caracteristici, 3: antrenare locală, 4: clipping
-    + zgomot DP, 5: trimitere delta). Tabel - date locale / date pe server /
-    date niciodată stocate (sursă: structura deja existentă a
-    `mobile/lib/features/profile/screens/privacy_screen.dart:58-184`, direct
-    mapabilă pe 3 coloane).
+  este încărcat pe server; datele locale persistate prin SharedPreferences
+  (director privat, sandbox Android/iOS); SecAgg discutat ca protocol
+  complementar neimplementat (incompatibil cu FedAsync: cere clienți
+  sincronizați + face imposibil discountul de staleness per-client).
+  - *Resurse:* Tabel - date locale (SharedPreferences) / date pe server /
+    date niciodată stocate (sursă:
+    `mobile/lib/features/profile/screens/privacy_screen.dart:58-184`,
+    direct mapabilă pe 3 coloane).
 
 ## Capitolul 5 - Detalii de Implementare
 *Resurse generale:* capitolul de "cum" - aici intră listingurile de cod, dar
