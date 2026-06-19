@@ -233,7 +233,7 @@ Pentru personalizare, fiecare utilizator are pe dispozitiv un model mic, un perc
 
 La nivel general, rezultatul este o aplicație Flutter funcțională, care reunește harta cu obiective și evenimente din apropiere, generarea de rute personalizate și sistemul de \textit{quest-uri}. Personalizarea descrisă în secțiunea anterioară este vizibilă direct în aplicație, pentru fiecare obiectiv din apropiere și în cadrul rutelor generate.
 
-Pe partea de FL, modelul de pe dispozitiv pornește de la o variantă a modelului global trecută și prin etapa de \textit{fine-tuning}, iar antrenarea locală se face prin FedAvg. Agregarea pe server este asincronă, cu o reducere în funcție de vechimea (\textit{staleness discount}) actualizărilor venite de la clienți \cite{xie2019fedasync} - o metodă prin care influența lor asupra modelului global este diminuată. O simulare de 600 de runde confirmă funcționarea în parametri buni a fluxului FL.
+Pe partea de FL, modelul de pe dispozitiv pornește de la o variantă a modelului global trecută și prin etapa de \textit{fine-tuning}, iar antrenarea locală se face prin FedAvg. Agregarea pe server este asincronă, cu o reducere în funcție de vechimea (\textit{staleness discount}) actualizărilor venite de la clienți \cite{xie2019fedasync} - o metodă prin care influența lor asupra modelului global este diminuată. O simulare de 600 de runde cu 10.000 de clienți sintetici arată o reducere a pierderii BCE (\textit{Binary Cross-Entropy}) cu 30,9\% (de la 0,695 la 0,480), față de 27,2\% în varianta fără discount. Am confirmat, astfel, că ignorarea vechimea actualizărilor contribuie la degradarea convergenţei.
 
 \section{Structura lucrării}
 
@@ -263,33 +263,41 @@ Primul caz de utilizare este cel de generare de rute și suport pe parcursul urm
 
 \section{Cerințe funcționale}
 
-Pornind de la cazurile de utilizare din secțiunea anterioară, cerințele funcționale au fost sintetizate în tabelul~\ref{tab:cerinte-functionale}, fiecare cu o descriere și secțiunile din Capitolele 4-6 unde cerința este tratată. Primul grup (de la \textbf{FR-1} la \textbf{FR-4}) sumarizează bucla principală de explorare: afișarea pe hartă a obiectivelor turistice din proximitate, generarea rutei care combină scorul modelului de tip MLP cu distanța față de poziția curentă, \textit{quest-urile} disponibile la obiectivele vizitate și posibilitatea de a adăuga sau vizualiza recenzii.
+Pornind de la cazurile de utilizare din secțiunea anterioară, cerințele funcționale au fost sintetizate în tabelul~\ref{tab:cerinte-functionale}, fiecare cu o descriere, condiții de acceptare și secțiunile din Capitolele 4-6 unde cerința este tratată. Primul grup (de la \textbf{FR-1} la \textbf{FR-4}) sumarizează bucla principală de explorare: afișarea pe hartă a obiectivelor turistice din proximitate, generarea rutei care combină scorul modelului de tip MLP cu distanța față de poziția curentă, \textit{quest-urile} disponibile la obiectivele vizitate și posibilitatea de a adăuga sau vizualiza recenzii.
 
-Al doilea grup (de la \textbf{FR-5} la \textbf{FR-7}) ține de personalizare și administrare: \textbf{FR-5} descrie fluxul procesului FL - primirea parametrilor modelului actualizat de la server, urmată de antrenarea locală, fără ca istoricul interacțiunilor să ajungă pe server, \textbf{FR-6} descrie controalele de confidențialitate - asigurarea DP, vizibilitatea asupra datelor, iar \textbf{FR-7} descrie rolul de administrator - aprobarea sau respingerea conținutului propus.
+Al doilea grup (de la \textbf{FR-5} la \textbf{FR-7}) ține de personalizare și administrare: \textbf{FR-5} descrie fluxul procesului FL: primirea parametrilor modelului actualizat de la server, urmată de antrenarea locală, fără ca istoricul interacțiunilor să ajungă pe server, flux verificat prin simularea de 600 de runde descrisă în 6.2; \textbf{FR-6} descrie controalele de confidențialitate - asigurarea DP, vizibilitatea asupra datelor - prin adăugarea de zgomot Gaussian și limitare a gradienților aplicate pe actualizările de ponderi, verificat prin analiza compromisului dintre confidențialitate și utilitate din 6.3; iar \textbf{FR-7} descrie rolul de administrator - aprobarea sau respingerea conținutului propus, verificat prin demo funcțional în 6.1.
 
 \begin{table}[h]
 \centering
-\footnotesize
-\caption{Cerințe funcționale}
+\scriptsize
+\caption{Cerințe funcționale cu condiții de acceptare.}
 \label{tab:cerinte-functionale}
-\begin{tabular}{|l|p{7cm}|p{2.8cm}|}
+\begin{tabular}{|l|p{2.8cm}|p{8cm}|p{1.8cm}|}
 \hline
-\textbf{ID} & \textbf{Descriere} & \textbf{Secțiune} \\
+\textbf{ID} & \textbf{Descriere} & \textbf{Condiții de acceptare} & \textbf{Secțiune} \\
 \hline
-FR-1 & Obiective din proximitate pe hartă. & 4.7, 5.1.4, 6.1 \\
+FR-1 & Obiective din proximitate pe hartă. &
+\textit{I:} coordonate GPS. \textit{E:} markere pentru obiective aflate la sub 200\,m. \textit{Î:} toate obiectivele din raza setată apar pe hartă. \textit{T:} demo funcțional. & 4.7, 5.1.4, 6.1 \\
 \hline
-FR-2 & Rute personalizate: scor model MLP și proximitate. & 4.5, 5.1.5, 6.1 \\
+FR-2 & Rute personalizate: scor MLP și proximitate. &
+\textit{I:} interese + poziție curentă. \textit{E:} rută ordonată după scor MLP ponderat cu distanța. \textit{Î:} rute diferite pentru utilizatori diferiți. \textit{T:} demo cu utilizatori diferiți. & 4.5, 5.1.5, 6.1 \\
 \hline
-FR-3 & \textit{Quest-uri} la obiectivele vizitate; puncte și progres. & 4.6, 5.1.6, 6.1 \\
+FR-3 & \textit{Quest-uri} la obiective vizitate; puncte și progres. &
+\textit{I:} intrare în \textit{geofence-ul} unui obiectiv. \textit{E:} \textit{quest} disponibil; puncte la finalizare. \textit{Î:} \textit{quest} activat la intrare; puncte actualizate la final. \textit{T:} demo funcțional. & 4.6, 5.1.6, 6.1 \\
 \hline
-FR-4 & Adăugare și vizualizare recenzii pentru obiective. & 5.2.3, 6.1 \\
+FR-4 & Adăugare și vizualizare recenzii. &
+\textit{I:} text + rating de la utilizator autentificat. \textit{E:} recenzie vizibilă în cadrul obiectivului. \textit{Î:} recenzia apare pentru toți utilizatorii. \textit{T:} demo funcțional. & 5.2.3, 6.1 \\
 \hline
-FR-5 & Sincronizare model și antrenare locală, fără date colectate pe server. & 4.4, de la 5.1.1 la 5.1.3, 5.2.1, 6.2 \\
+FR-5 & Sincronizare model și antrenare locală, fără date pe server. &
+\textit{I:} interacțiuni locale. \textit{E:} ponderi actualizate local; doar actualizarea trimisă la server. \textit{Î:} pierderea BCE scade cu $\geq$25\% față de varianta inițială. \textit{T:} simulare FL, 600 runde, 10.000 clienți. & 4.4, 5.1.1, 5.1.2, 5.1.3, 5.2.1, 6.2 \\
 \hline
-FR-6 & Zgomot DP aplicat pe actualizări; vizibilitate asupra datelor trimise. & 4.8, 5.1.2, 6.3 \\
+FR-6 & Zgomot DP pe actualizări; vizibilitate asupra datelor trimise. &
+\textit{I:} actualizare locală a ponderilor. \textit{E:} actualizare cu zgomot Gaussian și limitare a normei. \textit{Î:} interacțiunile utilizatorului nu sunt transmise direct. \textit{T:} compromis confidențialitate, utilitate. & 4.8, 5.1.2, 6.3 \\
 \hline
-FR-7 & Administrator: aprobă sau respinge conținut propus (obiective, povești, \textit{quest-uri}, recenzii). & 5.2.3, 6.1 \\
+FR-7 & Administrator: aprobă sau respinge conținut. &
+\textit{I:} propunere de conținut. \textit{E:} publicat sau respins de administrator. \textit{Î:} conținut neaprobat absent din aplicație. \textit{T:} demo flux administrator. & 5.2.3, 6.1 \\
 \hline
+\multicolumn{4}{l}{\textit{I}~=~Intrare; \textit{E}~=~Ieșire; \textit{Î}~=~Îndeplinit; \textit{T}~=~Testat în Cap.~6.} \\
 \end{tabular}
 \end{table}
 
@@ -302,7 +310,7 @@ Al doilea grup ține de partea de \textit{backend}: \textbf{NFR-4} impune ca ser
 \begin{table}[h]
 \centering
 \footnotesize
-\caption{Cerințe non-funcționale}
+\caption{Cerințe non-funcționale.}
 \label{tab:cerinte-nonfunctionale}
 \begin{tabular}{|l|p{7cm}|p{2.8cm}|}
 \hline
@@ -342,7 +350,7 @@ La polul opus se situează aplicațiile axate pe confidențialitate, precum Orga
 \begin{table}[h]
 \centering
 \footnotesize
-\caption{Comparație între aplicații existente de explorare urbană și CultureQuest}
+\caption{Comparație între aplicații existente de explorare urbană și CultureQuest.}
 \label{tab:apps-comparativ}
 \begin{tabular}{|l|l|l|l|l|}
 \hline
