@@ -23,7 +23,7 @@ down-weighted.
 Run from backend/: python3 federated/simulate_fl.py
 Results written to backend/federated/results/
 """
-import sys, os, json, math, random, asyncio, collections
+import sys, os, json, math, random, asyncio, collections, time
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -499,11 +499,15 @@ def main():
     print(f'  Staleness: {FRESH_PROB*100:.0f}% fresh [{FRESH_STALENESS[0]}-{FRESH_STALENESS[1]}], '
           f'{(1-FRESH_PROB)*100:.0f}% stale [{STALE_STALENESS[0]}-{STALE_STALENESS[1]}]')
     random.seed(SEED); np.random.seed(SEED)
+    t0_fa = time.perf_counter()
     results['fedasync'] = run_simulation(initial_weights, clients, test_data, use_fedasync=True)
+    t_fa = time.perf_counter() - t0_fa
 
     print('\nRunning without discount (every update weighted equally)...')
     random.seed(SEED); np.random.seed(SEED)
+    t0_nf = time.perf_counter()
     results['no_fedasync'] = run_simulation(initial_weights, clients, test_data, use_fedasync=False)
+    t_nf = time.perf_counter() - t0_nf
 
     stats = {
         'config': {
@@ -539,6 +543,14 @@ def main():
             }
             for variant in ('fedasync', 'no_fedasync')
         },
+        'timing': {
+            'fedasync_seconds':    round(t_fa, 2),
+            'no_fedasync_seconds': round(t_nf, 2),
+            'seconds_per_round': {
+                'fedasync':    round(t_fa / N_ROUNDS, 4),
+                'no_fedasync': round(t_nf / N_ROUNDS, 4),
+            },
+        },
     }
     p = os.path.join(RESULTS_DIR, 'stats.json')
     with open(p, 'w') as f:
@@ -567,6 +579,8 @@ def main():
     nf    = stats['summary']['no_fedasync']['final_loss']
     delta = nf - fa
     print(f'\n  FedAsync advantage: {delta:+.4f} lower final loss than no-discount.')
+    print(f'\n  Timing: fedasync={t_fa:.1f}s  no_fedasync={t_nf:.1f}s  '
+          f'({t_fa/N_ROUNDS*1000:.1f}ms/round  vs  {t_nf/N_ROUNDS*1000:.1f}ms/round)')
     print(f'  avg_eff_weight: fedasync={stats["summary"]["fedasync"]["avg_effective_weight"]:.3f}  '
           f'(old uniform-staleness sim would give ~0.162 -- fresh clients unfairly penalised)')
 

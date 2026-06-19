@@ -403,14 +403,13 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
     -> secțiune relevantă", ca recapitulare - nu introduce date noi. Pentru
     obiectivul (b) din 1.3, cele două rezultate vizibile sunt ruta generată
     (4.5) și categoria de potrivire afișată pe fișa obiectivului (4.4.1).
-- **7.2 Direcții de cercetare și lucrări viitoare** - "personal head" per
-  utilizator, agregare de tip buffer (FedBuff, Nguyen et al. 2022): FedBuff
-  bufferizează $k$ update-uri înainte de agregare, reducând varianța și
-  îmbunătățind anularea zgomotului DP prin mediere, dar presupune că $k$
-  clienți sunt activi simultan - dezavantaj major la participarea rară și
-  neregulată a turiștilor (bufferul riscă să nu se umple zile întregi,
-  blocând evoluția modelului); devine relevant dacă baza de utilizatori
-  crește suficient pentru a garanta un flux continuu de update-uri;
+- **7.2 Direcții de cercetare și lucrări viitoare** - impactul asupra bateriei
+  al antrenamentului local (5 epoci SGD) nu a fost măsurat, limitare a
+  simulării pe server, măsurabilă pe device real cu Battery Historian.
+  "personal head" per utilizator; agregare cu buffer (FedBuff, Nguyen et al.
+  2022), relevantă dacă baza de utilizatori crește suficient pentru a garanta
+  un flux continuu de update-uri (la participare rară, bufferul riscă să nu
+  se umple);
   posibilitatea de a posta poze pentru obiective (extensie a sistemului de
   recenzii/moderare, 5.2.3), colectare de date FL de la utilizatori reali
   la scară mare.
