@@ -424,7 +424,10 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
   se umple);
   posibilitatea de a posta poze pentru obiective (extensie a sistemului de
   recenzii/moderare, 5.2.3), colectare de date FL de la utilizatori reali
-  la scară mare.
+  la scară mare; integrarea popularității obiectivelor (număr de vizite
+  agregat) ca semnal suplimentar în scorul de candidați din 4.5 - în prezent
+  scorul combină doar FL și proximitate, fără a ține cont de cât de frecventat
+  este un obiectiv.
 
 ---
 
