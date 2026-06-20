@@ -58,7 +58,7 @@ DEPARTAMENTUL DE CALCULATOARE\\}
 \newcommand{\AdvisorRO}{Coordonator științific:}
 \newcommand{\BucRO}{BUCUREȘTI}
 
-\newcommand{\UniTextEN}{NATIONAL UNIVERSITY OF SCIENCE AND TECHNOLOGY POLITEHNICA OF BUCHAREST \\[\HeaderLineSpace]
+\newcommand{\UniTextEN}{NATIONAL UNIVERSITY OF SCIENCE AND TECHNOLOGY POLITEHNICA BUCHAREST \\[\HeaderLineSpace]
 FACULTY OF AUTOMATIC CONTROL AND COMPUTERS \\[\HeaderLineSpace]
 COMPUTER SCIENCE AND ENGINEERING DEPARTMENT\\}
 \newcommand{\DiplomaEN}{DIPLOMA PROJECT}
@@ -71,7 +71,7 @@ COMPUTER SCIENCE AND ENGINEERING DEPARTMENT\\}
 {\Large #1}  % header (university, faculty, department)
 \vspace{50pt}
 \begin{tabular}{p{6cm}p{4cm}}
-\includegraphics[scale=0.8]{pics/upb-logo.jpg} &
+\includegraphics[scale=0.4]{pics/upb-logo-resized.png} &
 	\includegraphics[scale=0.5,trim={14cm 11cm 2cm 5cm},clip=true]{pics/cs-logo.pdf}
 \end{tabular}
 
@@ -220,7 +220,7 @@ Pornind de la acest compromis, proiectul de față își propune să arate că p
 
 \item Personalizarea recomandărilor de rute pentru fiecare utilizator, fără ca datele acestuia - istoricul de interacțiuni, locațiile vizitate - să părăsească dispozitivul.
 
-\item Implementarea unui flux complet de FL: pre-antrenarea modelului global pe date publice și ajustarea fină (\textit{fine-tuning}); antrenarea locală prin coborâre pe gradient stocastică (SGD, \textit{Stochastic Gradient Descent}), trimiterea spre server doar a variației ponderilor față de modelul global, agregarea asincronă a actualizărilor prin FedAvg~\cite{mcmahan2017fedavg} și împiedicarea deducerii din acestea a interacțiunilor concrete, prin adăugarea de zgomot Gaussian asupra variației ponderilor.
+\item Implementarea unui flux complet de FL: pre-antrenarea modelului global pe date publice și ajustarea fină (\textit{fine-tuning}); antrenarea locală prin coborâre pe gradient stocastică (SGD, \textit{Stochastic Gradient Descent}) conform FedAvg~\cite{mcmahan2017fedavg}, trimiterea spre server doar a variației ponderilor față de modelul global, agregarea asincronă a actualizărilor prin FedAsync~\cite{xie2019fedasync} și împiedicarea deducerii din acestea a interacțiunilor concrete, prin adăugarea de zgomot Gaussian asupra variației ponderilor.
 \end{enumerate}
 
 \section{Soluția propusă}
@@ -303,28 +303,28 @@ FR-7 & Administrator: aprobă sau respinge conținut. &
 
 \section{Cerințe non-funcționale}
 
-La fel ca în secțiunea 2.2, cerințele non-funcționale au fost sintetizate în tabelul~\ref{tab:cerinte-nonfunctionale}, cu aceeași structură (descriere și secțiunile din Capitolele 4-6 unde sunt tratate). Primul grup (de la \textbf{NFR-1} la \textbf{NFR-3}) are legătură cu constrângerile impuse pe dispozitiv: \textbf{NFR-1} cere ca nicio informație privată despre utilizator - exceptând lista de interese - să nu părăsească telefonul, \textbf{NFR-2} cere ca obiectivele turistice să rămână disponibile și fără conexiune la internet, iar \textbf{NFR-3} cere ca antrenarea locală să nu fie complexă din punct de vedere computațional pentru un telefon obișnuit - ceea ce a motivat alegerea unui model MLP de dimensiuni reduse.
+La fel ca în secțiunea 2.2, cerințele non-funcționale au fost sintetizate în tabelul~\ref{tab:cerinte-nonfunctionale}, cu aceeași structură (descriere și secțiunile din Capitolele 4-6 unde sunt tratate), fiecare însoțită de o metrică verificabilă. Primul grup (de la \textbf{NFR-1} la \textbf{NFR-3}) are legătură cu constrângerile impuse pe dispozitiv: \textbf{NFR-1} cere ca nicio informație privată despre utilizator - exceptând lista de interese - să nu părăsească telefonul, \textbf{NFR-2} cere ca obiectivele turistice să rămână disponibile și fără conexiune la internet, iar \textbf{NFR-3} cere ca antrenarea locală să nu fie complexă din punct de vedere computațional - ceea ce a motivat alegerea unui model MLP de dimensiuni reduse, antrenat în 5 epoci locale.
 
-Al doilea grup ține de partea de \textit{backend}: \textbf{NFR-4} impune ca serviciul de agregare să suporte actualizări asincrone primite de la mai mulți clienți - fără conflicte între runde, iar \textbf{NFR-5} impune ca utilizatorii să primească recomandări utile încă de la început printr-un model global pre-antrenat \cite{bonawitz2019towards} - și din caracteristici bazate pe ariile de interes asociate fiecărui obiectiv - până când procesul FL își face efectul.
+Al doilea grup ține de partea de \textit{backend}: \textbf{NFR-4} impune ca serviciul de agregare să suporte actualizări asincrone primite de la mai mulți clienți, fără conflicte între runde, asigurat printr-un \textit{lock} Redis, iar \textbf{NFR-5} impune ca utilizatorii să primească recomandări utile încă de la început printr-un model global pre-antrenat \cite{bonawitz2019towards}, și din caracteristici bazate pe ariile de interes asociate fiecărui obiectiv, până când procesul FL își face efectul.
 
 \begin{table}[h]
 \centering
-\footnotesize
+\scriptsize
 \caption{Cerințe non-funcționale.}
 \label{tab:cerinte-nonfunctionale}
-\begin{tabular}{|l|p{7cm}|p{2.8cm}|}
+\begin{tabular}{|l|p{10cm}|p{2.5cm}|}
 \hline
 \textbf{ID} & \textbf{Descriere} & \textbf{Secțiune} \\
 \hline
-NFR-1 & Confidențialitate: nicio interacțiune a utilizatorului nu părăsește dispozitivul. & 4.8, de la 5.1.2 la 5.1.3, 6.3 \\
+NFR-1 & Confidențialitate: nicio interacțiune a utilizatorului nu părăsește dispozitivul; doar actualizarea de ponderi ($\approx$5\,KB la fiecare rundă FL) este trimisă la server. & 4.8, 5.1.2, 5.1.3, 6.3 \\
 \hline
-NFR-2 & Reziliență offline: obiective turistice stocate în \textit{cache} local. & 5.1.4, 6.1 \\
+NFR-2 & Reziliență offline: obiective turistice stocate în \textit{cache} local; accesibile fără conexiune la rețea. & 5.1.4, 6.1 \\
 \hline
-NFR-3 & Cost redus de antrenare pe dispozitiv. & 4.4.1, 5.1.1, 6.2.1 \\
+NFR-3 & Cost redus de antrenare pe dispozitiv: model de 1.281 parametri ($\approx$5\,KB valori în format float32); 5 epoci locale la fiecare rundă FL; calculul scorului pentru un obiectiv (un singur \textit{forward pass}) durează $\approx$39\,µs (simulare pe laptop). & 4.4.1, 5.1.1, 6.2.1 \\
 \hline
-NFR-4 & Scalabilitatea \textit{backend-ului} la actualizările asincrone. & 4.4.6, 5.2.1, 6.2.2 \\
+NFR-4 & Scalabilitatea \textit{backend-ului}: un \textit{lock} Redis serializează actualizările FL asincrone fără conflicte de date; 0 erori la cel mult 10 cereri simultane (latență medie 1,4 s la 10 cereri); degradare la 20 cereri. & 4.4.6, 5.2.1, 6.3 \\
 \hline
-NFR-5 & \textit{Cold start}: recomandări utile pentru utilizatori folosind modelul pre-antrenat. & 4.4.1, 5.3, 6.2.1 \\
+NFR-5 & \textit{Cold start}: recomandări utile pentru utilizatori folosind modelul pre-antrenat, fără runde FL prealabile; FL îmbunătățește modelul (pierdere BCE: 0,695 la start se transformă în 0,480 după 600 runde). & 4.4.1, 5.3, 6.2.1, 6.2.2 \\
 \hline
 \end{tabular}
 \end{table}
@@ -341,30 +341,38 @@ Având stabilite cerințele și limitele proiectului, Capitolul 3 trece în revi
 
 \section{Aplicații existente pentru explorare urbană}
 
-Platformele mobile de recomandare pentru turiști \cite{gavalas2014mobile} oferă un anumit nivel de personalizare bazat pe istoricul de activitate al utilizatorului, stocat și procesat pe serverele furnizorului. Google Maps generează, de exemplu, recomandări pe baza istoricului de locații, a căutărilor și a evaluărilor asociate contului Google\footnote{Google, pagina oficială despre recomandările personalizate. \url{https://support.google.com/websearch/answer/17025248?hl=en} (accesat 19.06.2026).}. TripAdvisor merge pe o logică asemănătoare, prin faptul că sugestiile de obiective și restaurante sunt adaptate pe baza recenziilor citite, a căutărilor anterioare și a locațiilor vizitate, tot prin contul de utilizator, procesat central\footnote{TripAdvisor, pagina oficială despre funcționarea recomandărilor/politica de confidențialitate. \url{https://tripadvisor.mediaroom.com/US-privacy-policy} (accesat 19.06.2026).}. În ambele cazuri, personalizarea funcționează doar pentru că acest istoric de interacțiuni ajunge să fie analizat pe server, nu pe dispozitivul utilizatorului.
+Platformele mobile de recomandare pentru turiști \cite{gavalas2014mobile} oferă un anumit nivel de personalizare bazat pe istoricul de activitate al utilizatorului, stocat și procesat pe serverele furnizorului. \textbf{Google Maps} generează, de exemplu, recomandări pe baza istoricului de locații, a căutărilor și a evaluărilor asociate contului Google\footnote{Google, pagina oficială despre recomandările personalizate. \url{https://support.google.com/websearch/answer/17025248?hl=en} (accesat 19.06.2026).}. \textbf{TripAdvisor} merge pe o logică asemănătoare, prin faptul că sugestiile de obiective și restaurante sunt adaptate pe baza recenziilor citite, a căutărilor anterioare și a locațiilor vizitate, tot prin contul de utilizator, procesat central\footnote{TripAdvisor, pagina oficială despre funcționarea recomandărilor/politica de confidențialitate. \url{https://tripadvisor.mediaroom.com/US-privacy-policy} (accesat 19.06.2026).}. În ambele cazuri, personalizarea funcționează doar pentru că acest istoric de interacțiuni ajunge să fie analizat pe server, nu pe dispozitivul utilizatorului.
 
-Pe lângă aceste platforme axate pe navigare, există și aplicații specializate în activități turistice legate de rezervări, precum GetYourGuide, care recomandă tururi cu ghizi, bilete și experiențe pe baza destinației căutate și a istoricului de căutări sau rezervări al utilizatorului, tot stocat și procesat central\footnote{GetYourGuide, pagina oficială despre cum funcționează recomandările și politica de confidențialitate. \url{https://www.getyourguide.com/c/privacy-policy} (accesat 19.06.2026).}. Spre deosebire de Google Maps sau TripAdvisor, accentul este pus pe activități plătite și predefinite, nu pe explorarea liberă a orașului, așa că nu există rute generate dinamic în funcție de poziția utilizatorului. Dincolo de aceste diferențe, toate trei se bazează pe același principiu - ML centralizat, antrenat pe date de la un număr mare de utilizatori.
+Pe lângă aceste platforme axate pe navigare, există și aplicații specializate în activități turistice legate de rezervări, precum \textbf{GetYourGuide}, care recomandă tururi cu ghizi, bilete și experiențe pe baza destinației căutate și a istoricului de căutări sau rezervări al utilizatorului, tot stocat și procesat central\footnote{GetYourGuide, pagina oficială despre cum funcționează recomandările și politica de confidențialitate. \url{https://www.getyourguide.com/c/privacy-policy} (accesat 19.06.2026).}. Spre deosebire de Google Maps sau TripAdvisor, accentul este pus pe activități plătite și predefinite, nu pe explorarea liberă a orașului, așa că nu există rute generate dinamic în funcție de poziția utilizatorului. Dincolo de aceste diferențe, toate trei se bazează pe același principiu - ML centralizat, antrenat pe date de la un număr mare de utilizatori.
 
-La polul opus se situează aplicațiile axate pe confidențialitate, precum Organic Maps, un proiect \textit{open-source} bazat pe date de la OpenStreetMap, fără cont de utilizator și fără colectare de date\footnote{Organic Maps, pagina oficială - „no tracking, no data collection”. \url{https://organicmaps.app/privacy/} (accesat 19.06.2026).}. Aici personalizarea nu există, iar toți utilizatorii dintr-o zonă văd același set de obiective, indiferent de interese, pentru că nu există niciun istoric din care acestea să poată fi accesate. Între cele două extreme - fie personalizare cu date colectate central, fie confidențialitate fără personalizare - se situează CultureQuest, unde scorul de personalizare este calculat prin FL, fără ca datele brute să părăsească dispozitivul. Toate aceste cazuri sunt adunate în tabelul~\ref{tab:apps-comparativ}.
+O categorie specială o reprezintă aplicațiile care propun tururi audio ghidate, precum \textbf{izi.TRAVEL}, care oferă narațiuni geolocalizate și trasee audio predefinite pentru obiective culturale, în special muzee, din diverse orașe. Față de Google Maps sau TripAdvisor, accentul cade pe conținutul cultural structurat, nu pe navigare sau rezervări, iar traseele sunt pregătite de muzee, ghizi sau organizații certificate, iar aplicația pornește automat narațiunea pe măsură ce utilizatorul ajunge în apropierea unui punct de interes\footnote{izi.TRAVEL, pagina oficială. \url{https://izi.travel/} (accesat 19.06.2026).}. Tururile pot fi descărcate pentru a funcționa în mod offline, dar lipsesc generarea dinamică de rute bazată pe profilul utilizatorului, personalizarea prin ML și gamificarea.
+
+Gamificarea explorării bazate pe locația curentă este o componentă lipsă din toate aplicațiile prezentate mai sus, dar este acoperită parțial de \textbf{Geocaching}. Aici utilizatorii caută ascunzători fizice plasate de alți membri ai comunității, navighează la coordonatele GPS corespunzătoare și își înregistrează descoperirile. Ei pot strânge puncte și debloca realizări\footnote{Groundspeak Inc. (Geocaching HQ), termeni de utilizare și politică de confidențialitate. \url{https://www.geocaching.com/account/documents/privacypolicy} (accesat 19.06.2026).}. Cum conținutul este integral generat de utilizatori, Geocaching ajunge să fie cea mai apropiată alternativă pentru componenta de explorare gamificată. Cu toate acestea, recomandările personalizate tot nu sunt prezente nici în cadrul acestei aplicații, rutele nu sunt construite dinamic, partea de ML pentru recomandări lipseste si istoricul de activitate nu este stocat local, ci centralizat.
+
+La polul opus se situează aplicațiile axate pe confidențialitate, precum \textbf{Organic Maps}, un proiect \textit{open-source} bazat pe date de la OpenStreetMap, fără cont de utilizator și fără colectare de date\footnote{Organic Maps, pagina oficială - „no tracking, no data collection”. \url{https://organicmaps.app/privacy/} (accesat 19.06.2026).}. Aici personalizarea nu există, iar toți utilizatorii dintr-o zonă văd același set de obiective, indiferent de interese, pentru că nu există niciun istoric din care acestea să poată fi accesate. Între cele două extreme - fie personalizare cu date colectate central, fie confidențialitate fără personalizare - se situează CultureQuest, unde scorul de personalizare este calculat prin FL, fără ca datele brute să părăsească dispozitivul. Toate aceste cazuri sunt adunate în tabelul~\ref{tab:apps-comparativ}.
 
 \begin{table}[h]
 \centering
-\footnotesize
+\scriptsize
 \caption{Comparație între aplicații existente de explorare urbană și CultureQuest.}
 \label{tab:apps-comparativ}
-\begin{tabular}{|l|l|l|l|l|}
+\begin{tabular}{|p{1.9cm}|p{2.2cm}|p{2.2cm}|p{1.9cm}|p{1.4cm}|p{1.6cm}|p{1.4cm}|}
 \hline
-\textbf{Aplicație} & \textbf{Personalizare} & \textbf{Colectare date} & \textbf{ML local} & \textbf{Gamificare} \\
+\textbf{Aplicație} & \textbf{Rute turistice} & \textbf{Personalizare} & \textbf{Fără date pe server} & \textbf{Suport offline} & \textbf{Cost / acces} & \textbf{Gamificare} \\
 \hline
-Google Maps & Da & Centralizat & Nu & Nu \\
+Google Maps & Navigație generală & Centralizată & Nu & Parțial & Gratuit / API plătit & Nu \\
 \hline
-TripAdvisor & Da & Centralizat & Nu & Limitată \\
+TripAdvisor & Nu & Centralizată & Nu & Nu & Gratuit / API plătit & Limitat \\
 \hline
-GetYourGuide & Da & Centralizat & Nu & Nu \\
+GetYourGuide & Tururi predefinite & Limitată & Nu & Nu & Gratuit & Nu \\
 \hline
-Organic Maps & Nu & Fără & Nu & Nu \\
+izi.TRAVEL & Trasee audio predefinite & Nu & Nu & Parțial & Gratuit & Nu \\
 \hline
-CultureQuest & Da & Local & Da & Da \\
+Geocaching & Nu & Nu & Nu & Parțial & Freemium & Da \\
+\hline
+Organic Maps & Navigație generală & Nu & Da & Da & Gratuit, open source & Nu \\
+\hline
+CultureQuest & Dinamice, personalizate (FL) & Locală (FL) & Da & Da & Gratuit, open source & Da \\
 \hline
 \end{tabular}
 \end{table}
@@ -396,7 +404,7 @@ A doua axă împarte FL în două moduri de desfășurare \cite{kairouz2021advan
   \item \textbf{\textit{Cross-silo}} - clienții sunt un număr mic de organizații sau servere, cu conexiuni stabile și seturi de date mari.
 \end{itemize}
 
-CultureQuest este, din această perspectivă, un sistem \textit{cross-device}. Telefoanele utilizatorilor sunt conectate la internet intermitent, fiecare cu un volum mic de interacțiuni locale. Un sistem \textit{cross-device} are nevoie de agregare asincronă \cite{xie2019fedasync}, pentru că acești clienți nu pot fi sincronizați la fiecare rundă de învățare, și de mecanisme de robustețe la actualizări extreme \cite{lyu2020threats}. Figura~\ref{fig:taxonomie-fl} situează CultureQuest pe ambele axe.
+CultureQuest este, din această perspectivă, un sistem \textit{cross-device}. Telefoanele utilizatorilor sunt conectate la internet intermitent, fiecare cu un volum mic de interacțiuni locale. Pentru aplicație, s-a optat, așadar, pentru agregare asincronă \cite{xie2019fedasync}, tocmai pentru că acești clienți sunt intermitenți și nu este practic să se aștepte formarea unei cohorte complete la fiecare rundă de învățare. Este nevoie, prin urmare, și de mecanisme de robustețe la actualizări extreme \cite{lyu2020threats}. Figura~\ref{fig:taxonomie-fl} situează CultureQuest pe ambele axe.
 
 \begin{figure}[h]
 \centering
@@ -425,20 +433,22 @@ CultureQuest este, din această perspectivă, un sistem \textit{cross-device}. T
 
 \section{Alternative respinse}
 
-Eterogenitatea datelor între clienți este una dintre provocările cele mai notabile ale FL \cite{li2020challenges}, iar o direcție importantă de cercetare propune algoritmi care corectează deriva (\textit{drift}) dintre actualizările locale ale clienților și modelul global. FedProx \cite{li2020fedprox} adaugă funcției de cost locale un termen proximal, care penalizează distanța dintre ponderile actualizate și cele ale modelului global de la începutul rundei de învățare. SCAFFOLD \cite{karimireddy2020scaffold} introduce, pentru fiecare client, o variabilă de control care estimează cât de mult diferă actualizarea sa de media cohortei și corectează gradientul local pe baza acestei estimări. FedDyn \cite{acar2021feddyn} ajunge la un rezultat similar printr-un regularizator dinamic, recalculat la fiecare rundă pe baza istoricului actualizărilor clientului. Toate cele trei leagă actualizarea unui client de comportamentul celorlalți clienți selectați în aceeași rundă.
+FedAvg \cite{mcmahan2017fedavg} este algoritmul de referință al FL. La fiecare rundă, un grup de K clienți antrenează local pe propriile date, iar serverul agregă actualizările prin medie ponderată. Eterogenitatea datelor dintre clienți este una dintre provocările cele mai notabile ale FL \cite{li2020challenges}, iar o direcție importantă de cercetare propune algoritmi care corectează deriva (\textit{drift}) dintre actualizările locale ale clienților și modelul global. FedProx \cite{li2020fedprox} adaugă funcției de cost locale un termen proximal, care penalizează distanța dintre ponderile actualizate și cele ale modelului global de la începutul rundei. SCAFFOLD \cite{karimireddy2020scaffold} introduce, pentru fiecare client, o variabilă de control care estimează cât de mult diferă actualizarea sa de media cohortei și corectează gradientul local pe baza acestei estimări. FedDyn \cite{acar2021feddyn} ajunge la un rezultat similar printr-un regularizator dinamic, recalculat la fiecare rundă pe baza istoricului actualizărilor clientului. Toate cele trei leagă actualizarea unui client de comportamentul celorlalți clienți selectați în aceeași rundă.
 
-Această legătură nu are însă un corespondent în design-ul CultureQuest, unde fiecare rundă agregă modelul global cu actualizarea unui singur client. Nu există o cohortă de la care un client să se abată, nici actualizări paralele de reconciliat la final de rundă - condiții pe care se bazează atât termenul proximal din FedProx, cât și variabilele de control din SCAFFOLD sau regularizatorul din FedDyn. Aplicat în acest context, un astfel de termen de corecție ar trage actualizarea locală către un punct de referință arbitrar, fără ca vreo garanție de convergență din literatură să mai fie valabilă, întrucât toate cele trei presupun, în demonstrațiile lor, runde sincrone cu mai mulți clienți. De aceea, design-ul asincron al CultureQuest are nevoie de altceva - un mecanism care reduce influența actualizărilor venite de la clienți cu un model local prea vechi (FedAsync, menționat în secțiunea anterioară). Tabelul~\ref{tab:fl-alternative} rezumă această comparație.
+Această legătură nu are însă un corespondent în CultureQuest, unde agregarea se realizează prin FedAsync \cite{xie2019fedasync}, care procesează, câte o actualizare pe rând, pe măsură ce sosește de la un client, fără să aștepte o cohortă. Antrenarea locală urmează, totuși, logica FedAvg (SGD pe interacțiunile locale ale utilizatorului). Fără cohorte, nu există actualizări paralele de reconciliat la final de rundă, dar nici conceptul de medie a grupului față de care un client să se abată - condiții pe care se bazează atât termenul proximal din FedProx, cât și variabilele de control din SCAFFOLD sau regularizatorul din FedDyn. Aplicat în acest context, un astfel de termen de corecție ar trage actualizarea locală către un punct de referință arbitrar, fără ca vreo garanție de convergență din literatură să mai fie valabilă, întrucât toate cele trei presupun, în demonstrațiile lor, runde sincrone cu mai mulți clienți. De aceea, design-ul asincron al CultureQuest are nevoie de altceva - un mecanism care reduce influența actualizărilor venite de la clienți cu un model local prea vechi. Tabelul~\ref{tab:fl-alternative} rezumă această comparație.
 
 \begin{table}[h]
 \centering
 \footnotesize
-\caption{Comparație între FedAvg și algoritmii cu corecție explicită a derivei (FedProx, SCAFFOLD, FedDyn), și soluția adoptată de CultureQuest.}
+\caption{Comparație între algoritmii FL principali și soluția adoptată de CultureQuest.}
 \label{tab:fl-alternative}
-\begin{tabular}{|l|c|p{4.5cm}|c|}
+\begin{tabular}{|l|c|p{5.5cm}|c|}
 \hline
-\textbf{Algoritm} & \textbf{Sincron?} & \textbf{Mecanism de corecție a derivei} & \textbf{1 client/rundă?} \\
+\textbf{Algoritm} & \textbf{Sincron?} & \textbf{Mecanism} & \textbf{1 client/rundă?} \\
 \hline
-FedAvg & Da & - & Da \\
+FedAvg \cite{mcmahan2017fedavg} & Da & Medie ponderată a cohortei de K clienți & Nu \\
+\hline
+FedAsync \cite{xie2019fedasync} & Nu & \textit{Discount staleness}: $1/(1+s)$ & Da \\
 \hline
 FedProx \cite{li2020fedprox} & Da & Termen proximal (penalizare față de modelul global) & Nu \\
 \hline
@@ -446,7 +456,7 @@ SCAFFOLD \cite{karimireddy2020scaffold} & Da & Variabilă de control per client 
 \hline
 FedDyn \cite{acar2021feddyn} & Da & Regularizator dinamic per client & Nu \\
 \hline
-CultureQuest & Nu & Reducere în funcție de vechime & Da \\
+CultureQuest & Nu & FedAvg (doar pentru antrenarea locală) + FedAsync + limitare normă L2 & Da \\
 \hline
 \end{tabular}
 \end{table}
@@ -457,15 +467,15 @@ Alegerea tehnologiilor pentru CultureQuest a fost ghidată de câteva criterii c
 
 \subsection{Flutter și Riverpod}
 
-Pentru aplicația mobilă, CultureQuest folosește Flutter\footnote{Documentația oficială Flutter. \url{https://flutter.dev} (accesat 19.06.2026).} și Riverpod\footnote{Documentația oficială Riverpod. \url{https://riverpod.dev} (accesat 19.06.2026).} pentru gestionarea stării. Flutter are avantajul de a permite o singură bază de cod Dart pentru Android și iOS, dar și partea de \textit{hot reload} care accelerează dezvoltarea de cod. Alternativele posibile sunt fie React Native, cu un \textit{bridge} între codul de JavaScript și componentele native, adică cu adăugarea unui mecanism bidirecțional de comunicare între cele două - deci, un strat de complexitate suplimentar - fie dezvoltare nativă pe cele două platforme, caz în care logica clientului FL s-ar duplica. În ceea ce privește Riverpod, acesta oferă un model de gestionare a stării declarativ și testabil. Este, prin urmare, potrivit pentru o aplicație în care starea ecranului curent trebuie sincronizată cu procese care rulează în fundal, precum antrenarea locală a modelului.
+Pentru aplicația mobilă, CultureQuest folosește Flutter\footnote{Documentația oficială Flutter. \url{https://flutter.dev} (accesat 19.06.2026).} și Riverpod\footnote{Documentația oficială Riverpod. \url{https://riverpod.dev} (accesat 19.06.2026).} pentru gestionarea stării. Flutter are avantajul de a permite o singură bază de cod Dart pentru Android și iOS, ceea ce înjumătățește efortul de mentenanță față de dezvoltarea nativă pe cele două platforme, fiind relevant, mai ales, pentru a nu duplica logica clientului FL și, totodată, pentru a nu îngreuna sincronizarea. Flutter compilează codul Dart direct în cod nativ ARM, fără un \textit{bridge} către componentele native, eliminându-se \textit{overhead-ul} de comunicare regăsit în React Native la fiecare apel nativ\footnote{Flutter, documentație privind performanța și arhitectura de compilare. \url{https://docs.flutter.dev/perf} (accesat 19.06.2026).}. În ceea ce privește Riverpod, acesta oferă un model de gestionare a stării declarativ și testabil. Este, prin urmare, potrivit pentru o aplicație în care starea ecranului curent trebuie sincronizată cu procese care rulează în fundal, precum antrenarea locală a modelului.
 
 \subsection{FastAPI, MongoDB și Redis}
 
-Pe partea de \textit{backend}, CultureQuest folosește FastAPI\footnote{Documentația oficială FastAPI. \url{https://fastapi.tiangolo.com} (accesat 19.06.2026).}, MongoDB\footnote{Documentația oficială MongoDB. \url{https://www.mongodb.com/docs/} (accesat 19.06.2026).} și Redis\footnote{Documentația oficială Redis. \url{https://redis.io/docs/} (accesat 19.06.2026).}. FastAPI este scris în Python, iar asta înseamnă că face posibilă integrarea directă a serviciilor de agregare FL și a antrenării modelului MLP cu ecosistemul PyTorch folosit și la pre-antrenare, din nou, fără introducerea unui strat de complexitate între limbaje. Suportul nativ pentru operații asincrone se potrivește cu un număr mare de clienți conectați intermitent, ceea ce este tipic pentru un sistem \textit{cross-device}. Legat de MongoDB, acesta stochează date variabile - obiective, \textit{quest-uri}, povești, recenzii - într-un mod mai flexibil decât ar permite folosirea unei baze de date relaționale. Redis, la rândul lui, acoperă starea nepersistentă a procesului FL, deoarece stocarea în memorie este suficientă, dar și mai rapidă.
+Pe partea de \textit{backend}, CultureQuest folosește FastAPI\footnote{Documentația oficială FastAPI. \url{https://fastapi.tiangolo.com} (accesat 19.06.2026).}, MongoDB\footnote{Documentația oficială MongoDB. \url{https://www.mongodb.com/docs/} (accesat 19.06.2026).} și Redis\footnote{Documentația oficială Redis. \url{https://redis.io/docs/} (accesat 19.06.2026).}. FastAPI este scris în Python, ceea ce permite integrarea directă cu ecosistemul NumPy folosit la pre-antrenare și la inferența MLP, fără strat de conversie între limbaje. Mai mult, suportul nativ pentru operații asincrone\footnote{FastAPI, documentație privind operațiile asincrone. \url{https://fastapi.tiangolo.com/async/} (accesat 19.06.2026).} se potrivește cu un număr mare de clienți conectați intermitent. Alegerea MongoDB, adică a unei baze de date non-relaționale, se justifică prin stocarea de date eterogene cu câmpuri diferite - obiective, \textit{quest-uri}, povești, recenzii - care într-o bază de date relațională precum PostgreSQL ar necesita tabele de \textit{join} suplimentare. Interogările de proximitate sunt acoperite de indexul 2dsphere nativ al MongoDB și, deci, nu este nevoie de o extensie precum PostGIS, ale cărei capabilități GIS avansate nu sunt necesare când OSRM se ocupă deja de partea de rutare. Redis, la rândul lui, acoperă starea nepersistentă a procesului FL, cu o latență de sub 1 ms pentru operații în memorie și cu suport pentru \texttt{SET NX PX} atomic - pentru lock-ul de agregare (\texttt{fl:agg\_lock}) care protejează ciclul read-aggregate-write.
 
 \subsection{Motorul de rutare OSRM}
 
-Funcționalitatea de rutare se bazează pe OSRM (\textit{Open Source Routing Machine})\footnote{Documentația oficială OSRM. \url{https://project-osrm.org} (accesat 19.06.2026).}, un motor \textit{open-source}. Poate fi găzduit local, pe același server cu restul serviciilor de \textit{backend}, fără dependență de un API extern plătit. OSRM calculează rute pe rețeaua de drumuri pe baza datelor OpenStreetMap și răspunde suficient de rapid pentru a fi folosit de utilizator pe parcursul unei rute.
+Funcționalitatea de rutare se bazează pe OSRM (\textit{Open Source Routing Machine})\footnote{Documentația oficială OSRM. \url{https://project-osrm.org} (accesat 19.06.2026).}, un motor \textit{open-source} bazat pe date OpenStreetMap. Poate fi găzduit local, pe același server cu restul serviciilor de \textit{backend}, fără dependență de un API extern plătit (Google Maps Direction API facturează, de exemplu, per cerere\footnote{Google Maps Platform, prețuri Directions API. \url{https://developers.google.com/maps/documentation/directions/usage-and-billing} (accesat 19.06.2026).}). OSRM calculează rute pe rețeaua de drumuri folosind Contraction Hierarchies, și astfel, răspunde în câteva zeci de milisecunde pentru o rută obișnuită ca distanță în perimetrul unui oraș\footnote{Luxen, D., \& Vetter, C. (2011). Real-time routing with OpenStreetMap data. \textit{Proceedings of the 19th ACM SIGSPATIAL}. \url{https://doi.org/10.1145/2093973.2094062}} - suficient de rapid pentru a fi folosit de utilizator pe parcursul unei rute.
 
 \subsection{Perceptron multi-strat}
 
@@ -779,7 +789,7 @@ Identitatea autorului recenziei & - & Autorul fiecărei recenzii sau povești \\
 
 \subsection{Rezultatele simulării procesului de învățare federată}
 
-\section{Evaluarea confidențialității și robusteții}
+\section{Evaluarea confidențialității, robusteții și scalabilității}
 
 \section{Analiză comparativă și discuții}
 

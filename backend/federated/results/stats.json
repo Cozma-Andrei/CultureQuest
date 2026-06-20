@@ -4885,5 +4885,14 @@
         22
       ]
     }
+  },
+  "timing": {
+    "fedasync_seconds": 13.97,
+    "no_fedasync_seconds": 13.98,
+    "seconds_per_round": {
+      "fedasync": 0.0233,
+      "no_fedasync": 0.0233
+    },
+    "inference_us_numpy": 38.86
   }
 }

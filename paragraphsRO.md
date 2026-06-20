@@ -157,11 +157,17 @@ spre Cap. 7.)*
 | 6.1 Corectitudinea funcțională | 2-3 | Figură multi-panel (capturi FR) | 1.3 |
 | 6.2 (intro performanță model FL) | 1 | - | 0.2 |
 | 6.2.1 Rezultate pre-antrenare | 2-3 | 2 figuri + Tabel înainte/după fine-tuning | 1.5 |
-| 6.2.2 Rezultate simulare FL | 2-3 | 3 figuri (`loss_curve`, `fedasync_effect`, `staleness_distribution`) | 1.8 |
-| 6.3 Evaluare confidențialitate/robustețe | 2-3 | (de verificat `stats.json`) | 0.8 |
+| 6.2.2 Rezultate simulare FL | 2-3 | 3 figuri (`loss_curve`, `fedasync_effect`, `staleness_distribution`) + `timing.inference_us_numpy` din `stats.json` | 1.8 |
+| 6.3 Evaluare confidențialitate/robustețe/scalabilitate | 3-4 | `stats.json` clipping sweep + Tabel load test (4 niveluri concurență) | 1.3 |
 | 6.4 Analiză comparativă și discuții | 2-3 | Tabel extins din 3.4 | 1.0 |
 
-**Subtotal Capitolul 6: ~6.6 pagini** (~13-16 paragrafe + ~6 figuri + 2 tabele)
+**Subtotal Capitolul 6: ~7.1 pagini** (~14-17 paragrafe + ~6 figuri + 3 tabele)
+
+*Față de estimarea inițială (6,6 pagini), secțiunea 6.3 a crescut cu ~0,5
+pagini pentru a include testul de scalabilitate (tabel load test + concluzie
+NFR-4) și parametrii DP expliciți (σ=0,1; ℓ₂≤1,0). Creșterea e justificată
+de conținut nou demonstrabil: `federated/results/load_test.json` și cheia
+`timing` din `stats.json`.*
 
 ---
 
@@ -189,18 +195,17 @@ capitol.)*
 | 3. Soluții Existente | ~6.7 | 15% |
 | 4. Soluția Propusă | ~11.3 | 26% |
 | 5. Detalii de Implementare | ~10.85 | 25% |
-| 6. Evaluare | ~6.6 | 15% |
+| 6. Evaluare | ~7.1 | 16% |
 | 7. Concluzii | ~2.0 | 5% |
-| **Total (Cap. 1-7)** | **~43.6** | **100%** |
+| **Total (Cap. 1-7)** | **~44.1** | **100%** |
 | Bibliografie (24 intrări, APA) | ~1.5-2 (listă, nu paragrafe) | - |
 
-~43-44 de pagini pentru Cap. 1-7 - revizuit cu ~+0.9 pagini față de prima
-estimare, ca să contabilizeze explicit listele cu marcatori (1.3, 5.5, 7.2) și
-formulele afișate cu termeni "unde: ..." (4.4.2-4.4.5), care ocupă spațiu real
-pe pagină chiar dacă nu sunt "paragrafe" propriu-zise. Rămâne în marja
-rezonabilă față de target-ul de 40. Distribuția e firească pentru o lucrare cu
-componentă de proiectare+implementare FL: Cap. 4 și 5 (proiectare,
-implementare) domină, Cap. 1 și 7 (introducere, concluzii) sunt scurte.
+~44 de pagini pentru Cap. 1-7 - față de estimarea anterioară (~43,6 pagini),
+Cap. 6 a crescut cu ~0,5 pagini (6,3 extins cu testul de scalabilitate și
+parametrii DP expliciți). Rămâne în marja rezonabilă față de target-ul de 40.
+Distribuția e firească pentru o lucrare cu componentă de proiectare+implementare
+FL: Cap. 4 și 5 (proiectare, implementare) domină, Cap. 1 și 7 (introducere,
+concluzii) sunt scurte.
 
 ### Dacă vrei mai aproape de exact 40 de pagini
 
@@ -209,8 +214,7 @@ marcate "opțional"/flexibile în `structureRO.md`):
 - Renunță la tabelele opționale din 3.5.1/3.5.2 (rămân text) -> -~0.8 pagini.
 - Fără schiță la 4.7 (te bazezi pe captura din 5.1.6) -> -~0.2 pagini.
 - Fără tabel opțional la 2.4 și 7.1 -> -~0.5 pagini.
-- 6.3 cu 2 paragrafe, fără figură nouă (dacă `stats.json` nu are date) ->
-  -~0.3 pagini.
+- 6.3: sari tabelul load test, menționezi doar concluzia textual -> -~0.4 pagini.
 - 3.3 cu 2 paragrafe în loc de 3 (figura e adaptată, nu originală, necesită
   mai puțină explicație) -> -~0.25 pagini.
 - 5.3 cu 1-2 figuri în loc de 1-3 (alegi cele mai relevante din

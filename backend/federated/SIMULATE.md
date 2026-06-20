@@ -2,8 +2,7 @@
 
 Simulates `N_CLIENTS` synthetic clients running the production FL pipeline
 from the **same pretrained weights** and **same random seed**, then compares
-two things: the effect of the FedAsync staleness discount, and how much
-protection server-side delta clipping provides against a rogue update.
+the effect of the FedAsync staleness discount on convergence.
 
 ## How to run
 
@@ -38,18 +37,15 @@ Results are written to `backend/federated/results/`.
    offline period. Each round: pick a random client, sample its staleness,
    train from the historical snapshot it would have had, add DP noise,
    aggregate via `clipped_fedavg` on the server.
-6. Sweeps one rogue client update through a range of L2 norms and aggregates
-   it with both plain `fedavg` and production `clipped_fedavg`, to measure how
-   much drift each allows into the global model.
-7. Pushes the FedAsync run's final weights back to Redis via `_redis_push`,
+6. Pushes the FedAsync run's final weights back to Redis via `_redis_push`,
    so the real model benefits from the simulation.
-8. Saves stats and six plots.
+7. Saves stats and seven plots.
 
 ## Outputs
 
 | File | Contents |
 |------|----------|
-| `results/stats.json` | Config, initial baseline, per-variant summary (final/min loss, drift, effective weight, % improvement vs initial), per-round arrays, clipping-robustness sweep |
+| `results/stats.json` | Config, initial baseline, per-variant summary (final/min loss, drift, effective weight, % improvement vs initial), per-round arrays, `timing` (`fedasync_seconds`, `no_fedasync_seconds`, `seconds_per_round`, `inference_us_numpy`: mean of 10 000 single-thread numpy forward passes in µs) |
 | `results/loss_curve.png` | Global Binary Cross-Entropy loss over rounds (production configuration) |
 | `results/weight_drift.png` | L2 norm of the local-global delta each round |
 | `results/fedasync_effect.png` | Loss curves with vs without the FedAsync discount, all else identical: isolates the discount's effect on convergence |
@@ -63,10 +59,13 @@ Results are written to `backend/federated/results/`.
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `N_CLIENTS` | 10000 | Distinct client interest profiles |
-| `N_ROUNDS` | 300 | Total server-side aggregation rounds per variant (1 round = 1 device upload) |
+| `N_ROUNDS` | 600 | Total server-side aggregation rounds per variant (1 round = 1 device upload) |
 | `INTERACTIONS_PER_ROUND` | 15 | Synthetic interactions per round (matches app threshold) |
 | `LOCAL_EPOCHS` | 5 | SGD passes over local data |
-| `DP_SIGMA` | 0.1 | DP noise scale |
+| `LEARNING_RATE` | 0.01 | SGD learning rate |
+| `DP_SIGMA` | 0.1 | DP noise scale (σ in the Gaussian mechanism) |
+| `DP_CLIP_NORM` | 1.0 | L2 clip norm applied client-side before noise (matches `kDPClipNorm` in app) |
+| `SERVER_MAX_NORM` | 1.0 | Max L2 norm of the server-side delta in `clipped_fedavg` |
 | `FRESH_PROB` | 0.80 | Fraction of clients that are recently synced (staleness 0-2) |
 | `FRESH_STALENESS` | (0, 2) | Staleness range for fresh clients |
 | `STALE_STALENESS` | (15, 30) | Staleness range for stale clients (the remaining 20%) |
@@ -89,3 +88,23 @@ Results are written to `backend/federated/results/`.
   real model benefits from the simulation.
 - If Redis is unreachable at startup the script falls back to random weights
   and still runs (the push at the end will also fail gracefully).
+
+## Related tooling
+
+**`federated/load_test.py`** - a separate script that stress-tests the live
+`POST /api/federated/model/update` endpoint, not the simulation.  It fires 1,
+5, 10, and 20 concurrent requests and records throughput, mean latency, and
+error count.  Results are written to `federated/results/load_test.json`.  Run
+it inside the backend container while the service is live:
+
+```bash
+docker exec -it culturequest_backend python3 federated/load_test.py
+```
+
+**`tests/test_fl_model.py`** - pytest suite (20 tests) covering
+`build_initial_weights`, `fl_predict`, `fedavg`, `clipped_fedavg`, and the
+staleness discount formula.  Run with:
+
+```bash
+docker exec culturequest_backend pytest tests/ -v
+```

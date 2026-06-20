@@ -1,0 +1,42 @@
+[
+  {
+    "n_concurrent": 1,
+    "success": 1,
+    "errors": 0,
+    "total_seconds": 0.007,
+    "throughput_rps": 151.98,
+    "latency_mean_ms": 6.5,
+    "latency_p95_ms": 6.5,
+    "error_sample": null
+  },
+  {
+    "n_concurrent": 5,
+    "success": 5,
+    "errors": 0,
+    "total_seconds": 1.225,
+    "throughput_rps": 4.08,
+    "latency_mean_ms": 622.6,
+    "latency_p95_ms": 923.5,
+    "error_sample": null
+  },
+  {
+    "n_concurrent": 10,
+    "success": 10,
+    "errors": 0,
+    "total_seconds": 2.75,
+    "throughput_rps": 3.64,
+    "latency_mean_ms": 1384.1,
+    "latency_p95_ms": 2442.2,
+    "error_sample": null
+  },
+  {
+    "n_concurrent": 20,
+    "success": 12,
+    "errors": 8,
+    "total_seconds": 3.082,
+    "throughput_rps": 6.49,
+    "latency_mean_ms": 2064.9,
+    "latency_p95_ms": 3076.1,
+    "error_sample": "Expecting value: line 1 column 1 (char 0)"
+  }
+]

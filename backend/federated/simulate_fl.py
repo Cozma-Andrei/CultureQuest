@@ -25,10 +25,14 @@ Results written to backend/federated/results/
 """
 import sys, os, json, math, random, asyncio, collections, time
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-matplotlib.rcParams['axes.unicode_minus'] = False
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    matplotlib.rcParams['axes.unicode_minus'] = False
+    _HAS_MPL = True
+except ImportError:
+    _HAS_MPL = False
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from app.federated.model import build_initial_weights, fedavg, clipped_fedavg, fl_predict, INPUT_DIM, HIDDEN_DIMS
@@ -493,6 +497,15 @@ def main():
     initial_probes = {name: fl_predict(initial_weights, fv.tolist()) for name, (fv, _) in PROBES.items()}
     print(f'  initial loss = {initial_loss:.4f}')
 
+    print('\nBenchmarking inference (single forward pass)...')
+    _bench_input = test_data[0][0].tolist()
+    N_BENCH = 10000
+    _t0 = time.perf_counter()
+    for _ in range(N_BENCH):
+        fl_predict(initial_weights, _bench_input)
+    inference_us = (time.perf_counter() - _t0) / N_BENCH * 1_000_000
+    print(f'  avg inference: {inference_us:.2f} µs over {N_BENCH} runs (numpy, laptop)')
+
     results = {'initial': {'loss': initial_loss, 'probes': initial_probes}}
 
     print(f'\nRunning with FedAsync staleness discount...')
@@ -550,6 +563,7 @@ def main():
                 'fedasync':    round(t_fa / N_ROUNDS, 4),
                 'no_fedasync': round(t_nf / N_ROUNDS, 4),
             },
+            'inference_us_numpy': round(inference_us, 2),
         },
     }
     p = os.path.join(RESULTS_DIR, 'stats.json')
@@ -557,14 +571,17 @@ def main():
         json.dump(stats, f, indent=2)
     print(f'\n  saved {p}')
 
-    print('\nPlotting...')
-    plot_loss(results)
-    plot_drift(results)
-    plot_fedasync_effect(results)
-    plot_staleness_distribution(results)
-    plot_per_staleness_loss_delta(results)
-    plot_probes(results)
-    plot_contextual_probes(results)
+    if _HAS_MPL:
+        print('\nPlotting...')
+        plot_loss(results)
+        plot_drift(results)
+        plot_fedasync_effect(results)
+        plot_staleness_distribution(results)
+        plot_per_staleness_loss_delta(results)
+        plot_probes(results)
+        plot_contextual_probes(results)
+    else:
+        print('\nPlotting skipped (matplotlib not available).')
 
     print('\nSummary:')
     print(f'  {"INITIAL":11s}  loss={initial_loss:.4f}')

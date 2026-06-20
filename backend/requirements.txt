@@ -10,5 +10,6 @@ bcrypt==4.1.3
 python-multipart==0.0.9
 httpx==0.27.0
 
-# Federated Learning (numpy only needed at runtime; tensorflow/sklearn/matplotlib are local-only)
+# Federated Learning
 numpy==1.26.4
+matplotlib==3.8.4

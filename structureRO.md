@@ -93,7 +93,7 @@ arhitectură din 4.1; la 1.5, un grafic din 6.2.2 (ex. `loss_curve.png`).
   mulți clienți, ceea ce nu se aplică design-ului asincron al CultureQuest, cu
   un singur client per rundă.
   - *Resurse:* Tabel comparativ FedAvg / FedProx / SCAFFOLD / FedDyn /
-    CultureQuest (FedAvg async + staleness discount), pe coloane: necesită
+    CultureQuest (FedAsync + limitare normă L2), pe coloane: necesită
     runde sincrone?, mecanism de corecție a derivei, compatibil cu un singur
     client per rundă?. Acest tabel se poate relua/extinde în 6.4 cu o coloană
     de evaluare.
@@ -341,7 +341,10 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
     INTERACTIONS_PER_ROUND=15, LEARNING_RATE=0.01, LOCAL_EPOCHS=5,
     DP_SIGMA=0.1, DP_CLIP_NORM=1.0, SERVER_MAX_NORM=1.0, FRESH_PROB=0.80,
     FRESH_STALENESS=(0,2), STALE_STALENESS=(15,30),
-    STALE_LABEL_FLIP_RATE=0.70).
+    STALE_LABEL_FLIP_RATE=0.70). Suită de teste automate: `tests/test_fl_model.py`
+    (20 de teste pytest) acoperă `build_initial_weights`, `fl_predict`, `fedavg`,
+    `clipped_fedavg` și formula discount-ului de staleness; rulează în containerul
+    Docker (`docker exec culturequest_backend pytest tests/ -v`).
 - **5.5 Dificultăți întâmpinate în procesul de implementare** - problema
   regresiei către medie din pre-antrenare și modul în care fine-tuning-ul a
   rezolvat-o; ajustarea reducerii în funcție de vechime.
@@ -379,14 +382,27 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
       Secundare (4, -> Anexe ca set complet de grafice): `weight_drift.png`,
       `per_staleness_loss_delta.png`, `probe_scores.png`,
       `contextual_probes.png`. Datele numerice din `stats.json` (102KB) pot
-      alimenta un tabel sumar complementar figurilor principale.
-- **6.3 Evaluarea confidențialității și robusteții** - efectul zgomotului DP
-  asupra utilității modelului; efectul limitării (clipping) asupra
-  actualizărilor de tip adversarial.
-  - *Resurse:* verifică `backend/federated/results/stats.json` pentru date
-    privind efectul DP/clipping (MSE vs. nivel de zgomot, robustețe vs.
-    actualizări adversariale); dacă nu există, secțiunea necesită un experiment
-    nou (grafic/tabel) - de marcat separat când se redactează 6.3.
+      alimenta un tabel sumar complementar figurilor principale. `stats.json`
+      include și cheia `timing.inference_us_numpy` (media a 10.000 de rulări de
+      *forward pass* single-thread numpy); valoarea demonstrează NFR-3: costul
+      de inferență per obiectiv este neglijabil, estimat sub 10 ms chiar și pe
+      dispozitive lente pentru un model de 1.281 parametri.
+- **6.3 Evaluarea confidențialității, robusteții și scalabilității** - (a)
+  efectul zgomotului DP (σ=0,1; ℓ₂≤1,0) asupra utilității modelului; efectul
+  limitării (clipping) asupra actualizărilor adversariale, cuantificat prin
+  sweep-ul din `stats.json`; (b) testul de scalabilitate pentru NFR-4: câte
+  cereri FL simultane suportă backend-ul fără conflicte de date, prin lock-ul
+  Redis cu 10 reîncercări x 0,3 s.
+  - *Resurse:* `backend/federated/results/stats.json` - secțiunea
+    `clipping_sweep` (robustețe vs. actualizări adversariale: derivă globală
+    cu vs. fără clipping la norme crescătoare). Tabel cu rezultatele testului
+    de scalabilitate: 4 niveluri de concurență (1 / 5 / 10 / 20 cereri
+    simultane), coloane succes / erori / latență medie (ms) / latență p95
+    (ms) - date din `federated/results/load_test.json`, generat de
+    `federated/load_test.py`. Concluzie demonstrabilă: la ≤10 cereri
+    simultane - 0 erori (latență medie 6,5 ms / 622 ms / 1.384 ms la 1 / 5 /
+    10 cereri); la 20 cereri - 12/20 succes, 8 respinse de lock expirat
+    (degradare grațioasă, nu corupere de date).
 - **6.4 Analiză comparativă și discuții** - compromisurile dintre FedAvg
   sincron și asincron (problema clienților întârziați - straggler problem);
   poziționarea față de alternativele din Capitolul 3.
@@ -427,8 +443,8 @@ bibtex și locațiile surselor se află în `bibliography_sourcesRO.md`.
 
 | Citare | Folosit pentru | Citat în |
 |---|---|---|
-| McMahan, B., Moore, E., Ramage, D., Hampson, S., & y Arcas, B. A. (2017). Communication-Efficient Learning of Deep Networks from Decentralized Data. *AISTATS 2017*. | Originea FedAvg - procedura de antrenare locală la nivelul fiecărui client și formula de agregare prin medie ponderată. | 1.3, 3.3, 4.4.2 |
-| Xie, C., Koyejo, S., & Gupta, I. (2019). Asynchronous Federated Optimization. *arXiv:1903.03934*. | Reducerea pe bază de vechime (staleness discount) din FedAsync (`n_effective = n_samples/(1+staleness)`), nucleul agregării asincrone din CultureQuest. | 1.5, 3.3, 4.4.3, 6.2.2 |
+| McMahan, B., Moore, E., Ramage, D., Hampson, S., & y Arcas, B. A. (2017). Communication-Efficient Learning of Deep Networks from Decentralized Data. *AISTATS 2017*. | Originea FedAvg - procedura de antrenare locală la nivelul fiecărui client și formula de agregare prin medie ponderată. | 1.3, 3.3, 3.4, 4.4.2 |
+| Xie, C., Koyejo, S., & Gupta, I. (2019). Asynchronous Federated Optimization. *arXiv:1903.03934*. | Reducerea pe bază de vechime (staleness discount) din FedAsync (`n_effective = n_samples/(1+staleness)`), nucleul agregării asincrone din CultureQuest. | 1.3, 1.5, 3.3, 4.4.3, 6.2.2 |
 | Bonawitz, K., Eichner, H., Grieskamp, N., Huba, D., Ingerman, A., Ivanov, V., Kiddon, C., Konečný, J., Mazzocchi, S., McMahan, H. B., Van Overveldt, T., Petrou, D., Ramage, D., & Roselander, J. (2019). Towards Federated Learning at Scale: System Design. *Proceedings of the 2nd SysML Conference*. | Motivația, regăsită în sisteme FL de producție, de a porni modelul global de la ponderi pre-antrenate (warm-start) în loc de o inițializare aleatoare - stă la baza pipeline-ului de pre-antrenare/fine-tuning și a cerinței legate de cold-start. | 1.1, 2.3, 5.3 |
 | McMahan, H. B., Ramage, D., Talwar, K., & Zhang, L. (2018). Learning Differentially Private Recurrent Language Models. *ICLR 2018* (arXiv:1710.06963). | Șablonul DP-FedAvg de tip clip-then-aggregate - originea limitării normei L2 per actualizare, folosită de `clipped_fedavg`; pasul de adăugare a zgomotului urmează însă varianta Local-DP de mai jos (Wei et al., 2020). | 4.4.4 |
 | Wei, K., Li, J., Ding, M., Ma, C., Yang, H. H., Farokhi, F., Jin, S., Quek, T. Q. S., & Poor, H. V. (2020). Federated Learning with Differential Privacy: Algorithms and Performance Analysis. *IEEE Transactions on Information Forensics and Security*, 15. | NbAFL (Noising before Model Aggregation FL) - fiecare client limitează (clip) și adaugă zgomot Gaussian calibrat pe delta-ul ponderilor *înainte* de transmitere, astfel încât serverul nu vede niciodată o actualizare curată; mecanismul Local-DP efectiv implementat de `_addDPNoise`, împreună cu analiza compromisului confidențialitate-utilitate care stă la baza evaluării din 6.3. | 4.4.5, 6.3 |
