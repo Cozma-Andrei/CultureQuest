@@ -81,9 +81,7 @@ Results are written to `backend/federated/results/`.
   `fl:agg_lock` used in production. This is intentional: the simulation is a
   single sequential process with no concurrent callers.
 - DP noise and server-side delta clipping are applied in every FL round, same
-  as production. The clipping-robustness sweep additionally runs plain
-  `fedavg` (no clipping) purely for comparison; production always aggregates
-  through `clipped_fedavg`.
+  as production. Production always aggregates through `clipped_fedavg`.
 - The FedAsync run's weights are the ones pushed to Redis at the end, so the
   real model benefits from the simulation.
 - If Redis is unreachable at startup the script falls back to random weights

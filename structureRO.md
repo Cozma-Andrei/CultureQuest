@@ -115,9 +115,9 @@ arhitectură din 4.1; la 1.5, un grafic din 6.2.2 (ex. `loss_curve.png`).
     când utilizatorul deschide fișa unui obiectiv. Asta întărește alegerea
     unei implementări proprii, ușoare.
     - *Resurse:* Tabel comparativ MLP propriu vs. TFLite vs. PyTorch Mobile,
-      pe coloane: dimensiune model, dependențe de runtime, compatibilitate
-      cross-platform (Flutter) - tabel decizional, justifică direct alegerea
-      implementării proprii.
+      pe coloane: parametri/dimensiune model, runtime adăugat la APK (arm64),
+      dependențe native, timp de inferență tipic - tabel decizional, justifică
+      direct alegerea implementării proprii.
 
 ## Capitolul 4 - Soluția Propusă
 *Resurse generale:* acesta e capitolul de proiectare - diagrame, tabele și
@@ -388,18 +388,14 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
       de inferență per obiectiv este neglijabil, estimat sub 10 ms chiar și pe
       dispozitive lente pentru un model de 1.281 parametri.
 - **6.3 Evaluarea confidențialității, robusteții și scalabilității** - (a)
-  efectul zgomotului DP (σ=0,1; ℓ₂≤1,0) asupra utilității modelului; efectul
-  limitării (clipping) asupra actualizărilor adversariale, cuantificat prin
-  sweep-ul din `stats.json`; (b) testul de scalabilitate pentru NFR-4: câte
+  efectul zgomotului DP (σ=0,1; ℓ₂≤1,0) și al limitării (clipping) asupra
+  utilității modelului; (b) testul de scalabilitate pentru NFR-4: câte
   cereri FL simultane suportă backend-ul fără conflicte de date, prin lock-ul
   Redis cu 10 reîncercări x 0,3 s.
-  - *Resurse:* `backend/federated/results/stats.json` - secțiunea
-    `clipping_sweep` (robustețe vs. actualizări adversariale: derivă globală
-    cu vs. fără clipping la norme crescătoare). Tabel cu rezultatele testului
-    de scalabilitate: 4 niveluri de concurență (1 / 5 / 10 / 20 cereri
-    simultane), coloane succes / erori / latență medie (ms) / latență p95
-    (ms) - date din `federated/results/load_test.json`, generat de
-    `federated/load_test.py`. Concluzie demonstrabilă: la ≤10 cereri
+  - *Resurse:* Tabel cu rezultatele testului de scalabilitate: 4 niveluri de
+    concurență (1 / 5 / 10 / 20 cereri simultane), coloane succes / erori /
+    latență medie (ms) / latență p95 (ms) - date din `backend/load_test.json`,
+    generat de `federated/load_test.py`. Concluzie demonstrabilă: la ≤10 cereri
     simultane - 0 erori (latență medie 6,5 ms / 622 ms / 1.384 ms la 1 / 5 /
     10 cereri); la 20 cereri - 12/20 succes, 8 respinse de lock expirat
     (degradare grațioasă, nu corupere de date).
