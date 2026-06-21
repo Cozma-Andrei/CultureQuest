@@ -4,7 +4,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from redis.asyncio import Redis
-from app.federated.model import build_initial_weights, fedavg, clipped_fedavg
+from app.federated.model import build_initial_weights, avg, clipped_avg
 
 FL_WEIGHTS_KEY   = "fl:global_weights"
 FL_ROUND_KEY     = "fl:round"
@@ -76,7 +76,7 @@ async def submit_client_update(
         discount = 1.0 / (1.0 + staleness)
         effective_samples = max(1, round(num_samples * discount))
         global_virtual_samples = max(effective_samples * 4, 20)
-        new_weights = clipped_fedavg(
+        new_weights = clipped_avg(
             [(effective_samples, client_weights), (global_virtual_samples, global_weights)],
             global_weights,
             max_norm=1.0,

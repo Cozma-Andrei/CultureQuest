@@ -35,7 +35,7 @@ except ImportError:
     _HAS_MPL = False
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from app.federated.model import build_initial_weights, fedavg, clipped_fedavg, fl_predict, INPUT_DIM, HIDDEN_DIMS
+from app.federated.model import build_initial_weights, avg, clipped_avg, fl_predict, INPUT_DIM, HIDDEN_DIMS
 
 # Config
 N_CLIENTS              = 10000
@@ -235,7 +235,7 @@ def run_simulation(initial_weights, clients, test_data, use_fedasync=True):
         discount  = (1.0 / (1.0 + staleness)) if use_fedasync else 1.0
         effective = max(1, round(INTERACTIONS_PER_ROUND * discount))
         virtual   = max(effective * 4, 20)
-        gw = clipped_fedavg([(effective, noisy_w), (virtual, gw)], gw, max_norm=SERVER_MAX_NORM)
+        gw = clipped_avg([(effective, noisy_w), (virtual, gw)], gw, max_norm=SERVER_MAX_NORM)
         history.append(_copy_weights(gw))
 
         loss_hist.append(_bce_loss(gw, test_data))

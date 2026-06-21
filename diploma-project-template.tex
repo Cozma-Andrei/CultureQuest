@@ -39,6 +39,7 @@
 \usepackage{tikz}
 \usepackage{pdflscape}
 \usepackage{listings}
+\usepackage{longtable}
 \setlist{noitemsep}
 
 %%% HEADERS & FOOTERS
@@ -783,17 +784,49 @@ Pe server, obiectivele de pe o rază de 10 km sunt ordonate după un scor iniți
 
 \subsection{Sistemul de misiuni și tehnologia de \textit{geofencing}}
 
-Misiunile se accesează din fișa unui obiectiv, prin butonul „View quests". La apăsare, aplicația măsoară, pe baza poziției curente, cât de departe se află utilizatorul de obiectiv, iar în cazul în care utilizatorul se află la mai mult de 100 de metri, misiunile apar doar în modul citire, fără posibilitatea de a trimite un răspuns pentru ele. Sub acest prag, misiunea devine activă: utilizatorul răspunde la un \textit{quiz} (întrebare cu variante sau notă text), trimis printr-o cerere HTTP de tip POST la \path{/quests/\{id\}/complete}. Pentru un răspuns corect, serverul acordă puncte și misiunea se marchează drept finalizată pe dispozitiv. Cât despre unul greșit, obiectivul se marchează, totuși, ca vizitat, de vreme ce utilizatorul este fizic acolo. Panoul de misiuni poate fi observat în \textbf{figura~\ref{fig:proximity-sheet}} din Anexe.
+Misiunile se accesează din fișa unui obiectiv, prin butonul „View quests". La apăsare, aplicația măsoară, pe baza poziției curente, cât de departe se află utilizatorul de obiectiv, iar în cazul în care utilizatorul se află la mai mult de 100 de metri, misiunile apar doar în modul citire, fără posibilitatea de a trimite un răspuns pentru ele. Sub acest prag, misiunea devine activă: utilizatorul răspunde la un \textit{quiz} (întrebare cu variante sau notă text), trimis printr-o cerere HTTP de tip POST la \path{/quests/{id}/complete}. Pentru un răspuns corect, serverul acordă puncte și misiunea se marchează drept finalizată pe dispozitiv. Cât despre unul greșit, obiectivul se marchează, totuși, ca vizitat, de vreme ce utilizatorul este fizic acolo. Panoul de misiuni poate fi observat în \textbf{figura~\ref{fig:proximity-sheet}} din Anexe.
 
 Detectarea apropierii față de locații se face printr-un serviciu de \textit{geofencing} manual (\path{proximity_service.dart}), construit pe fluxul de poziții GPS cu un filtru de 10 metri, ceea ce înseamnă că fluxul GPS trimite o actualizare doar dacă utilizatorul s-a deplasat cu cel puțin 10 metri față de poziția curentă. Cu fiecare actualizare, se recalculează distanța față de obiectivele din zona curentă - cele din raza de 1500 de metri față de ultima poziție. Evenimentul ENTER se trimite când utilizatorul ajunge la mai puțin de 100 de metri de un obiectiv, iar cel de EXIT când iese din această rază. Dacă utilizatorul s-a deplasat cu mai mult de 200 de metri față de ultimul punct de la care s-a actualizat lista de obiective, aceasta se reîncarcă de la server.
 
 \section{Implementarea serviciilor \textit{backend}}
 
+Din punct de vedere al serviciilor \textit{backend}, în aplicația CultureQuest există trei arii principale. Prima este reprezentată de modul în care gestionează serverul agregarea FL și cuprinde: primirea actualizărilor de la clienți, aplicarea \textit{staleness discount-ului}, limitarea deltei și coordonarea prin Redis pentru a preveni problemele de sincronizare. A doua arie cuprinde punctele de acces API asociate comunicării dispozitivelor mobile cu serverul, printre care: descărcarea modelului global de către clienți, interogarea statusului procesului FL, și alte puncte de acces necesare pentru interfața de comunicare. A treia și ultima arie descrisă în această secțiune este alcătuită din sistemul de recenzii și moderarea conținutului. Aici sunt incluse: agregarea evaluărilor asociate unui obiectiv, moderarea automată prin OpenAI Moderation API cu \textit{fallback} pe o listă locală de cuvinte interzise, dar și un sistem de revizuire manuală pentru obiective, povești și \textit{quest-uri} concepute de turiști sau localnici.
+
 \subsection{Serviciul de agregare}
+
+Protocolul FL din CultureQuest este asincron, unde există doar o actualizare în cadrul unei runde (și nu există barieră de sincronizare), iar agregarea se face printr-o medie ponderată cu discount de vechime. La primirea unei actualizări de la un client, serverul calculează delta față de ponderile globale și limitează norma L2 a acesteia la $\tau = 1$. Implementarea se regăsește în metoda \texttt{clipped\_avg} aflată în \textbf{\textit{listing-ul}~\ref{lst:clippedfedavg}} din Anexe. Dacă un client trimite o actualizare cu normă mare, delta se scalează înainte de agregare. Astfel, contribuția sa este limitată la cel mult $\frac{1}{N_{\mathrm{virtual}}}$ pentru fiecare coordonată de pondere. Aici se adaugă și discountul de vechime, care taie suplimentar contribuția clienților care antrenează pe o versiune veche a modelului global. Numărul efectiv de eșantioane devine $n_{\mathrm{eff}} = \lfloor n \cdot \frac{1}{1+s} \rfloor$, unde $s$ arată numărul de runde cu care clientul rămâne în urmă, și, mai mult, modelul global intră în propria sa agregare cu cel puțin de patru ori mai multe eșantioane virtuale decât aduce clientul, ce împiedică o singură actualizare să schimbe radical ponderile globale.
+
+Pentru a preveni problemele de sincronizare când se trimit actualizări în același timp de la mai mulți clienți, ciclul de citire-agregare-scriere este securizat din punct de vedere al condițiilor de cursă (\textit{race conditions}) printr-un \textit{lock} Redis cu token-ul \texttt{SET NX PX}, ce are un TTL (\textit{Time to Live}) de 5 secunde care previne blocaje în cazul unei erori, pentru că în cazul în care \textit{lock-ul} nu poate fi obținut după zece încercări la un interval de 0,3 secunde distanță, cererea este respinsă. Eliberarea lui se face printr-un script Lua care verifică în mod atomic că token-ul stocat este cel al procesului curent, pentru a evita ștergerea accidentală a unui \textit{lock} care aparține unui alt client.
 
 \subsection{Punctele de acces API}
 
+Între dispozitivele mobile și serviciul FL din \textit{backend}, comunicarea se realizează prin patru puncte de acces HTTP, pe care le-am descris sumar în \textbf{tabelul~\ref{tab:fl-endpoints}}, putându-se observa că doar un punct de acces este rezervat conturilor de tip administrator, cel care permite încărcarea unui model pre-antrenat și resetarea istoricului de runde. Alte rute nelegate de partea de FL se gasesc în \textbf{tabelul~\ref{tab:all-endpoints}} din Anexe.
+
+\begin{table}[h]
+\centering
+\scriptsize
+\caption{Punctele de acces HTTP ale serviciului FL.}
+\label{tab:fl-endpoints}
+\begin{tabular}{|l|p{3cm}|p{5.5cm}|p{2.5cm}|}
+\hline
+\textbf{Metodă} & \textbf{Cale} & \textbf{Scop} & \textbf{Autorizare} \\
+\hline
+GET & \texttt{/model/global} & Descărcare model global și primire rundă curentă & Publică \\
+\hline
+POST & \texttt{/model/update} & Trimitere actualizare locală după antrenament & JWT utilizator \\
+\hline
+POST & \texttt{/admin/initialize} & Încărcare ponderi pre-antrenate, resetare istoric & JWT administrator \\
+\hline
+GET & \texttt{/model/status} & Status FL: rundă, clienți unici, eșantioane agregate & Publică \\
+\hline
+\end{tabular}
+\end{table}
+
 \subsection{Sistemul de recenzii și moderarea conținutului}
+
+Recenziile au două părți (text liber și evaluare cu stele de la 1 la 5) și sunt moderate la trimitere. Dacă este definit în cod un \textit{API key} pentru OpenAI, serverul face un apel către OpenAI Moderation API\footnote{OpenAI Moderation API - documentație oficială. \url{https://platform.openai.com/docs/guides/moderation} (accesat 19.06.2026).}, care returnează un câmp \texttt{flagged} și categoriile pentru care textul recenziei devine \textit{flagged}. Totuși, acă cheia nu este prezentă sau cererea către API returnează o eroare, se recurge la un \textit{fallback} bazat pe un filtru local de expresii și cuvinte care cuprind insulte și discurs de ură. În orice caz, recenziile semnalate nu sunt vizibile altor utilizatori și trebuie revizuite de administrator.
+
+Poveștile și \textit{quest-urile} propuse de utilizatori ajung într-o listă cu statusul \textit{pending}, devenind vizibile tuturor utilizatorilor autentificați, și există două metode prin care se aprobă acestea, ori prin intermediul unui administrator, ori prin strângerea a cinci voturi din comunitate de la turiști sau localnici diferiți de autor. Adăugarea unor obiective noi pe hartă se face, însă, doar prin aprobarea unui administrator.
 
 \section{Fluxul etapei de pre-antrenare}
 
@@ -888,6 +921,132 @@ Detectarea apropierii față de locații se face printr-un serviciu de \textit{g
 \label{fig:proximity-sheet}
 \end{figure}
 
+{\scriptsize
+\begin{longtable}{|p{1.1cm}|p{5.5cm}|p{4.5cm}|p{1cm}|}
+\caption{Toate punctele de acces REST ale aplicației CultureQuest (prefixul \texttt{/api} este omis).} \label{tab:all-endpoints} \\
+\hline
+\textbf{Met.} & \textbf{Cale} & \textbf{Scop} & \textbf{Auth} \\
+\hline
+\multicolumn{4}{|l|}{\textit{{-} = publică \quad U = JWT utilizator \quad A = JWT administrator}} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Met.} & \textbf{Cale} & \textbf{Scop} & \textbf{Auth} \\
+\hline
+\endhead
+POST & \texttt{/auth/register} & Înregistrare cont & - \\
+\hline
+POST & \texttt{/auth/login} & Autentificare & - \\
+\hline
+GET & \texttt{/auth/me} & Profil utilizator & U \\
+\hline
+PATCH & \texttt{/auth/interests} & Actualizare interese & U \\
+\hline
+GET & \texttt{/landmarks/} & Obiective din apropiere & - \\
+\hline
+GET & \texttt{/landmarks/all} & Toate obiectivele & - \\
+\hline
+GET & \texttt{/landmarks/\{id\}} & Detalii obiectiv & - \\
+\hline
+POST & \texttt{/landmarks/} & Creare obiectiv & U \\
+\hline
+PATCH & \texttt{/landmarks/\{id\}/website} & Actualizare website & U \\
+\hline
+PATCH & \texttt{/landmarks/\{id\}/info} & Actualizare info & U \\
+\hline
+POST & \texttt{/landmarks/\{id\}/visit} & Contor vizite & - \\
+\hline
+POST & \texttt{/landmarks/\{id\}/rate} & Evaluare obiectiv & - \\
+\hline
+POST & \texttt{/landmarks/submit} & Propunere obiectiv nou & U \\
+\hline
+POST & \texttt{/landmarks/\{id\}/stories} & Adăugare poveste & U \\
+\hline
+GET & \texttt{/landmarks/admin/pending} & Obiective în așteptare & A \\
+\hline
+GET & \texttt{/landmarks/admin/submissions} & Propuneri utilizatori & A \\
+\hline
+GET & \texttt{/landmarks/admin/pending-stories} & Povești în așteptare & A \\
+\hline
+POST & \texttt{/landmarks/admin/\{id\}/approve} & Aprobare obiectiv & A \\
+\hline
+POST & \texttt{/landmarks/admin/\{id\}/reject} & Respingere obiectiv & A \\
+\hline
+PATCH & \texttt{/landmarks/admin/\{id\}} & Editare obiectiv & A \\
+\hline
+DELETE & \texttt{/landmarks/admin/\{id\}} & Ștergere obiectiv & A \\
+\hline
+POST & \texttt{/landmarks/admin/stories/\{id\}/approve} & Aprobare poveste & A \\
+\hline
+POST & \texttt{/landmarks/admin/stories/\{id\}/reject} & Respingere poveste & A \\
+\hline
+GET & \texttt{/routes/global} & Rute globale & - \\
+\hline
+POST & \texttt{/routes/admin} & Creare rută manuală & A \\
+\hline
+POST & \texttt{/routes/generate} & Generare rută FL & U \\
+\hline
+GET & \texttt{/quests/} & Lista misiuni & U \\
+\hline
+GET & \texttt{/quests/me/progress} & Progres misiuni & U \\
+\hline
+POST & \texttt{/quests/\{id\}/complete} & Completare misiune & U \\
+\hline
+POST & \texttt{/quests/submit/\{landmark\_id\}} & Propunere misiune & U \\
+\hline
+GET & \texttt{/quests/admin/pending} & Misiuni în așteptare & A \\
+\hline
+POST & \texttt{/quests/admin/\{id\}/approve} & Aprobare misiune & A \\
+\hline
+POST & \texttt{/quests/admin/\{id\}/reject} & Respingere misiune & A \\
+\hline
+GET & \texttt{/federated/model/global} & Model global FL & - \\
+\hline
+POST & \texttt{/federated/model/update} & Trimitere actualizare FL & U \\
+\hline
+POST & \texttt{/federated/admin/initialize} & Inițializare model FL & A \\
+\hline
+GET & \texttt{/federated/model/status} & Status FL & - \\
+\hline
+GET & \texttt{/users/leaderboard} & Clasament & U \\
+\hline
+POST & \texttt{/users/me/reset-progress} & Resetare progres & U \\
+\hline
+POST & \texttt{/users/location} & Actualizare locație & U \\
+\hline
+GET & \texttt{/users/nearby} & Utilizatori din apropiere & U \\
+\hline
+POST & \texttt{/events/} & Creare eveniment & U \\
+\hline
+GET & \texttt{/events/landmark/\{id\}} & Evenimente obiectiv & - \\
+\hline
+GET & \texttt{/events/nearby} & Evenimente din apropiere & - \\
+\hline
+PATCH & \texttt{/events/\{id\}} & Actualizare eveniment & U \\
+\hline
+DELETE & \texttt{/events/\{id\}} & Ștergere eveniment & U \\
+\hline
+POST & \texttt{/community/vote/story/\{id\}} & Vot poveste & U \\
+\hline
+POST & \texttt{/community/vote/quest/\{id\}} & Vot misiune & U \\
+\hline
+GET & \texttt{/community/pending} & Conținut în așteptare & U \\
+\hline
+POST & \texttt{/comments/\{landmark\_id\}} & Adăugare recenzie & U \\
+\hline
+PATCH & \texttt{/comments/\{comment\_id\}} & Actualizare recenzie & U \\
+\hline
+GET & \texttt{/comments/\{landmark\_id\}} & Recenzii obiectiv & - \\
+\hline
+GET & \texttt{/comments/admin/flagged} & Recenzii semnalate & A \\
+\hline
+POST & \texttt{/comments/admin/\{id\}/approve} & Aprobare recenzie & A \\
+\hline
+DELETE & \texttt{/comments/admin/\{id\}} & Ștergere recenzie & A \\
+\hline
+\end{longtable}
+}
+
 \chapter{Extrase de Cod} % Introduce o nouă anexă
 
 \begin{lstlisting}[caption={Backpropagare și limitare a gradienților în \texttt{\_trainLocally} (\texttt{fl\_client\_service.dart:272-302}).}, label={lst:backprop}]
@@ -952,6 +1111,29 @@ double _gaussian(double sigma) {
     * math.cos(2.0 * math.pi * u2);
   return z * sigma;
 }
+\end{lstlisting}
+
+\clearpage
+\begin{lstlisting}[caption={Agregare cu limitarea normei deltei (\texttt{backend/app/federated/model.py:72-100}).}, label={lst:clippedfedavg}, language=Python]
+def clipped_avg(
+    updates: list[tuple[int, list[list[float]]]],
+    global_weights: list[list[float]],
+    max_norm: float = 1.0,
+) -> list[list[float]]:
+    clipped: list[tuple[int, list[list[float]]]] = []
+    for n_samples, client_weights in updates:
+        delta = [
+            [c - g for c, g in zip(cl, gl)]
+            for cl, gl in zip(client_weights, global_weights)
+        ]
+        norm = math.sqrt(sum(v ** 2 for layer in delta for v in layer))
+        scale = min(1.0, max_norm / max(norm, 1e-8))
+        clipped_weights = [
+            [g + d * scale for g, d in zip(gl, dl)]
+            for gl, dl in zip(global_weights, delta)
+        ]
+        clipped.append((n_samples, clipped_weights))
+    return avg(clipped)
 \end{lstlisting}
 
 \end{appendices}

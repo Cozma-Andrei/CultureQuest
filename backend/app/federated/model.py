@@ -54,9 +54,9 @@ def build_initial_weights() -> list[list[float]]:
     return result
 
 
-def fedavg(updates: list[tuple[int, list[list[float]]]]) -> list[list[float]]:
+def avg(updates: list[tuple[int, list[list[float]]]]) -> list[list[float]]:
     """Weighted average of weight tensors across client updates.
-    Kept for baseline comparison; use clipped_fedavg in production."""
+    Kept for baseline comparison; use clipped_avg in production."""
     total = sum(n for n, _ in updates)
     result: list[list[float]] | None = None
     for n_samples, client_weights in updates:
@@ -69,7 +69,7 @@ def fedavg(updates: list[tuple[int, list[list[float]]]]) -> list[list[float]]:
     return result  # type: ignore[return-value]
 
 
-def clipped_fedavg(
+def clipped_avg(
     updates: list[tuple[int, list[list[float]]]],
     global_weights: list[list[float]],
     max_norm: float = 1.0,
@@ -97,6 +97,6 @@ def clipped_fedavg(
             for gl, dl in zip(global_weights, delta)
         ]
         clipped.append((n_samples, clipped_weights))
-    return fedavg(clipped)
+    return avg(clipped)
 
 

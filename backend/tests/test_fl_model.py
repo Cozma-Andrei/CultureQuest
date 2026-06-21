@@ -2,13 +2,11 @@ import math
 import pytest
 from app.federated.model import (
     build_initial_weights,
-    fedavg,
-    clipped_fedavg,
+    avg,
+    clipped_avg,
     fl_predict,
-    INPUT_DIM, HIDDEN_DIMS, OUTPUT_DIM, LAYER_SHAPES,
+    INPUT_DIM, HIDDEN_DIMS, LAYER_SHAPES,
 )
-
-# ── helpers ──────────────────────────────────────────────────────────────────
 
 def zero_weights():
     return [([0.0] * math.prod(s)) for s in LAYER_SHAPES]
@@ -20,8 +18,6 @@ def _delta_norm(w_new, w_old):
         for a, b in zip(l_new, l_old)
     ))
 
-
-# ── build_initial_weights ─────────────────────────────────────────────────────
 
 def test_initial_weights_layer_count():
     w = build_initial_weights()
@@ -42,8 +38,6 @@ def test_initial_weights_weights_not_all_zero():
     for weight_idx in (0, 2, 4):
         assert any(v != 0.0 for v in w[weight_idx]), f"weight layer {weight_idx} is all zero"
 
-
-# ── fl_predict ────────────────────────────────────────────────────────────────
 
 def test_predict_output_in_unit_interval():
     w = build_initial_weights()
@@ -75,55 +69,46 @@ def test_predict_clamps_extreme_logits():
     assert 0.0 <= out <= 1.0
 
 
-# ── fedavg ───────────────────────────────────────────────────────────────────
-
-def test_fedavg_single_client_returns_same_weights():
+def test_avg_single_client_returns_same_weights():
     w = build_initial_weights()
-    result = fedavg([(10, w)])
+    result = avg([(10, w)])
     for r_layer, w_layer in zip(result, w):
         assert all(abs(a - b) < 1e-6 for a, b in zip(r_layer, w_layer))
 
-def test_fedavg_equal_samples_is_mean():
+def test_avg_equal_samples_is_mean():
     w1 = [[2.0, 4.0]]
     w2 = [[4.0, 8.0]]
-    result = fedavg([(1, w1), (1, w2)])
+    result = avg([(1, w1), (1, w2)])
     assert abs(result[0][0] - 3.0) < 1e-6
     assert abs(result[0][1] - 6.0) < 1e-6
 
-def test_fedavg_weighted_average():
+def test_avg_weighted_average():
     w1 = [[0.0]]
     w2 = [[4.0]]
-    result = fedavg([(1, w1), (3, w2)])  # 1/(1+3)=0.25 * 0 + 3/4 * 4 = 3.0
+    result = avg([(1, w1), (3, w2)])  # 1/(1+3)=0.25 * 0 + 3/4 * 4 = 3.0
     assert abs(result[0][0] - 3.0) < 1e-6
 
 
-# ── clipped_fedavg ────────────────────────────────────────────────────────────
-
-def test_clipped_fedavg_zero_delta_unchanged():
+def test_clipped_avg_zero_delta_unchanged():
     global_w = build_initial_weights()
-    result = clipped_fedavg([(10, global_w)], global_w, max_norm=1.0)
+    result = clipped_avg([(10, global_w)], global_w, max_norm=1.0)
     for r_layer, g_layer in zip(result, global_w):
         assert all(abs(a - b) < 1e-6 for a, b in zip(r_layer, g_layer))
 
-def test_clipped_fedavg_small_delta_not_clipped():
+def test_clipped_avg_small_delta_not_clipped():
     global_w = zero_weights()
     client_w = [[0.01] * len(l) for l in global_w]  # small delta, norm < 1.0
-    result = clipped_fedavg([(1, client_w), (1, global_w)], global_w, max_norm=1.0)
-    # delta from client is small → no scaling; result between global and client
+    result = clipped_avg([(1, client_w), (1, global_w)], global_w, max_norm=1.0)
     norm = _delta_norm(result, global_w)
     assert norm < 0.5
 
-def test_clipped_fedavg_large_delta_is_clipped():
+def test_clipped_avg_large_delta_is_clipped():
     global_w = zero_weights()
-    # client weights very far from global
     client_w = [[100.0] * len(l) for l in global_w]
-    result = clipped_fedavg([(1, client_w), (1, global_w)], global_w, max_norm=1.0)
+    result = clipped_avg([(1, client_w), (1, global_w)], global_w, max_norm=1.0)
     norm = _delta_norm(result, global_w)
-    # after clipping the effective delta norm ≤ max_norm / 2 (split with global)
     assert norm <= 1.0
 
-
-# ── staleness discount (logic from fl_service.submit_client_update) ───────────
 
 @pytest.mark.parametrize("staleness,expected", [
     (0,  1.0),
