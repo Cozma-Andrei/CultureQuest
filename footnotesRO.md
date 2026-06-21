@@ -15,32 +15,24 @@ secțiunea respectivă e scrisă/verificată, nu cu o dată fixă dinainte.
 ---
 
 ## Capitolul 1 - Introducere
-Nicio notă de subsol anticipată. 1.1 se bazează pe referințe bibliografice
-(citate de mai multe ori / centrale pentru argumentare - vezi auditul de
-bibliografie), nu pe linkuri punctuale. Dacă, la redactare, apare o singură
-sursă web pentru "apariția aplicațiilor mobile bazate pe locație" care nu
-merită o intrare în bibliografie, poate deveni notă de subsol aici.
+- **1.1** - Business of Apps, *Travel App Report 2025* (pentru statistica "850
+  de milioane de utilizatori de aplicații de călătorit în 2023").
+  \url{https://www.businessofapps.com/data/travel-app-report/} (accesat 19.06.2026)
 
 ## Capitolul 2 - Analiza Cerințelor / Motivație
 Nicio notă de subsol anticipată - conținut specific proiectului.
 
 ## Capitolul 3 - Studiu de Piață / Soluții Existente
 - **3.1 Aplicații existente pentru explorare urbană** - paginile oficiale de
-  funcționalități/confidențialitate ale aplicațiilor menționate, ca dovadă
-  pentru afirmațiile despre modul lor de personalizare/colectare a datelor:
-  - Google Maps - pagina despre recomandările personalizate ("Pentru tine")
-    și/sau politica de confidențialitate Google (verifică URL-ul exact și
-    adaugă data accesării).
-  - TripAdvisor - pagina despre cum funcționează recomandările/politica de
-    confidențialitate (verifică URL-ul exact și adaugă data accesării).
-  - GetYourGuide - pagina despre cum funcționează recomandările/politica de
-    confidențialitate (verifică URL-ul exact și adaugă data accesării).
-  - Organic Maps - pagina oficială/depozitul de cod, privind politica de
-    confidențialitate ("no tracking, no data collection") (verifică URL-ul
-    exact și adaugă data accesării).
-  - Notă: acestea acoperă și lacuna 1.1/3.1 identificată în auditul de
-    bibliografie - sunt dovada citată pentru "personalizarea presupune
-    încărcarea istoricului pe server".
+  funcționalități/confidențialitate ale aplicațiilor menționate:
+  - Google Maps - \url{https://support.google.com/websearch/answer/17025248?hl=en} (accesat 19.06.2026)
+  - TripAdvisor - \url{https://tripadvisor.mediaroom.com/US-privacy-policy} (accesat 19.06.2026)
+  - GetYourGuide - \url{https://www.getyourguide.com/c/privacy-policy} (accesat 19.06.2026)
+  - izi.TRAVEL - pagina oficială. \url{https://izi.travel/} (accesat 19.06.2026)
+  - Geocaching (Groundspeak Inc.) - termeni și politică de confidențialitate.
+    \url{https://www.geocaching.com/account/documents/privacypolicy} (accesat 19.06.2026)
+  - Organic Maps - "no tracking, no data collection".
+    \url{https://organicmaps.app/privacy/} (accesat 19.06.2026)
 - **3.2 Analiză comparativă centralizat vs. FL** - "filtrarea
   colaborativă/bazată pe conținut" e mai probabil o lacună de
   **bibliografie** (concept central, posibil reluat în 3.1) decât o notă de
@@ -51,29 +43,32 @@ Nicio notă de subsol anticipată - conținut specific proiectului.
   deja acoperită de citarea bibliografică existentă - nu e nevoie de notă de
   subsol separată, dar menționează explicit "Adaptat din [N]" în caption.
 - **3.5.1 Flutter și Riverpod** - documentația oficială:
-  - Flutter - https://flutter.dev (accesat ZZ.LL.AAAA)
-  - Riverpod - https://riverpod.dev (accesat ZZ.LL.AAAA)
-  - (opțional, pentru comparație) React Native - https://reactnative.dev
-    (accesat ZZ.LL.AAAA)
+  - Flutter - \url{https://flutter.dev} (accesat 19.06.2026)
+  - Riverpod - \url{https://riverpod.dev} (accesat 19.06.2026)
+  - Flutter performanță/compilare nativă ARM - \url{https://docs.flutter.dev/perf} (accesat 19.06.2026)
 - **3.5.2 FastAPI, MongoDB și Redis** - documentația oficială:
-  - FastAPI - https://fastapi.tiangolo.com (accesat ZZ.LL.AAAA)
-  - MongoDB - https://www.mongodb.com/docs/ (accesat ZZ.LL.AAAA)
-  - Redis - https://redis.io/docs/ (accesat ZZ.LL.AAAA)
-- **3.5.3 Motorul de Rutare OSRM** - https://project-osrm.org (accesat
-  ZZ.LL.AAAA)
-- **3.5.4 MLP propriu vs. TFLite/PyTorch Mobile** - documentația oficială
-  pentru alternativele comparate:
-  - TensorFlow Lite - https://www.tensorflow.org/lite (accesat ZZ.LL.AAAA)
-  - PyTorch Mobile - https://pytorch.org/mobile/home/ (accesat ZZ.LL.AAAA;
-    verifică dacă pagina e încă activă - PyTorch Mobile e parțial înlocuit de
-    ExecuTorch în versiunile recente)
+  - FastAPI - \url{https://fastapi.tiangolo.com} (accesat 19.06.2026)
+  - MongoDB - \url{https://www.mongodb.com/docs/} (accesat 19.06.2026)
+  - Redis - \url{https://redis.io/docs/} (accesat 19.06.2026)
+  - FastAPI async - \url{https://fastapi.tiangolo.com/async/} (accesat 19.06.2026)
+- **3.5.3 Motorul de Rutare OSRM** - documentația oficială și surse suplimentare:
+  - OSRM - \url{https://project-osrm.org} (accesat 19.06.2026)
+  - Google Maps Directions API pricing (pentru comparația "facturează per cerere") -
+    \url{https://developers.google.com/maps/documentation/directions/usage-and-billing} (accesat 19.06.2026)
+  - Luxen, D., \& Vetter, C. (2011). Real-time routing with OpenStreetMap data.
+    \textit{Proceedings of the 19th ACM SIGSPATIAL}.
+    \url{https://doi.org/10.1145/2093973.2094062} (pentru afirmația de performanță OSRM)
+- **3.5.4 MLP propriu vs. TFLite/PyTorch Mobile** - documentația oficială:
+  - TensorFlow Lite - \url{https://www.tensorflow.org/lite} (accesat 19.06.2026)
+  - TFLite binary size (~1,3 MB APK arm64) - \url{https://www.tensorflow.org/lite/guide/reduce_binary_size} (accesat 19.06.2026)
+  - PyTorch Mobile/ExecuTorch (~30 MB) - \url{https://docs.pytorch.org/executorch/stable/index.html} (accesat 19.06.2026);
+    pagina veche PyTorch Mobile: \url{https://pytorch.org/mobile/home/} (parțial înlocuit de ExecuTorch)
 
 ## Capitolul 4 - Soluția Propusă
-- **4.7 Hartă și navigare** - dacă geofencing-ul se bazează pe un pachet
-  Flutter specific (ex. `geolocator`, `flutter_compass`), pagina pachetului
-  de pe pub.dev poate fi notă de subsol la prima menționare (verifică
-  pachetul efectiv din `pubspec.yaml` și adaugă URL + data accesării). Dacă
-  pachetul e deja footnote-uit în 5.1.6, nu se repetă aici.
+- **4.7 Hartă și navigare** - ambele pachete sunt footnote-uite direct în tex:
+  - `geolocator` - \url{https://pub.dev/packages/geolocator} (accesat 19.06.2026)
+  - `flutter_compass` - \url{https://pub.dev/packages/flutter_compass} (accesat 19.06.2026)
+  Nu se repetă în 5.1.6.
 - Restul secțiunilor (4.1-4.6, 4.8) - conținut specific proiectului sau deja
   acoperit de bibliografie (4.4, 4.8); nicio notă de subsol anticipată.
 

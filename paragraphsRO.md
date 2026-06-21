@@ -158,7 +158,7 @@ spre Cap. 7.)*
 | 6.2 (intro performanță model FL) | 1 | - | 0.2 |
 | 6.2.1 Rezultate pre-antrenare | 2-3 | 2 figuri + Tabel înainte/după fine-tuning | 1.5 |
 | 6.2.2 Rezultate simulare FL | 2-3 | 3 figuri (`loss_curve`, `fedasync_effect`, `staleness_distribution`) + `timing.inference_us_numpy` din `stats.json` | 1.8 |
-| 6.3 Evaluare confidențialitate/robustețe/scalabilitate | 3-4 | `stats.json` clipping sweep + Tabel load test (4 niveluri concurență) | 1.3 |
+| 6.3 Evaluare confidențialitate/robustețe/scalabilitate | 3-4 | `stats.json` (loss final, îmbunătățire %) + Tabel load test (4 niveluri concurență) | 1.3 |
 | 6.4 Analiză comparativă și discuții | 2-3 | Tabel extins din 3.4 | 1.0 |
 
 **Subtotal Capitolul 6: ~7.1 pagini** (~14-17 paragrafe + ~6 figuri + 3 tabele)
@@ -180,7 +180,7 @@ capitol.)*
 | Secțiune | Paragrafe | Resursă | Pagini est. |
 |---|---|---|---|
 | 7.1 Concluzii generale | 3 | opțional tabel recapitulativ obiectiv->rezultat | 1.0 |
-| 7.2 Direcții de cercetare și lucrări viitoare | 1 + listă (4 direcții) + 1 | listă | 1.0 |
+| 7.2 Direcții de cercetare și lucrări viitoare | 1 + listă (6 direcții) + 1 | listă | 1.2 |
 
 **Subtotal Capitolul 7: ~2 pagini** (~5-6 paragrafe + 1 listă)
 

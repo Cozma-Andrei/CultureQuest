@@ -415,19 +415,24 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
     -> secțiune relevantă", ca recapitulare - nu introduce date noi. Pentru
     obiectivul (b) din 1.3, cele două rezultate vizibile sunt ruta generată
     (4.5) și categoria de potrivire afișată pe fișa obiectivului (4.4.1).
-- **7.2 Direcții de cercetare și lucrări viitoare** - impactul asupra bateriei
-  al antrenamentului local (5 epoci SGD) nu a fost măsurat, limitare a
-  simulării pe server, măsurabilă pe device real cu Battery Historian.
-  "personal head" per utilizator; agregare cu buffer (FedBuff, Nguyen et al.
-  2022), relevantă dacă baza de utilizatori crește suficient pentru a garanta
-  un flux continuu de update-uri (la participare rară, bufferul riscă să nu
-  se umple);
-  posibilitatea de a posta poze pentru obiective (extensie a sistemului de
-  recenzii/moderare, 5.2.3), colectare de date FL de la utilizatori reali
-  la scară mare; integrarea popularității obiectivelor (număr de vizite
-  agregat) ca semnal suplimentar în scorul de candidați din 4.5 - în prezent
-  scorul combină doar FL și proximitate, fără a ține cont de cât de frecventat
-  este un obiectiv.
+- **7.2 Direcții de cercetare și lucrări viitoare** - 6 direcții, ca listă
+  cu bullet-uri:
+  1. Impactul asupra bateriei al antrenamentului local (5 epoci SGD) - nu a
+     fost măsurat, limitare a simulării pe server; măsurabil pe device real
+     cu Battery Historian.
+  2. "Personal head" per utilizator (FedPer, Arivazhagan et al. 2019) - straturi
+     de personalizare locale care nu sunt niciodată trimise la server.
+  3. Agregare cu buffer (FedBuff, Nguyen et al. 2022) - cale de mijloc între
+     FedAvg sincron și varianta complet asincronă; relevantă dacă baza de
+     utilizatori crește suficient (la participare rară, bufferul riscă să nu
+     se umple).
+  4. Postarea de poze pentru obiective - extensie a sistemului de
+     recenzii/moderare (5.2.3).
+  5. Colectare de date FL de la utilizatori reali la scară mare.
+  6. Integrarea popularității obiectivelor (număr de vizite agregat) ca semnal
+     suplimentar în scorul de candidați din 4.5 - în prezent scorul combină
+     doar FL și proximitate, fără a ține cont de cât de frecventat este un
+     obiectiv.
 
 ---
 
@@ -487,7 +492,7 @@ ocupă mai mult de o pagină și ar întrerupe firul textului dacă ar fi inline
   - `_trainLocally` complet,
     `mobile/lib/features/federated/services/fl_client_service.dart:248-312`
     (65 linii) - varianta extinsă a Listing-ului 1 din 5.1.1 (forward pass +
-    backpropagation + clipping, integral).
+    backpropagation + clipping, integral). X
   - opțional, `proximity_service.dart` complet (66 linii) - varianta extinsă
     a referinței din 5.1.6, dacă se dorește un al 6-lea exemplu de cod.
 - **Grafice complete de simulare/pre-antrenare** (din
@@ -495,9 +500,9 @@ ocupă mai mult de o pagină și ar întrerupe firul textului dacă ar fi inline
   din `pics/`)
   - `weight_drift.png`, `per_staleness_loss_delta.png`, `probe_scores.png`,
     `contextual_probes.png` - secundare față de cele 3 figuri principale din
-    6.2.2.
+    6.2.2. X
   - `dataset_overview.png`, `label_by_type.png`, `train_val_split.png` - cele
-    neincluse inline în 5.3.
+    neincluse inline în 5.3. X
 - **Capturi de ecran suplimentare**
   - Fluxul de onboarding (`onboarding_screen.dart`, `interests_screen.dart`).
   - Ecranele de autentificare (`login_screen.dart`, `register_screen.dart`).
@@ -511,4 +516,4 @@ ocupă mai mult de o pagină și ar întrerupe firul textului dacă ar fi inline
     `backend/.env.example`.
 - **Tabele extinse**
   - Tabelul complet al endpoint-urilor REST (landmarks/quests/comments/routes),
-    dacă 5.2.2 prezintă în text doar cele 4 endpoint-uri FL.
+    dacă 5.2.2 prezintă în text doar cele 4 endpoint-uri FL. X
