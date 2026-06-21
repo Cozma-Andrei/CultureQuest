@@ -80,9 +80,7 @@ Nicio notă de subsol anticipată - conținut specific proiectului.
   (1958) ca referință bibliografică, dacă se discută pe larg.
 - **5.1.3 Bufferul local de interacțiuni (SharedPreferences)** -
   https://pub.dev/packages/shared_preferences (accesat ZZ.LL.AAAA)
-- **5.1.6 Sistemul de misiuni și geofencing** - pachetul Flutter folosit
-  pentru geofencing/locație (ex. `geolocator`) - pagina pub.dev, cu URL + data
-  accesării (verifică pachetul efectiv din `pubspec.yaml`).
+- **5.1.6 Sistemul de misiuni și geofencing** - nicio notă de subsol; `geolocator` e deja footnote-uit la 4.7.
 - **5.2.3 Sistemul de recenzii și moderarea conținutului** - OpenAI Moderation
   API - https://platform.openai.com/docs/guides/moderation (accesat
   ZZ.LL.AAAA); folosită o singură dată, candidat clar de notă de subsol.

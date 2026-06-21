@@ -38,6 +38,7 @@
 \usepackage{enumitem}
 \usepackage{tikz}
 \usepackage{pdflscape}
+\usepackage{listings}
 \setlist{noitemsep}
 
 %%% HEADERS & FOOTERS
@@ -263,7 +264,7 @@ Primul caz de utilizare este cel de generare de rute și suport pe parcursul urm
 
 \section{Cerințe funcționale}
 
-Pornind de la cazurile de utilizare din secțiunea anterioară, cerințele funcționale au fost sintetizate în tabelul~\ref{tab:cerinte-functionale}, fiecare cu o descriere, condiții de acceptare și secțiunile din Capitolele 4-6 unde cerința este tratată. Primul grup (de la \textbf{FR-1} la \textbf{FR-4}) acoperă bucla principală de explorare: afișarea pe hartă a obiectivelor turistice din proximitate, generarea rutei care combină scorul modelului de tip MLP cu distanța față de poziția curentă, \textit{quest-urile} disponibile la obiectivele vizitate și posibilitatea de a adăuga sau vizualiza recenzii.
+Pornind de la cazurile de utilizare din secțiunea anterioară, cerințele funcționale au fost sintetizate în \textbf{tabelul~\ref{tab:cerinte-functionale}}, fiecare cu o descriere, condiții de acceptare și secțiunile din Capitolele 4-6 unde cerința este tratată. Primul grup (de la \textbf{FR-1} la \textbf{FR-4}) acoperă bucla principală de explorare: afișarea pe hartă a obiectivelor turistice din proximitate, generarea rutei care combină scorul modelului de tip MLP cu distanța față de poziția curentă, \textit{quest-urile} disponibile la obiectivele vizitate și posibilitatea de a adăuga sau vizualiza recenzii.
 
 Al doilea grup (de la \textbf{FR-5} la \textbf{FR-7}) ține de personalizare și administrare: \textbf{FR-5} descrie fluxul procesului FL: primirea parametrilor modelului actualizat de la server, urmată de antrenarea locală, fără ca istoricul interacțiunilor să ajungă pe server, flux verificat prin simularea de 600 de runde descrisă în 6.2; \textbf{FR-6} descrie controalele de confidențialitate - asigurarea DP, vizibilitatea asupra datelor - prin adăugarea de zgomot Gaussian și limitare a gradienților aplicate pe actualizările de ponderi, verificat prin analiza compromisului dintre confidențialitate și utilitate din 6.3; iar \textbf{FR-7} descrie rolul de administrator - aprobarea sau respingerea conținutului propus, verificat prin demo funcțional în 6.1.
 
@@ -303,7 +304,7 @@ FR-7 & Administrator: aprobă sau respinge conținut. &
 
 \section{Cerințe non-funcționale}
 
-La fel ca în secțiunea 2.2, cerințele non-funcționale au fost sintetizate în tabelul~\ref{tab:cerinte-nonfunctionale}, cu aceeași structură (descriere și secțiunile din Capitolele 4-6 unde sunt tratate), fiecare însoțită de o metrică verificabilă. Primul grup (de la \textbf{NFR-1} la \textbf{NFR-3}) are legătură cu constrângerile impuse pe dispozitiv: \textbf{NFR-1} cere ca nicio informație privată despre utilizator - exceptând lista de interese - să nu părăsească telefonul, \textbf{NFR-2} cere ca obiectivele turistice să rămână disponibile și fără conexiune la internet, iar \textbf{NFR-3} cere ca antrenarea locală să nu fie complexă din punct de vedere computațional - ceea ce a motivat alegerea unui model MLP de dimensiuni reduse, antrenat în 5 epoci locale.
+La fel ca în secțiunea 2.2, cerințele non-funcționale au fost sintetizate în \textbf{tabelul~\ref{tab:cerinte-nonfunctionale}}, cu aceeași structură (descriere și secțiunile din Capitolele 4-6 unde sunt tratate), fiecare însoțită de o metrică verificabilă. Primul grup (de la \textbf{NFR-1} la \textbf{NFR-3}) are legătură cu constrângerile impuse pe dispozitiv: \textbf{NFR-1} cere ca nicio informație privată despre utilizator - exceptând lista de interese - să nu părăsească telefonul, \textbf{NFR-2} cere ca obiectivele turistice să rămână disponibile și fără conexiune la internet, iar \textbf{NFR-3} cere ca antrenarea locală să nu fie complexă din punct de vedere computațional - ceea ce a motivat alegerea unui model MLP de dimensiuni reduse, antrenat în 5 epoci locale.
 
 Al doilea grup ține de partea de \textit{backend}: \textbf{NFR-4} impune ca serviciul de agregare să suporte actualizări asincrone primite de la mai mulți clienți, fără conflicte între runde, asigurat printr-un \textit{lock} Redis, iar \textbf{NFR-5} impune ca utilizatorii să primească recomandări utile încă de la început printr-un model global pre-antrenat \cite{bonawitz2019towards}, și din caracteristici bazate pe ariile de interes asociate fiecărui obiectiv, până când procesul FL își face efectul.
 
@@ -316,11 +317,11 @@ Al doilea grup ține de partea de \textit{backend}: \textbf{NFR-4} impune ca ser
 \hline
 \textbf{ID} & \textbf{Descriere} & \textbf{Secțiune} \\
 \hline
-NFR-1 & Confidențialitate: nicio interacțiune a utilizatorului nu părăsește dispozitivul; doar actualizarea de ponderi ($\approx$5\,KB la fiecare rundă FL) este trimisă la server. & 4.8, 5.1.2, 5.1.3, 6.3 \\
+NFR-1 & Confidențialitate: nicio interacțiune a utilizatorului nu părăsește dispozitivul; doar actualizarea de ponderi ($\approx$5 KB la fiecare rundă FL) este trimisă la server. & 4.8, 5.1.2, 5.1.3, 6.3 \\
 \hline
 NFR-2 & Reziliență offline: obiective turistice stocate în \textit{cache} local; accesibile fără conexiune la rețea. & 5.1.4, 6.1 \\
 \hline
-NFR-3 & Cost redus de antrenare pe dispozitiv: model de 1.281 parametri ($\approx$5\,KB valori în format float32); 5 epoci locale la fiecare rundă FL; calculul scorului pentru un obiectiv (un singur \textit{forward pass}) durează $\approx$39\,µs (simulare pe laptop). & 4.4.1, 5.1.1, 6.2.1 \\
+NFR-3 & Cost redus de antrenare pe dispozitiv: model de 1.281 parametri ($\approx$5 KB valori în format float32); 5 epoci locale la fiecare rundă FL; calculul scorului pentru un obiectiv (un singur \textit{forward pass}) durează $\approx$39\,µs (simulare pe laptop). & 4.4.1, 5.1.1, 6.2.1 \\
 \hline
 NFR-4 & Scalabilitatea \textit{backend-ului}: un \textit{lock} Redis serializează actualizările FL asincrone fără conflicte de date; 0 erori la cel mult 10 cereri simultane (latență medie 1,4 s la 10 cereri); degradare la 20 cereri. & 4.4.6, 5.2.1, 6.3 \\
 \hline
@@ -349,7 +350,7 @@ O categorie specială o reprezintă aplicațiile care propun tururi audio ghidat
 
 Gamificarea explorării bazate pe locația curentă este o componentă lipsă din toate aplicațiile prezentate mai sus, dar este acoperită parțial de \textbf{Geocaching}. Aici utilizatorii caută ascunzători fizice plasate de alți membri ai comunității, navighează la coordonatele GPS corespunzătoare și își înregistrează descoperirile. Ei pot strânge puncte și debloca realizări\footnote{Groundspeak Inc. (Geocaching HQ), termeni de utilizare și politică de confidențialitate. \url{https://www.geocaching.com/account/documents/privacypolicy} (accesat 19.06.2026).}. Cum conținutul este integral generat de utilizatori, Geocaching ajunge să fie cea mai apropiată alternativă pentru componenta de explorare gamificată. Cu toate acestea, recomandările personalizate tot nu sunt prezente nici în cadrul acestei aplicații, rutele nu sunt construite dinamic, partea de ML pentru recomandări lipsește și istoricul de activitate nu este stocat local, ci centralizat.
 
-La polul opus se situează aplicațiile axate pe confidențialitate, precum \textbf{Organic Maps}, un proiect \textit{open-source} bazat pe date de la OpenStreetMap, fără cont de utilizator și fără colectare de date\footnote{Organic Maps, pagina oficială - „no tracking, no data collection”. \url{https://organicmaps.app/privacy/} (accesat 19.06.2026).}. Aici personalizarea nu există, iar toți utilizatorii dintr-o zonă văd același set de obiective, indiferent de interese, pentru că nu există niciun istoric din care acestea să poată fi accesate. Între cele două extreme - fie personalizare cu date colectate central, fie confidențialitate fără personalizare - se situează CultureQuest, unde scorul de personalizare este calculat prin FL, fără ca datele brute să părăsească dispozitivul. Toate aceste cazuri sunt adunate în tabelul~\ref{tab:apps-comparativ}.
+La polul opus se situează aplicațiile axate pe confidențialitate, precum \textbf{Organic Maps}, un proiect \textit{open-source} bazat pe date de la OpenStreetMap, fără cont de utilizator și fără colectare de date\footnote{Organic Maps, pagina oficială - „no tracking, no data collection”. \url{https://organicmaps.app/privacy/} (accesat 19.06.2026).}. Aici personalizarea nu există, iar toți utilizatorii dintr-o zonă văd același set de obiective, indiferent de interese, pentru că nu există niciun istoric din care acestea să poată fi accesate. Între cele două extreme - fie personalizare cu date colectate central, fie confidențialitate fără personalizare - se situează CultureQuest, unde scorul de personalizare este calculat prin FL, fără ca datele brute să părăsească dispozitivul. Toate aceste cazuri sunt adunate în \textbf{tabelul~\ref{tab:apps-comparativ}}.
 
 \begin{table}[h]
 \centering
@@ -404,7 +405,7 @@ A doua axă împarte FL în două moduri de desfășurare \cite{kairouz2021advan
   \item \textbf{\textit{Cross-silo}} - clienții sunt un număr mic de organizații sau servere, cu conexiuni stabile și seturi de date mari.
 \end{itemize}
 
-CultureQuest este, din această perspectivă, un sistem \textit{cross-device}. Telefoanele utilizatorilor sunt conectate la internet intermitent, fiecare cu un volum mic de interacțiuni locale. Pentru aplicație, s-a optat, așadar, pentru agregare asincronă \cite{xie2019fedasync}, tocmai pentru că acești clienți sunt intermitenți și nu este practic să se aștepte formarea unei cohorte complete la fiecare rundă de învățare. Este nevoie, prin urmare, și de mecanisme de robustețe la actualizări extreme \cite{lyu2020threats}. Figura~\ref{fig:taxonomie-fl} situează CultureQuest pe ambele axe.
+CultureQuest este, din această perspectivă, un sistem \textit{cross-device}. Telefoanele utilizatorilor sunt conectate la internet intermitent, fiecare cu un volum mic de interacțiuni locale. Pentru aplicație, s-a optat, așadar, pentru agregare asincronă \cite{xie2019fedasync}, tocmai pentru că acești clienți sunt intermitenți și nu este practic să se aștepte formarea unei cohorte complete la fiecare rundă de învățare. Este nevoie, prin urmare, și de mecanisme de robustețe la actualizări extreme \cite{lyu2020threats}. \textbf{Figura~\ref{fig:taxonomie-fl}} situează CultureQuest pe ambele axe.
 
 \begin{figure}[h]
 \centering
@@ -435,7 +436,7 @@ CultureQuest este, din această perspectivă, un sistem \textit{cross-device}. T
 
 FedAvg \cite{mcmahan2017fedavg} este algoritmul de referință al FL. La fiecare rundă, un grup de K clienți antrenează local pe propriile date, iar serverul agregă actualizările prin medie ponderată. Eterogenitatea datelor dintre clienți este una dintre provocările cele mai notabile ale FL \cite{li2020challenges}, iar o direcție importantă de cercetare propune algoritmi care corectează deriva (\textit{drift}) dintre actualizările locale ale clienților și modelul global. FedProx \cite{li2020fedprox} adaugă funcției de cost locale un termen proximal, care penalizează distanța dintre ponderile actualizate și cele ale modelului global de la începutul rundei. SCAFFOLD \cite{karimireddy2020scaffold} introduce, pentru fiecare client, o variabilă de control care estimează cât de mult diferă actualizarea sa de media cohortei și corectează gradientul local pe baza acestei estimări. FedDyn \cite{acar2021feddyn} ajunge la un rezultat similar printr-un regularizator dinamic, recalculat la fiecare rundă pe baza istoricului actualizărilor clientului. Toate cele trei leagă actualizarea unui client de comportamentul celorlalți clienți selectați în aceeași rundă.
 
-Această legătură nu are, însă, un corespondent în CultureQuest, unde agregarea se realizează prin FedAsync \cite{xie2019fedasync}, care procesează, câte o actualizare pe rând, pe măsură ce sosește de la un client, fără să aștepte o cohortă. Antrenarea locală urmează, totuși, logica FedAvg (SGD pe interacțiunile locale ale utilizatorului). Fără cohorte, nu există actualizări paralele de reconciliat la final de rundă, dar nici conceptul de medie a grupului față de care un client să se abată - condiții pe care se bazează atât termenul proximal din FedProx, cât și variabilele de control din SCAFFOLD sau regularizatorul din FedDyn. Aplicat în acest context, un astfel de termen de corecție ar trage actualizarea locală către un punct de referință arbitrar, fără ca vreo garanție de convergență din literatură să mai fie valabilă, întrucât toate cele trei presupun, în demonstrațiile lor, runde sincrone cu mai mulți clienți. De aceea, design-ul asincron al CultureQuest are nevoie de altceva - un mecanism care reduce influența actualizărilor venite de la clienți cu un model local prea vechi. Tabelul~\ref{tab:fl-alternative} rezumă această comparație.
+Această legătură nu are, însă, un corespondent în CultureQuest, unde agregarea se realizează prin FedAsync \cite{xie2019fedasync}, care procesează, câte o actualizare pe rând, pe măsură ce sosește de la un client, fără să aștepte o cohortă. Antrenarea locală urmează, totuși, logica FedAvg (SGD pe interacțiunile locale ale utilizatorului). Fără cohorte, nu există actualizări paralele de reconciliat la final de rundă, dar nici conceptul de medie a grupului față de care un client să se abată - condiții pe care se bazează atât termenul proximal din FedProx, cât și variabilele de control din SCAFFOLD sau regularizatorul din FedDyn. Aplicat în acest context, un astfel de termen de corecție ar trage actualizarea locală către un punct de referință arbitrar, fără ca vreo garanție de convergență din literatură să mai fie valabilă, întrucât toate cele trei presupun, în demonstrațiile lor, runde sincrone cu mai mulți clienți. De aceea, design-ul asincron al CultureQuest are nevoie de altceva - un mecanism care reduce influența actualizărilor venite de la clienți cu un model local prea vechi. \textbf{Tabelul~\ref{tab:fl-alternative}} rezumă această comparație.
 
 \begin{table}[h]
 \centering
@@ -456,7 +457,7 @@ SCAFFOLD \cite{karimireddy2020scaffold} & Da & Variabilă de control per client 
 \hline
 FedDyn \cite{acar2021feddyn} & Da & Regularizator dinamic per client & Nu \\
 \hline
-CultureQuest & Nu & FedAvg (doar pentru antrenarea locală) + FedAsync + limitare normă L2 & Da \\
+CultureQuest & Nu & FedAvg (doar pentru antrenarea locală) + FedAsync & Da \\
 \hline
 \end{tabular}
 \end{table}
@@ -481,7 +482,7 @@ Funcționalitatea de rutare se bazează pe OSRM (\textit{Open Source Routing Mac
 
 Modelul de recomandare al CultureQuest este un MLP. Arhitectura este simplă: trei straturi complet conectate (22-32-16-1), pornind de la un vector de 22 de caracteristici asociate obiectivelor turistice și culturale. Pe dispozitiv, modelul nu este folosit doar pentru antrenarea locală, ci și pentru afișare - de fiecare dată când utilizatorul deschide pagina cu informații a unui obiectiv turistic, aplicația face o nouă trecere \textit{forward pass} prin model, ca să calculeze scorul de potrivire afișat pentru turist. Tocmai pentru că rulează la fiecare interacțiune, modelul trebuie să fie o implementare proprie, cât mai ușoară și fără dependențe externe.
 
-Alternativele cunoscute pentru rularea unui model de rețea neuronală pe un dispozitiv sunt TFLite\footnote{Documentația oficială TensorFlow Lite. \url{https://www.tensorflow.org/lite} (accesat 19.06.2026).} și PyTorch Mobile\footnote{PyTorch Mobile este parțial înlocuit de ExecuTorch; documentația oficială ExecuTorch. \url{https://docs.pytorch.org/executorch/stable/index.html} (accesat 19.06.2026).}, ambele \textit{runtime-uri} dedicate, cu dependențe native pentru fiecare platformă. TFLite adaugă $\approx$1,3 MB\footnote{Google. TFLite: reduce binary size. \url{https://www.tensorflow.org/lite/guide/reduce_binary_size} (accesat 19.06.2026).} la APK (arm64), PyTorch Mobile $\approx$30 MB\footnote{PyTorch. PyTorch Mobile. \url{https://pytorch.org/mobile/home/} (accesat 19.06.2026).}, fără avantaje vizibile pentru un model de 5 KB. Implementarea în Dart rămâne, deci, mai mică, fără dependențe de \textit{runtime} suplimentare, și compatibilă nativ cu Flutter, după cum reiese și din tabelul~\ref{tab:mlp-comparativ}.
+Alternativele cunoscute pentru rularea unui model de rețea neuronală pe un dispozitiv sunt TFLite\footnote{Documentația oficială TensorFlow Lite. \url{https://www.tensorflow.org/lite} (accesat 19.06.2026).} și PyTorch Mobile\footnote{PyTorch Mobile este parțial înlocuit de ExecuTorch; documentația oficială ExecuTorch. \url{https://docs.pytorch.org/executorch/stable/index.html} (accesat 19.06.2026).}, ambele \textit{runtime-uri} dedicate, cu dependențe native pentru fiecare platformă. TFLite adaugă $\approx$1,3 MB\footnote{Google. TFLite: reduce binary size. \url{https://www.tensorflow.org/lite/guide/reduce_binary_size} (accesat 19.06.2026).} la APK (arm64), PyTorch Mobile $\approx$30 MB\footnote{PyTorch. PyTorch Mobile. \url{https://pytorch.org/mobile/home/} (accesat 19.06.2026).}, fără avantaje vizibile pentru un model de 5 KB. Implementarea în Dart rămâne, deci, mai mică, fără dependențe de \textit{runtime} suplimentare, și compatibilă nativ cu Flutter, după cum reiese și din \textbf{tabelul~\ref{tab:mlp-comparativ}}.
 
 \clearpage
 \begin{table}[h]
@@ -508,7 +509,7 @@ Acest capitol detaliază proiectarea CultureQuest, cu suportul a câtorva diagra
 
 \section{Prezentare generală a sistemului}
 
-La nivel general, CultureQuest este format din patru componente: aplicația mobilă, scrisă în Flutter, un \textit{backend} FastAPI, o bază de date MongoDB pentru datele persistente și o instanță Redis pentru starea nepersistentă a procesului FL. Figura~\ref{fig:arhitectura-generala} arată comunicarea dintre ele. Aplicația mobilă este singurul punct de legătură dintre utilizator și sistem - toate cererile trec prin \textit{backend}, care, în funcție de tipul de date, citește sau scrie în MongoDB sau în Redis.
+La nivel general, CultureQuest este format din patru componente: aplicația mobilă, scrisă în Flutter, un \textit{backend} FastAPI, o bază de date MongoDB pentru datele persistente și o instanță Redis pentru starea nepersistentă a procesului FL. \textbf{Figura~\ref{fig:arhitectura-generala}} arată comunicarea dintre ele. Aplicația mobilă este singurul punct de legătură dintre utilizator și sistem - toate cererile trec prin \textit{backend}, care, în funcție de tipul de date, citește sau scrie în MongoDB sau în Redis.
 
 Diagrama evidențiază trei fluxuri principale, pe care le-am numerotat cu (1), (2) și (3). Primul (1), cererea de hartă și rute, funcționează astfel: aplicația mobilă trimite poziția curentă, \textit{backend-ul} interoghează baza de date pentru obiectivele din apropiere, le oferă un scor prin intermediul modelului FL global ținut în Redis și calculează, pe baza scorurilor, o rută pe care o trimite înapoi. Al doilea (2), agregarea FL, funcționează similar: dispozitivul trimite actualizarea modelului antrenat local, \textit{backend-ul} o agregă cu ajutorul stării ținute în Redis și trimite înapoi modelul global actualizat. Recenziile, poveștile și \textit{quest-urile} adăugate de utilizatori formează al treilea flux (3), unde acestea trec printr-un pas de moderare înainte să fie salvate în MongoDB.
 
@@ -523,7 +524,7 @@ Diagrama evidențiază trei fluxuri principale, pe care le-am numerotat cu (1), 
 
 Aplicația mobilă este organizată pe module de tip \textit{feature}, unde fiecare funcționalitate principală este asociată unui director propriu cu ecrane și provideri, fără dependențe directe față de alte module. Cele șapte module sunt \textit{map} - pentru hartă și obiectivele de pe aceasta, dar și pentru generare de rute, \textit{auth} - pentru autentificare, \textit{federated} - pentru clientul FL, \textit{onboarding} - pentru alegerea intereselor de către utilizator la instalarea aplicației, \textit{profile} - pentru profilul utilizatorului și statusul procesului FL, \textit{proximity} - pentru partea \textit{geofencing} și detectarea proximității față de obiective și \textit{quest} - pentru sistemul de misiuni.
 
-Gestionarea stării intră în responsabilitatea Riverpod, care leagă modulele între ele prin provideri declarativi. Aceștia sunt disponibili de la orice nivel al arborelui de \textit{widget-uri}, rezultând avantajul că datele nu mai sunt transmise manual prin constructori. Figura~\ref{fig:arhitectura-mobila} ilustrează arhitectura în trei straturi. Modulele de tip \textit{feature} folosesc provideri Riverpod specializați, care la rândul lor delegă atât cererile către \textit{backend}, cât și operațiile de stocare locală altor servicii dedicate. Providerii partajați arată dependențele funcționale dintre module: \textit{fl\_provider} este utilizat de \textit{map} (pentru scorul de potrivire afișat în cadrul unui obiectiv), de \textit{federated} (pentru statusul agregării FL) și de \textit{profile} (pentru statusul antrenării locale). De asemenea, \textit{proximity\_provider} este partajat de \textit{proximity} și \textit{quest}, cel din urmă depinzând de evenimentele de \textit{geofencing} pentru a permite completarea \textit{quest-urilor} disponibile pentru un obiectiv.
+Gestionarea stării intră în responsabilitatea Riverpod, care leagă modulele între ele prin provideri declarativi. Aceștia sunt disponibili de la orice nivel al arborelui de \textit{widget-uri}, rezultând avantajul că datele nu mai sunt transmise manual prin constructori. \textbf{Figura~\ref{fig:arhitectura-mobila}} ilustrează arhitectura în trei straturi. Modulele de tip \textit{feature} folosesc provideri Riverpod specializați, care la rândul lor delegă atât cererile către \textit{backend}, cât și operațiile de stocare locală altor servicii dedicate. Providerii partajați arată dependențele funcționale dintre module: \textit{fl\_provider} este utilizat de \textit{map} (pentru scorul de potrivire afișat în cadrul unui obiectiv), de \textit{federated} (pentru statusul agregării FL) și de \textit{profile} (pentru statusul antrenării locale). De asemenea, \textit{proximity\_provider} este partajat de \textit{proximity} și \textit{quest}, cel din urmă depinzând de evenimentele de \textit{geofencing} pentru a permite completarea \textit{quest-urilor} disponibile pentru un obiectiv.
 
 \begin{figure}[h]
 \centering
@@ -536,7 +537,7 @@ Gestionarea stării intră în responsabilitatea Riverpod, care leagă modulele 
 
 \textit{Backend-ul} aplicației este implementat cu FastAPI și structurat pe domenii de funcționalitate. Fiecare colecție MongoDB are un grup de rute dedicat și un serviciu de logică de business asociat. Grupurile de rute sunt împărțite în felul următor: un grup pentru autentificarea utilizatorilor (\textit{auth}, cu înregistrare și autentificare pe bază de token JWT), obiectivele turistice și culturale (\textit{landmarks}), misiunile (\textit{quests}), rutele turistice (\textit{routes}), evenimentele (\textit{events}), recenziile (\textit{comments}), validarea comunitară a conținutului (\textit{community}) și schimbul de ponderi FL cu clienții (\textit{federated}).
 
-Modelul de date - a cărui schemă completă este ilustrată în figura~\ref{fig:db} din Anexe - este construit în jurul colecțiilor \textbf{USERS} și \textbf{LANDMARKS}: USERS stochează profilul utilizatorului, format din credențialele acestuia și lista de interese pe care le poate selecta, și care intră ulterior în construirea vectorului de caracteristici pentru modelul FL, iar LANDMARKS reprezintă obiectivele care au drept caracteristică principală locația în format GeoJSON indexată 2dsphere, necesară interogărilor de proximitate. De colecția LANDMARKS sunt legate direct \textbf{QUESTS}, \textbf{EVENTS}, \textbf{COMMENTS}, \textbf{STORIES} și \textbf{VISITS}, dar și \textbf{ROUTES} pentru stocharea rutelor ca secvențe ordonate de referințe către LANDMARKS (fie rute globale pre-generate, fie generate de utilizatorii care doresc să parcurgă un traseu cu obiectivele turistice din apropiere).
+Modelul de date - a cărui schemă completă este ilustrată în \textbf{figura~\ref{fig:db}} din Anexe - este construit în jurul colecțiilor \textbf{USERS} și \textbf{LANDMARKS}: USERS stochează profilul utilizatorului, format din credențialele acestuia și lista de interese pe care le poate selecta, și care intră ulterior în construirea vectorului de caracteristici pentru modelul FL, iar LANDMARKS reprezintă obiectivele care au drept caracteristică principală locația în format GeoJSON indexată 2dsphere, necesară interogărilor de proximitate. De colecția LANDMARKS sunt legate direct \textbf{QUESTS}, \textbf{EVENTS}, \textbf{COMMENTS}, \textbf{STORIES} și \textbf{VISITS}, dar și \textbf{ROUTES} pentru stocharea rutelor ca secvențe ordonate de referințe către LANDMARKS (fie rute globale pre-generate, fie generate de utilizatorii care doresc să parcurgă un traseu cu obiectivele turistice din apropiere).
 
 Conținutul generat de utilizatori trece printr-un flux de moderare înainte de publicare. \textit{Quest-urile} propuse și poveștile sunt create cu statusul \textit{pending} și devin disponibile altor utilizatori doar după aprobarea de către un administrator sau de către cinci alți utilizatori. Comentariile sunt, însă, publicate imediat, dar pot fi marcate automat prin câmpul \textit{flagged} de modulul de moderare a conținutului, acestea ajungând să fie vizibile conturilor de tip administrator pentru a fi revizuite manual.
 
@@ -546,9 +547,9 @@ Sistemul FL din CultureQuest este proiectat să asocieze un scor de potrivire fi
 
 \subsection{Arhitectura modelului}
 
-Modelul folosit pentru personalizarea din cadrul aplicației este un MLP cu arhitectura $22 \to 32 \to 16 \to 1$, model ilustrat în figura~\ref{fig:mlp}, în care se descrie faptul că straturile ascunse folosesc funcția de activare ReLU, pe când stratul de ieșire aplică funcția sigmoid, producând un scor continuu în $[0, 1]$ care determină gradul de potrivire dintre profilul utilizatorului și un obiectiv dat. Modelul însumează 1.281 de parametri, acest număr mic de parametri fiind ales deliberat pentru a menține costul computațional redus pe dispozitiv. Acesta rulează atât în antrenare, cât și la fiecare deschidere a fișei unui obiectiv.
+Modelul folosit pentru personalizarea din cadrul aplicației este un MLP cu arhitectura $22 \to 32 \to 16 \to 1$, model ilustrat în \textbf{figura~\ref{fig:mlp}}, în care se descrie faptul că straturile ascunse folosesc funcția de activare ReLU, pe când stratul de ieșire aplică funcția sigmoid, producând un scor continuu în $[0, 1]$ care determină gradul de potrivire dintre profilul utilizatorului și un obiectiv dat. Modelul însumează 1.281 de parametri, acest număr mic de parametri fiind ales deliberat pentru a menține costul computațional redus pe dispozitiv. Acesta rulează atât în antrenare, cât și la fiecare deschidere a fișei unui obiectiv.
 
-Vectorul de intrare de 22 de dimensiuni grupează caracteristicile în patru categorii, iar fiecare caracteristică este detaliată în tabelul~\ref{tab:features}. Primele 14 dimensiuni codifică profilul de interese al utilizatorului și tipul obiectivului în format \textit{one-hot}. Contextul temporal (dimensiunile 14-16) stabilește disponibilitatea obiectivului la momentul interogării, dacă la momentul actual este weekend și mai include ora normalizată la $[0, 1]$. Contextul spațial și de rută (dimensiunile 17-21) includ rangul relativ de distanță față de alte posibile obiective care pot fi alese pentru rută, scorul de potrivire a intereselor și trei caracteristici care sunt active doar în etapa de generare a rutelor.
+Vectorul de intrare de 22 de dimensiuni grupează caracteristicile în patru categorii, iar fiecare caracteristică este detaliată în \textbf{tabelul~\ref{tab:features}}. Primele 14 dimensiuni codifică profilul de interese al utilizatorului și tipul obiectivului în format \textit{one-hot}. Contextul temporal (dimensiunile 14-16) stabilește disponibilitatea obiectivului la momentul interogării, dacă la momentul actual este weekend și mai include ora normalizată la $[0, 1]$. Contextul spațial și de rută (dimensiunile 17-21) includ rangul relativ de distanță față de alte posibile obiective care pot fi alese pentru rută, scorul de potrivire a intereselor și trei caracteristici care sunt active doar în etapa de generare a rutelor.
 
 Același model rulează pentru fiecare locație în parte, cu un vector de caracteristici construit specific acesteia, scorul rezultat fiind convertit într-o categorie de potrivire afișată pe fișa obiectivului - \textbf{scăzut} pentru scoruri sub 0,4, \textbf{mediu} pentru intervalul $[0{,}4,\ 0{,}7)$ și \textbf{ridicat} pentru scoruri mai mari sau egale decât 0,7.
 
@@ -595,7 +596,7 @@ Același model rulează pentru fiecare locație în parte, cu un vector de carac
 
 Procedura de antrenare locală este implementată conform protocolului clientului din FedAvg \cite{mcmahan2017fedavg}. Dispozitivul antrenează modelul pe un buffer local de interacțiuni și trimite ulterior către server doar variația ponderilor față de modelul global. O rundă de antrenare se declanșează automat după strângerea a 15 interacțiuni în buffer, pragul ales asigurând un set minim divers de exemple înainte de actualizare. Runda poate fi inițiată și manual, de către utilizator, dacă au fost strânse cel puțin 8 interacțiuni cu obiectivele, pragul ales fiind mai mic aici, deoarece utilizatorul alege conștient să trimită actualizările către server. Fiecare rundă presupune rularea a 5 epoci complete peste întregul set local, număr testat în literatura de bază FL \cite{mcmahan2017fedavg}, aducând un echilibru între reducerea numărului de runde de învățare și limitarea derivei locale a modelului față de cel global.
 
-Optimizarea se realizează prin SGD cu rata de învățare $\eta = 0{,}01$, care este aplicată pentru fiecare eșantion, valoarea conservatoare prevenind divergența în prezența zgomotului Gaussian adăugat în pasul de DP. Pentru funcția de pierdere se folosește eroarea medie pătratică (MSE, \textit{Mean Squared Error}), cu formula actualizărilor ilustrată în ecuația~\ref{eq:sgd}. Alegerea MSE față de BCE este motivată de natura etichetelor de antrenare: acestea sunt valori continue în $[0, 1]$, nu valori de 0 sau 1 discrete, iar gradienții MSE sunt mărginiți, pe când BCE are gradienți nemărginiți pe măsură ce predicția se apropie de 0 sau 1, ceea ce poate destabiliza antrenarea în prezența zgomotului Gaussian adăugat în pasul de DP; însă, simularea evaluează convergența cu BCE, care este o metrică mai sensibilă pentru modelul cu ieșire sigmoid, deoarece scara logaritmică penalizează mai sever predicțiile confident greșite față de eroarea pătratică. Gradientul acestor actualizări este limitat la norma L2 unitară, iar dacă norma depășește 1, gradientul este scalat proporțional. Procesul este diferit de limitarea variației ponderilor aplicată ulterior în pasul de DP.
+Optimizarea se realizează prin SGD cu rata de învățare $\eta = 0{,}01$, care este aplicată pentru fiecare eșantion, valoarea conservatoare prevenind divergența în prezența zgomotului Gaussian adăugat în pasul de DP. Pentru funcția de pierdere se folosește eroarea medie pătratică (MSE, \textit{Mean Squared Error}), cu formula actualizărilor ilustrată în \textbf{ecuația~\ref{eq:sgd}}. Alegerea MSE față de BCE este motivată de natura etichetelor de antrenare: acestea sunt valori continue în $[0, 1]$, nu valori de 0 sau 1 discrete, iar gradienții MSE sunt mărginiți, pe când BCE are gradienți nemărginiți pe măsură ce predicția se apropie de 0 sau 1, ceea ce poate destabiliza antrenarea în prezența zgomotului Gaussian adăugat în pasul de DP; însă, simularea evaluează convergența cu BCE, care este o metrică mai sensibilă pentru modelul cu ieșire sigmoid, deoarece scara logaritmică penalizează mai sever predicțiile confident greșite față de eroarea pătratică. Gradientul acestor actualizări este limitat la norma L2 unitară, iar dacă norma depășește 1, gradientul este scalat proporțional. Procesul este diferit de limitarea variației ponderilor aplicată ulterior în pasul de DP.
 
 \begin{equation}
 w_{t+1} = w_t - \eta \cdot \frac{g_t}{\max\!\left(1,\, \|g_t\|_2\right)}
@@ -606,11 +607,11 @@ w_{t+1} = w_t - \eta \cdot \frac{g_t}{\max\!\left(1,\, \|g_t\|_2\right)}
 
 \subsection{Agregarea asincronă și reducerea în funcție de vechime}
 
-Serverul agregă imediat fiecare actualizare primită, fără a aștepta alți clienți, indiferent dacă este vorba doar de un subset dintre ei, procesul de învățare de pe dispozitiv și apoi agregarea reprezentând o rundă. Clientul trimite către server numărul rundei la care a descărcat modelul global (\texttt{client\_round}), iar \textit{staleness-ul} reprezintă câte runde au trecut de când clientul a primit modelul actualizat. Factorul de reducere \cite{xie2019fedasync}, prezentat în ecuația~\ref{eq:fedasync}, scalează numărul efectiv de eșantioane.
+Serverul agregă imediat fiecare actualizare primită, fără a aștepta alți clienți, indiferent dacă este vorba doar de un subset dintre ei, procesul de învățare de pe dispozitiv și apoi agregarea reprezentând o rundă. Clientul trimite către server numărul rundei la care a descărcat modelul global (\texttt{client\_round}), iar \textit{staleness-ul} reprezintă câte runde au trecut de când clientul a primit modelul actualizat. Factorul de reducere \cite{xie2019fedasync}, prezentat în \textbf{ecuația~\ref{eq:fedasync}}, scalează numărul efectiv de eșantioane.
 
 Modelul global este ponderat cu de 4 ori mai multe eșantioane virtuale, astfel încât contribuția unui client să nu poată depăși 20\% din agregare. Această limitare compensează absența rotunjirii sincrone: în FedAvg clasic, diluarea contribuțiilor individuale apare natural din numărul de clienți participanți simultan, iar în varianta asincronă, unde clienții sunt procesați pe rând, același efect trebuie impus explicit. Am ales și un prag minim de 20 de eșantioane virtuale care asigură că, pentru clienții cu discount de \textit{staleness} extrem, procentul de contribuție este cel mult $\approx$5\%.
 
-Funcția de reducere este ilustrată în figura~\ref{fig:fedasync}, unde se observă că la \textit{staleness}=0 clientul contribuie integral, la \textit{staleness}=1 în proporție de 50\%, iar la \textit{staleness}=9 în proporție de doar 10\%. Alegerea algoritmului se justifică prin următorul caz: dacă doi - sau mai mulți - clienți descarcă modelul global în același timp și unul termină antrenarea mai repede, serverul ajunge la runda următoare înainte ca al doilea să trimită actualizarea. Prin urmare, discountul penalizează proporțional contribuția celui rămas în urmă cu varianta modelului global.
+Funcția de reducere este ilustrată în \textbf{figura~\ref{fig:fedasync}}, unde se observă că la \textit{staleness}=0 clientul contribuie integral, la \textit{staleness}=1 în proporție de 50\%, iar la \textit{staleness}=9 în proporție de doar 10\%. Alegerea algoritmului se justifică prin următorul caz: dacă doi - sau mai mulți - clienți descarcă modelul global în același timp și unul termină antrenarea mai repede, serverul ajunge la runda următoare înainte ca al doilea să trimită actualizarea. Prin urmare, discountul penalizează proporțional contribuția celui rămas în urmă cu varianta modelului global.
 
 \begin{equation}
 \mathrm{discount}(s) = \frac{1}{1 + s}, \quad n_{\mathrm{eff}} = \max\!\left(1,\ \left\lfloor n \cdot \mathrm{discount}(s) \right\rfloor\right)
@@ -628,7 +629,7 @@ Funcția de reducere este ilustrată în figura~\ref{fig:fedasync}, unde se obse
 
 \subsection{Limitarea gradienților}
 
-Înainte de agregare, serverul calculează variația ponderilor față de modelul global, denumită și delta. Dacă norma L2 a deltei depășește pragul $\tau = 1{,}0$, aceasta este rescalată proporțional conform ecuației~\ref{eq:clipping} \cite{mcmahan2018dpfedavg}, după care actualizarea rescalată este trecută prin agregarea ponderată FedAvg. Pentru un client care antrenează în mod normal, delta are o normă mică și factorul de scalare este 1, deci, actualizarea trece nemodificată. Limitarea intervine doar în cazul în care delta este foarte mare față de ce ar produce o antrenare obișnuită.
+Înainte de agregare, serverul calculează variația ponderilor față de modelul global, denumită și delta. Dacă norma L2 a deltei depășește pragul $\tau = 1$, aceasta este rescalată proporțional conform \textbf{ecuației~\ref{eq:clipping}} \cite{mcmahan2018dpfedavg}, după care actualizarea rescalată este trecută prin agregarea ponderată FedAvg. Pentru un client care antrenează în mod normal, delta are o normă mică și factorul de scalare este 1, deci, actualizarea trece nemodificată. Limitarea intervine doar în cazul în care delta este foarte mare față de ce ar produce o antrenare obișnuită.
 
 Rolul principal al acestui tip de limitare este de a reduce influența actualizărilor extreme. Un client malițios care evaluează totul adversarial \cite{lyu2020threats} produce o deltă cu normă mare, dar aceasta este redusă la $\tau$ înainte de agregare, limitând influența sa pentru fiecare coordonată de pondere, însă, limitarea deltei este și o condiție necesară pentru garantarea DP din secțiunea următoare.
 
@@ -656,7 +657,7 @@ Limitarea făcută coordonată cu coordonată la acest pas nu trebuie confundat�
 
 Citirea modelului global, agregarea și rescrierea lui nu alcătuiesc o operație atomică în mod implicit. Dacă doi clienți trimit actualizări în același timp, se poate ajunge ca ambii să citească modelul la aceeași versiune, să-și calculeze delta fiecare, independent, dar să-și suprascrie reciproc rezultatul agregării. Pentru a preveni acest caz, am implementat pentru server un \textit{lock} Redis bazat pe \texttt{SET NX PX}: un token unic care este scris în Redis sub cheia \texttt{fl:agg\_lock}, doar dacă aceasta nu există deja, ceea ce asigură că un singur client poate intra în etapa de agregare la un moment dat. Eliberarea \textit{lock-ului} se face printr-un script Lua rulat atomic, care mai întâi verifică că token-ul aparține clientului curent pentru a evita ștergerea eronată a unui \textit{lock} deținut de alt client.
 
-Dacă \textit{lock-ul} nu poate fi obținut, serverul mai încearcă de 9 ori, la intervale de câte 0,3 secunde - fereastra totală de 2,7 secunde acoperă scenariul a 10 cereri simultane, unde latența p95 a agregării este de 2,44 secunde (\textit{load test}, Capitolul 6) - iar dacă tot nu reușește, întoarce o eroare. \textit{Lock-ul} expiră de la sine după 5 secunde (valoare aleasă să depășească p95 la 10 cereri), în cazul în care serverul devine indisponibil în mijlocul agregării și \textit{lock-ul} rămâne blocat. Am redat fluxul întreg în figura~\ref{fig:redis-lock}.
+Dacă \textit{lock-ul} nu poate fi obținut, serverul mai încearcă de 9 ori, la intervale de câte 0,3 secunde - fereastra totală de 2,7 secunde acoperă scenariul a 10 cereri simultane, unde latența p95 a agregării este de 2,44 secunde (\textit{load test}, Capitolul 6) - iar dacă tot nu reușește, întoarce o eroare. \textit{Lock-ul} expiră de la sine după 5 secunde (valoare aleasă să depășească p95 la 10 cereri), în cazul în care serverul devine indisponibil în mijlocul agregării și \textit{lock-ul} rămâne blocat. Am redat fluxul întreg în \textbf{figura~\ref{fig:redis-lock}}.
 
 \begin{figure}[h]
 \centering
@@ -667,7 +668,7 @@ Dacă \textit{lock-ul} nu poate fi obținut, serverul mai încearcă de 9 ori, l
 
 \section{Fluxul de generare a rutelor}
 
-Generarea unei rute cuprinde, mai întâi, locația curentă a utilizatorului, rezultând, în final, un traseu ordonat de obiective din proximitate, alcătuit astfel încât să respecte preferințele legate de interese și un buget alocat de maxim 300 de minute (o sesiune tipică de jumătate de zi). Calculul rulează pe server, în \texttt{route\_service.py}, și este schițat în figura~\ref{fig:route-flow}. În prima etapă se strâng toate obiectivele turistice aflate pe o rază de 10 km, fiind o distanță care acoperă perimetrul centrului unui oraș și corespunde aproximativ cu două ore de deplasare pe jos. Apoi, li se atribuie un scor inițial care combină scorul FL (în proporție de 80\%) și proximitatea față de locația de start (în proporție de 20\%). Ponderea mare a FL se justifică prin faptul că vectorul de caracteristici include deja rangul relativ de distanță, aceasta fiind deja luată în considerare indirect, pe când componenta de proximitate de 20\% previne situația în care un obiectiv îndepărtat cu scor mare din punct de vedere FL este ales primul. Dacă modelul global nu este disponibil în momentul respectiv, locul scorului FL este preluat de o fracție de potrivire a intereselor, fiind dedusă direct din categoriile obiectivului. Primele 10 locații - dacă există în apropiere - cu cel mai mare scor rămân drept candidați.
+Generarea unei rute cuprinde, mai întâi, locația curentă a utilizatorului, rezultând, în final, un traseu ordonat de obiective din proximitate, alcătuit astfel încât să respecte preferințele legate de interese și un buget alocat de maxim 300 de minute (o sesiune tipică de jumătate de zi). Calculul rulează pe server, în \texttt{route\_service.py}, și este schițat în \textbf{figura~\ref{fig:route-flow}}. În prima etapă se strâng toate obiectivele turistice aflate pe o rază de 10 km, fiind o distanță care acoperă perimetrul centrului unui oraș și corespunde aproximativ cu două ore de deplasare pe jos. Apoi, li se atribuie un scor inițial care combină scorul FL (în proporție de 80\%) și proximitatea față de locația de start (în proporție de 20\%). Ponderea mare a FL se justifică prin faptul că vectorul de caracteristici include deja rangul relativ de distanță, aceasta fiind deja luată în considerare indirect, pe când componenta de proximitate de 20\% previne situația în care un obiectiv îndepărtat cu scor mare din punct de vedere FL este ales primul. Dacă modelul global nu este disponibil în momentul respectiv, locul scorului FL este preluat de o fracție de potrivire a intereselor, fiind dedusă direct din categoriile obiectivului. Primele 10 locații - dacă există în apropiere - cu cel mai mare scor rămân drept candidați.
 
 Am ales ca traseul să fie construit cu ajutorul unui algoritm greedy de tip vecin cel mai apropiat, adecvat pentru numărul mic de opriri dintr-o rută turistică (cel mult 5), deoarece o abordare exactă ar avea un cost computațional mai mare fără beneficii vizibile. La fiecare pas, se alege obiectivul cel mai aproape de poziția curentă, însă, cu o corecție care „scurtează" distanța față de candidații ale căror categorii se potrivesc intereselor utilizatorului. Pentru fiecare oprire se estimează și o durată de vizitare, durata care pleacă de la un timp de bază specific tipului de obiectiv, estimat pe baza comportamentului tipic al turiștilor sau localnicilor (de la 15 minute pentru o piață publică până la 70 de minute pentru un muzeu). Mai mult, este scalată între 75\% și 125\% în funcție de scorul FL al opririi. Intervalul de $\pm$25\% este suficient de mare pentru a reflecta preferința utilizatorului, dar nu atât de extrem încât să distorsioneze în mare măsură bugetul total de timp al rutei.
 
@@ -683,7 +684,7 @@ Am ales ca traseul să fie construit cu ajutorul unui algoritm greedy de tip vec
 
 Gamificarea se sprijină pe sistemul de \textit{quest-uri} asociate obiectivelor turistice și culturale - sarcini scurte pe care utilizatorul le poate accepta și duce la capăt doar la fața locului, fiind răsplătit cu puncte la completare. Un \textit{quest} poate fi adăugat atât de un administrator sau de o persoană care a creat obiectivul asociat pe hartă (și va fi disponibil imediat altor utilizatori), cât și de o persoană oarecare (în acest caz fiind nevoie ori de aprobarea unui administrator, ori de votul a cinci utilizatori fără rol de administrator). Pragul de cinci voturi este suficient de mic pentru a fi atins într-o comunitate activă, și, în același timp, suficient de mare pentru a aduce mai mulți utilizatori independenți laolaltă, iar voturile sunt anonime, păstrându-se principiul de confidențialitate al aplicației.
 
-Fiecare interacțiune cu un obiectiv lasă în urmă un scor de \textit{engagement} al turistului cu obiectivul, care reprezintă ținta de antrenament a modelului FL pentru acea interacțiune. Valoarea scorului crește odată cu „intensitatea interacțiunii": deschiderea fișei unui obiectiv generează valoarea 0,3, adăugarea la rută a obiectivului sau un răspuns greșit la un \textit{quest} aduce un scor de 0,5, iar un răspuns corect 0,9. Am ales valorile empiric, pentru a reprezenta o bună corelație cu dorința de implicare în a descoperi mai mult despre obiectivul curent. Așadar, scorul maxim generat prin aceste interacțiuni va deveni scorul asociat obiectivului, și va fi folosit pentru etapa de \textit{backpropagation}. Evaluările cu stele sunt convertite după formula $n/5$, producând valori între 0,2 și 1 în funcție de numărul de stele lăsat de utilizator în cadrul recenziei, dar, în acest caz, valoarea rezultată suprascrie orice valoare produsă de interacțiunile anterioare, chiar dacă ar fi mai mare. Setul complet de etichete este redat în tabelul~\ref{tab:engagement}.
+Fiecare interacțiune cu un obiectiv lasă în urmă un scor de \textit{engagement} al turistului cu obiectivul, care reprezintă ținta de antrenament a modelului FL pentru acea interacțiune. Valoarea scorului crește odată cu „intensitatea interacțiunii": deschiderea fișei unui obiectiv generează valoarea 0,3, adăugarea la rută a obiectivului sau un răspuns greșit la un \textit{quest} aduce un scor de 0,5, iar un răspuns corect 0,9. Am ales valorile empiric, pentru a reprezenta o bună corelație cu dorința de implicare în a descoperi mai mult despre obiectivul curent. Așadar, scorul maxim generat prin aceste interacțiuni va deveni scorul asociat obiectivului, și va fi folosit pentru etapa de \textit{backpropagation}. Evaluările cu stele sunt convertite după formula $n/5$, producând valori între 0,2 și 1 în funcție de numărul de stele lăsat de utilizator în cadrul recenziei, dar, în acest caz, valoarea rezultată suprascrie orice valoare produsă de interacțiunile anterioare, chiar dacă ar fi mai mare. Setul complet de etichete este redat în \textbf{tabelul~\ref{tab:engagement}}.
 
 \begin{table}[h]
 \centering
@@ -719,7 +720,7 @@ Harta aplicației integrează tehnica de \textit{geofencing}, implementată manu
 
 \section{Arhitectura de confidențialitate}
 
-Arhitectura de confidențialitate a CultureQuest pornește de la ideea că datele trebuie separate explicit în funcție de locul de stocare. Tot ce ține de comportamentul concret al turistului - obiectivele vizitate, rating-urile date fiecărui obiectiv în parte, \textit{quest-urile} finalizate și rutele salvate - rămân local, pe telefon, prin \textit{SharedPreferences}, în directorul privat al aplicației, în așa fel încât alte aplicații să nu aibă acces la date, fiind o responsabilitate a \textit{sandbox-ului} Android/iOS, iar spre server vin doar informații agregate sau anonimizate. Concret, se incrementează un contor global de vizite pentru fiecare obiectiv în locul primirii identității vizitatorului, respectiv se modifică suma și numărul de rating-uri în locul evaluării de către vizitator. Pe server, totul se rezumă la a se păstra doar datele necesare funcționării aplicației: numele complet, punctajul total, numărul de \textit{quest-uri} completate și interesele selectate. Aceeași logică se aplică și componentei FL: serverul primește doar delta-ul ponderilor obținut după antrenamentul local, peste care s-a adăugat deja zgomot Gaussian. Distribuția completă este redată în tabelul~\ref{tab:privacy}, iar modul în care sunt implementate mecanismele de confidențialitate este detaliat în Capitolul 5.
+Arhitectura de confidențialitate a CultureQuest pornește de la ideea că datele trebuie separate explicit în funcție de locul de stocare. Tot ce ține de comportamentul concret al turistului - obiectivele vizitate, rating-urile date fiecărui obiectiv în parte, \textit{quest-urile} finalizate și rutele salvate - rămân local, pe telefon, prin \textit{SharedPreferences}, în directorul privat al aplicației, în așa fel încât alte aplicații să nu aibă acces la date, fiind o responsabilitate a \textit{sandbox-ului} Android/iOS, iar spre server vin doar informații agregate sau anonimizate. Concret, se incrementează un contor global de vizite pentru fiecare obiectiv în locul primirii identității vizitatorului, respectiv se modifică suma și numărul de rating-uri în locul evaluării de către vizitator. Pe server, totul se rezumă la a se păstra doar datele necesare funcționării aplicației: numele complet, punctajul total, numărul de \textit{quest-uri} completate și interesele selectate. Aceeași logică se aplică și componentei FL: serverul primește doar delta-ul ponderilor obținut după antrenamentul local, peste care s-a adăugat deja zgomot Gaussian. Distribuția completă este redată în \textbf{tabelul~\ref{tab:privacy}}, iar modul în care sunt implementate mecanismele de confidențialitate este detaliat în Capitolul 5.
 
 Arhitectura actuală are, însă, și o limitare: serverul primește delta-ul fiecărui client în mod individual, așa că se pot distinge, în principiu, contribuțiile individuale. Protocolul de agregare securizată~\cite{bonawitz2017secagg} ar elimina acest risc, făcând ca serverul să vadă doar suma actualizărilor, nu și delta-urile individuale. Numai că SecAgg este incompatibil cu configurația asincronă pe care se bazează platforma. Protocolul cere ca un set fix de clienți să fie activi în același timp pentru schimbul de chei criptografice, ceea ce contravine modelului FedAsync în care clienții se conectează independent, fiecare la momentul lui. Mai mult, discountul de \textit{staleness} aplicat pentru fiecare client la agregare are nevoie de acces la delta-urile individuale, nu doar la suma lor.
 
@@ -748,21 +749,43 @@ Identitatea autorului recenziei & - & Autorul fiecărei recenzii sau povești \\
 
 \chapter{Detalii de Implementare}
 
-% TODO: paragraf de prezentare a capitolului
+Dacă Capitolul 4 descrie ce face fiecare componentă și care au fost motivele din spate pentru fiecare, Capitolul 5 se duce cu un nivel mai jos și detaliază cum s-au implementat concret componentele, prezentându-se, mai întâi, partea de aplicație mobilă, cu serviciul client FL, mecanismul DP, bufferul de interacțiuni și restul componentelor care rulează pe dispozitiv. După aceea, urmează serviciile \textit{backend}, cu agregarea FL, punctele de acces API și moderarea conținutului. Urmează și două secțiuni care sunt în legătură cu partea de ML pentru recomandări, pentru că una descrie fluxul de pre-antrenare pe date publice, prin care modelul global este pregătit înainte de a contribui clienții, iar alta prezintă \textit{framework-ul} de simulare FL pe care se bazează evaluarea din Capitolul 6. De-a lungul capitolului, părți de cod atașate în document arată locurile unde deciziile de implementare sunt cele mai relevante, și anume: antrenamentul local cu limitare a gradienților, adăugarea zgomotului Gaussian, agregarea FL cu limitare, moderarea printr-un API extern a conținutului și rularea unei runde de simulare. Se adună, în final, dificultățile întâlnite pe parcurs, făcând trecerea spre evaluarea rezultatelor.
 
 \section{Implementarea aplicației mobile}
 
+Implementarea mobilă acoperă șase subsecțiuni, pe care le-am descris în ordinea dependențelor: serviciul client FL, care implementează manual în Dart \textit{forward pass-ul}, partea de \textit{backpropagation} și limitarea gradienților, fără vreun \textit{framework} de ML. Legat de acest serviciu este mecanismul DP, care adaugă zgomot Gaussian variației de ponderi înainte de trimiterea de către client a actualizărilor, și bufferul local de interacțiuni, care păstrează scorurile de \textit{engagement} între runde și le stochează în \texttt{SharedPreferences}. Separat de FL, stocarea offline menține un \textit{cache} al obiectivelor turistice pe telefonul utilizatorilor, la care aplicația poate ajunge când \textit{backend}-ul nu este funcțional sau turistul nu are acces la o conexiune stabilă de rețea. Ultimele două subsecțiuni descriu componente orientate spre utilizator. Integrarea UI a generării rutelor înseamnă, odată, rularea algoritmului pe \textit{backend}, dar și afișarea rutelor, care intră în responsabilitatea aplicației mobile. Sistemul de misiuni cu \textit{geofencing} notifică când turistul intră în raza unui obiectiv și pune interacțiunea în bufferul local.
+
 \subsection{Serviciul client de învățare federată}
 
-\subsection{Adăugarea de zgomot pentru asigurarea confidențialității diferențiale}
+Serviciul client este implementat în Dart, în \texttt{fl\_client\_service.dart}, fără alte biblioteci adiționale, deoarece dimensiunea redusă a modelului, de doar 1.281 de parametri ($\approx$5 KB), nu necesită adăugarea unui \textit{runtime} de 1,3-30 MB, cum am argumentat în capitolul anterior. Cu scopul de a reutiliza cod, același \textit{forward pass} (metoda \texttt{predictScore}) este folosit și pentru a calcula scorul de potrivire afișat sub formă de categorie - scăzut, mediu, ridicat - atunci când utilizatorul apasă pe un obiectiv pentru a deschide fișa acestuia.
+
+Antrenamentul local cuprinde 5 epoci de SGD pe ce se află în buffer, cu o rată de învățare egală cu 0,01. La fiecare eșantion, după ce se calculează gradienții pentru cele 3 straturi, norma L2 a vectorului acestora este limitată la pragul $\tau=1$ prin rescalare, fiind vorba de limitarea descrisă la 4.4.4, și, în plus, actualizările cu gradienți NaN sau Inf sunt ignorate, ceea ce previne propagarea valorilor nenumerice spre modelul global. În Anexe se regăsește partea de \textit{backpropagation} din metoda \texttt{\_trainLocally}, în \textbf{\textit{listing-ul}~\ref{lst:backprop}}.
+
+\subsection{Adăugarea de zgomot pentru asigurarea confidențialității\\diferențiale}
+
+Mecanismul DP este implementat în metoda \texttt{\_addDPNoise}, metodă care este apelată pe dispozitiv imediat după ce are loc antrenamentul local, înainte să fie trimisă actualizarea spre server. Se calculează, mai întâi, delta - diferența dintre ponderile antrenate și varianta modelului de când runda a început. Apoi, fiecare coordonată a deltei este trunchiată la intervalul $[-\tau, \tau]$ cu $\tau=1$, pentru a mărgini sensibilitatea. După care, peste fiecare coordonată se adaugă zgomot Gaussian $\mathcal{N}(0,\,\sigma^2)$ cu $\sigma = \sigma_{\mathrm{noise}} \cdot \tau = 0{,}1$, ponderile trimise către server fiind reconstruite adăugând delta cu zgomotul aplicat la varianta globală, astfel încât serverul nu primește niciodată delta în stare curată.
+
+Zgomotul Gaussian este generat prin transformata Box-Muller\footnote{Box, G. E. P., \& Muller, M. E. (1958). A note on the generation of random normal deviates. \textit{The Annals of Mathematical Statistics}, 29(2), 610-611.}, implementarea putându-se observa în metoda \texttt{\_gaussian}. Transformata produce eșantioane $\mathcal{N}(0,\,\sigma^2)$ din două variabile uniforme independente $U_1, U_2 \sim \mathcal{U}(0,1)$, iar valoarea $U_1$ este trunchiată la $10^{-10}$ pentru a evita $\log(0)$, dar trunchierile de la acest pas nu trebuie confundate cu limitarea normei L2 de la secțiunea anterioară, deoarece aceea scalează vectorul întreg al gradienților ca să prevină fenomenul de \textit{exploding gradients}, pe când cea de la pasul de DP ține sensibilitatea mărginită pentru ca zgomotul adăugat să aducă un efect real asupra confidențialității. Implementarea celor două metode, \texttt{\_addDPNoise} și \texttt{\_gaussian}, este atașată în \textbf{\textit{listing-ul}~\ref{lst:dpnoise}} din Anexe.
 
 \subsection{Bufferul local de interacțiuni și persistența datelor}
 
+Interacțiunile dintre runde ale utilizatorului ajung într-un buffer persistent prin \texttt{Shared-\\Preferences} (\path{local_data_service.dart}), ele fiind indexate după ID-ul obiectivului turistic sau cultural. Există și un risc, adunarea unor intrări duplicate, așa că, prin structura \texttt{\_LandmarkBuffer} (\texttt{fl\_client\_service.dart}) se păstrează o singură intrare pentru fiecare obiectiv. Sunt prezente două cazuri pentru acordarea unei etichete de \textit{engagement} (scor) unui obiectiv, primul fiind acordarea unei evaluări sub formă de recenzie (1-5 stele), care suprascrie orice scor anterior atribuit locației. Pentru celelalte tipuri de interacțiuni, se păstrează cel mai ridicat scor înregistrat pentru obiectiv. De asemenea, persistența prin \texttt{SharedPreferences} face ca bufferul să nu fie golit dacă aplicația este oprită înainte ca runda să se încheie - este golit doar după trimiterea cu succes a actualizării spre server. În plus, ecranul de profil afișează numărul curent de interacțiuni din buffer, în acest mod utilizatorul având vizibilitate asupra stării procesului FL local, după cum se poate observa în \textbf{figura~\ref{fig:profile-fl-status}} din Anexe.
+
 \subsection{Stocarea temporară a obiectivelor pentru funcționarea offline}
+
+Lista completă de obiective se salvează tot în \texttt{SharedPreferences} (\path{local_data_service.dart}), sub o cheie globală, care este comună tuturor utilizatorilor, deoarece obiectivele sunt date publice, deci nu este nevoie să individualizăm pentru fiecare utilizator. Acestea nu au un timp de existență predefinit, locațiile fiind suprascrise la fiecare \textit{fetch} reușit. Fluxul legat de interograrea obiectivelor este reprezentat prin metoda \texttt{fetchAllLandmarks} (\texttt{map\_provider.dart}) care solicită prin punctul de acces \path{/landmarks/all} toate locațiile de la server, iar dacă se întoarce o eroare, se încarcă colecția de obiective din \textit{cache}. Întreaga colecție este stocată unitar, și nu este implementată paginarea bazată pe locația curentă. Aceasta este o limitare care devine ineficientă la scară largă, unde un număr foarte mare de obiective ar face randarea pe hartă imposibilă.
 
 \subsection{Algoritmul de generare a rutelor}
 
+În generarea unei rute este inclus pentru utilizator un panou inferior care expune un parametru configurabil (rata de departajare; 0-1000 metri, implicit 200 de metri), panoul fiind un \textit{slider} între „Shortest path" și „Most relevant". La apăsarea butonului de generare a rutei, se trimite de la client un \textit{request} de tip POST către \path{/routes/generate} cu: poziția curentă, numărul maxim de opriri (5), timpul disponibil (300 de minute) și valoarea \textit{slider-ului}. Interesele utilizatorului nu sunt trimise în \textit{request}, fiindcă serverul le preia din profilul utilizatorului din baza de date.
+
+Pe server, obiectivele de pe o rază de 10 km sunt ordonate după un scor inițial $\textit{scor}_{\mathrm{FL}} \times 0.8 + \textit{scor}_{\mathrm{distance}} \times 0.2$, unde scorul FL provine din predicția MLP, iar scorul legat de distanță normalizează distanța față de poziția curentă în intervalul $[0, 1]$. Dacă modelul FL nu este disponibil în Redis pentru a fi folosit la acest pas, scorul de potrivire a intereselor înlocuiește componenta FL cu același coeficient de 80\%. Se construiește o rută cu obiectivele selectate în maniera \textit{greedy nearest-neighbour}, cu rata de configurare (\texttt{flTiebreakerM}) menționată anterior - oprirea următoare se determină minimizând $\textit{dist} - \textit{flTiebreakerM} \times \textit{interest\_match}$, unde $\textit{interest\_match}$ se calculează din interesele utilizatorului - ajungându-se la următorul rezultat: un obiectiv mai relevant poate fi ales în locul unuia mai apropiat, dacă se încadrează în raza \textit{slider-ului} setată în panou. Durata atribuită fiecărei opriri pornește dintr-o valoare aleasă empiric în funcție de tipul obiectivului, și este scalată prin scorul FL al obiectivului în intervalul $[0.75, 1.25]$, astfel că locațiile cu un scor mai mare primesc mai mult timp de vizitare. Modul în care arată o rută generată poate fi vizualizat în \textbf{figura~\ref{fig:route-generation}} din Anexe.
+
 \subsection{Sistemul de misiuni și tehnologia de \textit{geofencing}}
+
+Misiunile se accesează din fișa unui obiectiv, prin butonul „View quests". La apăsare, aplicația măsoară, pe baza poziției curente, cât de departe se află utilizatorul de obiectiv, iar în cazul în care utilizatorul se află la mai mult de 100 de metri, misiunile apar doar în modul citire, fără posibilitatea de a trimite un răspuns pentru ele. Sub acest prag, misiunea devine activă: utilizatorul răspunde la un \textit{quiz} (întrebare cu variante sau notă text), trimis printr-o cerere HTTP de tip POST la \path{/quests/\{id\}/complete}. Pentru un răspuns corect, serverul acordă puncte și misiunea se marchează drept finalizată pe dispozitiv. Cât despre unul greșit, obiectivul se marchează, totuși, ca vizitat, de vreme ce utilizatorul este fizic acolo. Panoul de misiuni poate fi observat în \textbf{figura~\ref{fig:proximity-sheet}} din Anexe.
+
+Detectarea apropierii față de locații se face printr-un serviciu de \textit{geofencing} manual (\path{proximity_service.dart}), construit pe fluxul de poziții GPS cu un filtru de 10 metri, ceea ce înseamnă că fluxul GPS trimite o actualizare doar dacă utilizatorul s-a deplasat cu cel puțin 10 metri față de poziția curentă. Cu fiecare actualizare, se recalculează distanța față de obiectivele din zona curentă - cele din raza de 1500 de metri față de ultima poziție. Evenimentul ENTER se trimite când utilizatorul ajunge la mai puțin de 100 de metri de un obiectiv, iar cel de EXIT când iese din această rază. Dacă utilizatorul s-a deplasat cu mai mult de 200 de metri față de ultimul punct de la care s-a actualizat lista de obiective, aceasta se reîncarcă de la server.
 
 \section{Implementarea serviciilor \textit{backend}}
 
@@ -842,7 +865,94 @@ Identitatea autorului recenziei & - & Autorul fiecărei recenzii sau povești \\
 \label{fig:db}
 \end{figure}
 
+\clearpage
+\begin{figure}[!h]
+\centering
+\includegraphics[width=0.3\textwidth]{pics/profile-fl-status.png}
+\caption{Ecranul de profil cu statusul FL și numărul de interacțiuni din buffer.}
+\label{fig:profile-fl-status}
+\end{figure}
+
+\begin{figure}[!h]
+\centering
+\includegraphics[width=0.3\textwidth]{pics/route-generation.png}
+\caption{Ruta generată pe hartă.}
+\label{fig:route-generation}
+\end{figure}
+
+\clearpage
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.3\textwidth]{pics/proximity-sheet.png}
+\caption{Panoul de misiuni (\textit{quest-uri}) disponibil la detectarea unui obiectiv în apropiere.}
+\label{fig:proximity-sheet}
+\end{figure}
+
 \chapter{Extrase de Cod} % Introduce o nouă anexă
+
+\begin{lstlisting}[caption={Backpropagare și limitare a gradienților în \texttt{\_trainLocally} (\texttt{fl\_client\_service.dart:272-302}).}, label={lst:backprop}]
+// Backward
+final dLoss = 2.0 * (out - y);
+final dSig  = out * (1.0 - out);
+final dz3   = [dLoss * dSig];
+
+final dW3  = _outerVec(dz3, a2);
+final db3  = List<double>.from(dz3);
+final da2  = _vecMatT(dz3, w3);
+final dz2  = List.generate(16, (i) => da2[i] * _reluDeriv(z2[i]));
+
+final dW2  = _outerVec(dz2, a1);
+final db2g = List<double>.from(dz2);
+final da1  = _vecMatT(dz2, w2);
+final dz1  = List.generate(32, (i) => da1[i] * _reluDeriv(z1[i]));
+
+final dW1  = _outerVec(dz1, x);
+final db1g = List<double>.from(dz1);
+
+if (_hasNaN(db1g) || _hasNaN(db2g) || _hasNaN(db3)) continue;
+
+final allGrads = [
+  ...dW1.expand((r) => r), ...db1g,
+  ...dW2.expand((r) => r), ...db2g,
+  ...dW3.expand((r) => r), ...db3,
+];
+final norm = math.sqrt(allGrads.fold(0.0, (s, v) => s + v * v));
+final scale = (norm > 1.0) ? 1.0 / norm : 1.0;
+
+_applyGrad(w1, dW1, lr * scale);
+_applyGradVec(b1, db1g, lr * scale);
+_applyGrad(w2, dW2, lr * scale);
+_applyGradVec(b2, db2g, lr * scale);
+_applyGrad(w3, dW3, lr * scale);
+_applyGradVec(b3, db3,  lr * scale);
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Adăugarea zgomotului Gaussian pentru fiecare coordonată a deltei (\texttt{fl\_client\_service.dart:348-373}).}, label={lst:dpnoise}]
+void _addDPNoise(List<List<double>> globalSnapshot) {
+  final noiseStd = kDPSigma * kDPClipNorm;
+  for (int l = 0; l < _weights.length; l++) {
+    final delta = List<double>.generate(
+      _weights[l].length,
+      (i) => (_weights[l][i] - globalSnapshot[l][i])
+                  .clamp(-kDPClipNorm, kDPClipNorm),
+    );
+    for (int i = 0; i < delta.length; i++) {
+      delta[i] += _gaussian(noiseStd);
+    }
+    for (int i = 0; i < _weights[l].length; i++) {
+      _weights[l][i] = globalSnapshot[l][i] + delta[i];
+    }
+  }
+}
+
+double _gaussian(double sigma) {
+  final u1 = _rng.nextDouble().clamp(1e-10, 1.0);
+  final u2 = _rng.nextDouble();
+  final z = math.sqrt(-2.0 * math.log(u1))
+    * math.cos(2.0 * math.pi * u2);
+  return z * sigma;
+}
+\end{lstlisting}
 
 \end{appendices}
 \end{document}
