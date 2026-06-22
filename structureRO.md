@@ -492,7 +492,7 @@ ocupă mai mult de o pagină și ar întrerupe firul textului dacă ar fi inline
   - `_trainLocally` complet,
     `mobile/lib/features/federated/services/fl_client_service.dart:248-312`
     (65 linii) - varianta extinsă a Listing-ului 1 din 5.1.1 (forward pass +
-    backpropagation + clipping, integral). X
+    backpropagation + clipping, integral).
   - opțional, `proximity_service.dart` complet (66 linii) - varianta extinsă
     a referinței din 5.1.6, dacă se dorește un al 6-lea exemplu de cod.
 - **Grafice complete de simulare/pre-antrenare** (din
@@ -502,7 +502,7 @@ ocupă mai mult de o pagină și ar întrerupe firul textului dacă ar fi inline
     `contextual_probes.png` - secundare față de cele 3 figuri principale din
     6.2.2. X
   - `dataset_overview.png`, `label_by_type.png`, `train_val_split.png` - cele
-    neincluse inline în 5.3. X
+    neincluse inline în 5.3.
 - **Capturi de ecran suplimentare**
   - Fluxul de onboarding (`onboarding_screen.dart`, `interests_screen.dart`).
   - Ecranele de autentificare (`login_screen.dart`, `register_screen.dart`).
@@ -516,4 +516,4 @@ ocupă mai mult de o pagină și ar întrerupe firul textului dacă ar fi inline
     `backend/.env.example`.
 - **Tabele extinse**
   - Tabelul complet al endpoint-urilor REST (landmarks/quests/comments/routes),
-    dacă 5.2.2 prezintă în text doar cele 4 endpoint-uri FL. X
+    dacă 5.2.2 prezintă în text doar cele 4 endpoint-uri FL.

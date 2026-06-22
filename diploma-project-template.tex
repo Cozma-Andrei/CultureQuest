@@ -704,7 +704,7 @@ Obiectiv adăugat la rută & 0,5 \\
 \hline
 Navigare către obiectiv pornită & 0,6 \\
 \hline
-\textit{Quest} propus de utilizator & 0,80 \\
+\textit{Quest} propus de utilizator & 0,8 \\
 \hline
 Poveste trimisă & 0,85 \\
 \hline
@@ -760,7 +760,7 @@ Implementarea mobilă acoperă șase subsecțiuni, pe care le-am descris în ord
 
 Serviciul client este implementat în Dart, în \texttt{fl\_client\_service.dart}, fără alte biblioteci adiționale, deoarece dimensiunea redusă a modelului, de doar 1.281 de parametri ($\approx$5 KB), nu necesită adăugarea unui \textit{runtime} de 1,3-30 MB, cum am argumentat în capitolul anterior. Cu scopul de a reutiliza cod, același \textit{forward pass} (metoda \texttt{predictScore}) este folosit și pentru a calcula scorul de potrivire afișat sub formă de categorie - scăzut, mediu, ridicat - atunci când utilizatorul apasă pe un obiectiv pentru a deschide fișa acestuia.
 
-Antrenamentul local cuprinde 5 epoci de SGD pe ce se află în buffer, cu o rată de învățare egală cu 0,01. La fiecare eșantion, după ce se calculează gradienții pentru cele 3 straturi, norma L2 a vectorului acestora este limitată la pragul $\tau=1$ prin rescalare, fiind vorba de limitarea descrisă la 4.4.4, și, în plus, actualizările cu gradienți NaN sau Inf sunt ignorate, ceea ce previne propagarea valorilor nenumerice spre modelul global. În Anexe se regăsește partea de \textit{backpropagation} din metoda \texttt{\_trainLocally}, în \textbf{\textit{listing-ul}~\ref{lst:backprop}}.
+Antrenamentul local cuprinde 5 epoci de SGD pe ce se află în buffer, cu o rată de învățare egală cu 0,01. La fiecare eșantion, după ce se calculează gradienții pentru cele 3 straturi, norma L2 a vectorului acestora este limitată la pragul $\tau=1$ prin rescalare, fiind vorba de limitarea descrisă la 4.4.4, și, în plus, actualizările cu gradienți NaN sau Inf sunt ignorate, ceea ce previne propagarea valorilor nenumerice spre modelul global. Partea de \textit{backpropagation} se regăsește în metoda \texttt{\_trainLocally} din fișierul \texttt{fl\_client\_service.dart}.
 
 \subsection{Adăugarea de zgomot pentru asigurarea confidențialității\\diferențiale}
 
@@ -800,7 +800,7 @@ Pentru a preveni problemele de sincronizare când se trimit actualizări în ace
 
 \subsection{Punctele de acces API}
 
-Între dispozitivele mobile și serviciul FL din \textit{backend}, comunicarea se realizează prin patru puncte de acces HTTP, pe care le-am descris sumar în \textbf{tabelul~\ref{tab:fl-endpoints}}, putându-se observa că doar un punct de acces este rezervat conturilor de tip administrator, cel care permite încărcarea unui model pre-antrenat și resetarea istoricului de runde. Alte rute nelegate de partea de FL se gasesc în \textbf{tabelul~\ref{tab:all-endpoints}} din Anexe.
+Între dispozitivele mobile și serviciul FL din \textit{backend}, comunicarea se realizează prin patru puncte de acces HTTP, pe care le-am descris sumar în \textbf{tabelul~\ref{tab:fl-endpoints}}, putându-se observa că doar un punct de acces este rezervat conturilor de tip administrator, cel care permite încărcarea unui model pre-antrenat și resetarea istoricului de runde. Alte rute nelegate de partea de FL se găsesc în \textbf{tabelul~\ref{tab:all-endpoints}} din Anexe.
 
 \begin{table}[h]
 \centering
@@ -824,11 +824,25 @@ GET & \texttt{/model/status} & Status FL: rundă, clienți unici, eșantioane ag
 
 \subsection{Sistemul de recenzii și moderarea conținutului}
 
-Recenziile au două părți (text liber și evaluare cu stele de la 1 la 5) și sunt moderate la trimitere. Dacă este definit în cod un \textit{API key} pentru OpenAI, serverul face un apel către OpenAI Moderation API\footnote{OpenAI Moderation API - documentație oficială. \url{https://platform.openai.com/docs/guides/moderation} (accesat 19.06.2026).}, care returnează un câmp \texttt{flagged} și categoriile pentru care textul recenziei devine \textit{flagged}. Totuși, acă cheia nu este prezentă sau cererea către API returnează o eroare, se recurge la un \textit{fallback} bazat pe un filtru local de expresii și cuvinte care cuprind insulte și discurs de ură. În orice caz, recenziile semnalate nu sunt vizibile altor utilizatori și trebuie revizuite de administrator.
+Recenziile au două părți (text liber și evaluare cu stele de la 1 la 5) și sunt moderate la trimitere. Dacă este definit în cod un \textit{API key} pentru OpenAI, serverul face un apel către OpenAI Moderation API\footnote{OpenAI Moderation API - documentație oficială. \url{https://platform.openai.com/docs/guides/moderation} (accesat 19.06.2026).}, care returnează un câmp \texttt{flagged} și categoriile pentru care textul recenziei devine \textit{flagged}. Totuși, dacă cheia nu este prezentă sau cererea către API returnează o eroare, se recurge la un \textit{fallback} bazat pe un filtru local de expresii și cuvinte care cuprind insulte și discurs de ură. În orice caz, recenziile semnalate nu sunt vizibile altor utilizatori și trebuie revizuite de administrator.
 
 Poveștile și \textit{quest-urile} propuse de utilizatori ajung într-o listă cu statusul \textit{pending}, devenind vizibile tuturor utilizatorilor autentificați, și există două metode prin care se aprobă acestea, ori prin intermediul unui administrator, ori prin strângerea a cinci voturi din comunitate de la turiști sau localnici diferiți de autor. Adăugarea unor obiective noi pe hartă se face, însă, doar prin aprobarea unui administrator.
 
 \section{Fluxul etapei de pre-antrenare}
+
+Pentru etapa de pre-antrenare a modelului global, se folosesc patru seturi de date publice - TSMC2014 \cite{yang2015tsmc} (\textit{check-in-uri} din New York și Tokyo), TIST2015 \cite{yang2016tist} (\textit{check-in-uri} la nivel global), ubicomp2013 \cite{yang2013ubicomp} (\textit{check-in-uri} și recomandări pentru cei care vizitează restaurante din New York) și Yelp \cite{yelp2021dataset} (recenzii cu evaluări de la 1 la 5 stele pentru afaceri locale, în special din SUA și Canada) - la care se adaugă și un set de exemple sintetice, necesare deoarece sursele reale prezintă doar interacțiuni cu obiective deschise, un utilizator care ajunge la un muzeu închis în acel moment având probabilitate foarte mică de a scrie o recenzie. Astfel, fără exemple sintetice, modelul nu ar vedea niciodată intrări cu caracteristica \texttt{isOpen} egală cu 0 în etapa de antrenare. Seturile TSMC2014, TIST2015 și ubicomp2013 conțin date de tip LBSN (\textit{Location-Based Social Network}), fiind înregistrări anonimizate de pe Foursquare\footnote{Foursquare. \url{https://foursquare.com/company/who-we-are/} (accesat: 19.06.2026).} - o aplicație de \textit{check-in} social unde utilizatorii se înregistrau manual când ajungeau la o locație (restaurant, muzeu, parc etc.). Datele sunt relevante pentru că arată locații vizitate în mod voluntar, ceea ce reprezintă un semnal indirect de preferință și un sentiment pozitiv față de obiectiv.
+
+Fiecare înregistrare din surse este transformată într-un vector de caracteristici de 22 de dimensiuni, iar eticheta (scorul) de \textit{engagement} se deduce din tipul interacțiunii. Interacțiunile din seturile Foursquare primesc eticheta de bază 0,70 (check-in simplu), crescând la 0,75 pentru recomandări scrise, respectiv progresiv până la 0,90 în cazul vizitelor repetate, pe când recenziile din setul Yelp preiau direct scorul normalizat (numărul de stele împărțit la 5). Exemplele sintetice cu obiective închise primesc eticheta 0,10. Distribuția seturilor de date poate fi vizualizată în \textbf{figura~\ref{fig:dataset-overview}}.
+
+Antrenarea propriu-zisă rulează cel mult 60 de epoci cu \textit{early stopping} dacă timp de 10 epoci nu apare nicio îmbunătățire pe setul de validare. Se folosește SGD cu rata de învățare inițială de 0,01 și un factor de reducere de 0,98 per epocă, pe \textit{batch-uri} de 256 de exemple. Funcția de pierdere utilizată este MSE, la fel și ulterior pe dispozitiv în antrenarea FL. Însă, rezultatele pre-antrenării au arătat o problemă de regresie către medie: modelul prezice preponderent valori în intervalul 0,70-0,75, cu puține valori sub 0,40, din cauza dezechilibrului dintre exemplele cu scor mare și cele cu scor mic. \textit{Fine-tuning-ul} rezolvă această problemă prin două intervenții aplicate setului de antrenare: adăugarea a 2.000 de exemple sintetice suplimentare cu scor mic per tip de obiectiv (față de 300 la pre-antrenare) și suprareprezentarea de trei ori a înregistrărilor cu scorul sub 0,40. În paralel, rata de învățare crește la 0,02 cu un factor de reducere mai lent (0,995) pe parcursul a 40 de epoci, pentru a permite modelului să iasă din platoul atins fără să își suprascrie cunoștințele deja acumulate.
+
+\begin{figure}[!h]
+\centering
+\hspace*{-0.5cm}
+\includegraphics[width=1.05\textwidth]{pics/charts/dataset_overview.png}
+\caption{Prezentarea seturilor de date utilizate la pre-antrenare.}
+\label{fig:dataset-overview}
+\end{figure}
 
 \section{\textit{Framework-ul} pentru simularea procesului de învățare federată}
 
@@ -1048,43 +1062,6 @@ DELETE & \texttt{/comments/admin/\{id\}} & Ștergere recenzie & A \\
 }
 
 \chapter{Extrase de Cod} % Introduce o nouă anexă
-
-\begin{lstlisting}[caption={Backpropagare și limitare a gradienților în \texttt{\_trainLocally} (\texttt{fl\_client\_service.dart:272-302}).}, label={lst:backprop}]
-// Backward
-final dLoss = 2.0 * (out - y);
-final dSig  = out * (1.0 - out);
-final dz3   = [dLoss * dSig];
-
-final dW3  = _outerVec(dz3, a2);
-final db3  = List<double>.from(dz3);
-final da2  = _vecMatT(dz3, w3);
-final dz2  = List.generate(16, (i) => da2[i] * _reluDeriv(z2[i]));
-
-final dW2  = _outerVec(dz2, a1);
-final db2g = List<double>.from(dz2);
-final da1  = _vecMatT(dz2, w2);
-final dz1  = List.generate(32, (i) => da1[i] * _reluDeriv(z1[i]));
-
-final dW1  = _outerVec(dz1, x);
-final db1g = List<double>.from(dz1);
-
-if (_hasNaN(db1g) || _hasNaN(db2g) || _hasNaN(db3)) continue;
-
-final allGrads = [
-  ...dW1.expand((r) => r), ...db1g,
-  ...dW2.expand((r) => r), ...db2g,
-  ...dW3.expand((r) => r), ...db3,
-];
-final norm = math.sqrt(allGrads.fold(0.0, (s, v) => s + v * v));
-final scale = (norm > 1.0) ? 1.0 / norm : 1.0;
-
-_applyGrad(w1, dW1, lr * scale);
-_applyGradVec(b1, db1g, lr * scale);
-_applyGrad(w2, dW2, lr * scale);
-_applyGradVec(b2, db2g, lr * scale);
-_applyGrad(w3, dW3, lr * scale);
-_applyGradVec(b3, db3,  lr * scale);
-\end{lstlisting}
 
 \begin{lstlisting}[caption={Adăugarea zgomotului Gaussian pentru fiecare coordonată a deltei (\texttt{fl\_client\_service.dart:348-373}).}, label={lst:dpnoise}]
 void _addDPNoise(List<List<double>> globalSnapshot) {

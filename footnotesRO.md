@@ -89,6 +89,8 @@ Nicio notă de subsol anticipată - conținut specific proiectului.
   și pagina/licența de descărcare (ex. pagina Yelp Open Dataset), aceasta
   poate fi notă de subsol separată, complementară citării academice (verifică
   URL + data accesării).
+  - **Foursquare** - platforma sursă a datelor LBSN, menționată explicit dar absentă din bibliografie; notă de subsol la prima apariție în 5.3.
+    \url{https://foursquare.com} (accesat 19.06.2026)
 - **5.1.1, 5.1.4, 5.1.5, 5.2.1, 5.2.2, 5.4, 5.5** - conținut specific
   proiectului sau deja acoperit de bibliografie; nicio notă de subsol
   anticipată. (5.5 "regresia către medie" - concept statistic consacrat,
