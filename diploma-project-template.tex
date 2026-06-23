@@ -450,7 +450,7 @@ Această legătură nu are, însă, un corespondent în CultureQuest, unde agreg
 \hline
 FedAvg \cite{mcmahan2017fedavg} & Da & Medie ponderată a cohortei de K clienți & Nu \\
 \hline
-FedAsync \cite{xie2019fedasync} & Nu & \textit{Discount staleness}: $1/(1+s)$ & Da \\
+FedAsync \cite{xie2019fedasync} & Nu & \textit{Staleness discount}: $1/(1+s)$ & Da \\
 \hline
 FedProx \cite{li2020fedprox} & Da & Termen proximal (penalizare față de modelul global) & Nu \\
 \hline
@@ -548,7 +548,7 @@ Sistemul FL din CultureQuest este proiectat să asocieze un scor de potrivire fi
 
 \subsection{Arhitectura modelului}
 
-Modelul folosit pentru personalizarea din cadrul aplicației este un MLP cu arhitectura $22 \to 32 \to 16 \to 1$, model ilustrat în \textbf{figura~\ref{fig:mlp}}, în care se descrie faptul că straturile ascunse folosesc funcția de activare ReLU, pe când stratul de ieșire aplică funcția sigmoid, producând un scor continuu în $[0, 1]$ care determină gradul de potrivire dintre profilul utilizatorului și un obiectiv dat. Modelul însumează 1.281 de parametri, acest număr mic de parametri fiind ales deliberat pentru a menține costul computațional redus pe dispozitiv. Acesta rulează atât în antrenare, cât și la fiecare deschidere a fișei unui obiectiv.
+Modelul folosit pentru personalizarea din cadrul aplicației este un MLP cu arhitectura 22 -> 32 -> 16 -> 1, model ilustrat în \textbf{figura~\ref{fig:mlp}}, în care se descrie faptul că straturile ascunse folosesc funcția de activare ReLU, pe când stratul de ieșire aplică funcția sigmoid, producând un scor continuu în $[0, 1]$ care determină gradul de potrivire dintre profilul utilizatorului și un obiectiv dat. Modelul însumează 1.281 de parametri, acest număr mic de parametri fiind ales deliberat pentru a menține costul computațional redus pe dispozitiv. Acesta rulează atât în antrenare, cât și la fiecare deschidere a fișei unui obiectiv.
 
 Vectorul de intrare de 22 de dimensiuni grupează caracteristicile în patru categorii, iar fiecare caracteristică este detaliată în \textbf{tabelul~\ref{tab:features}}. Primele 14 dimensiuni codifică profilul de interese al utilizatorului și tipul obiectivului în format \textit{one-hot}. Contextul temporal (dimensiunile 14-16) stabilește disponibilitatea obiectivului la momentul interogării, dacă la momentul actual este weekend și mai include ora normalizată la $[0, 1]$. Contextul spațial și de rută (dimensiunile 17-21) includ rangul relativ de distanță față de alte posibile obiective care pot fi alese pentru rută, scorul de potrivire a intereselor și trei caracteristici care sunt active doar în etapa de generare a rutelor.
 
@@ -898,13 +898,47 @@ Implementarea componentelor descrise în acest capitol a adus mai multe provocă
 
 \chapter{Evaluare}
 
-% TODO: paragraf de prezentare a capitolului
+Capitolul 6 evaluează CultureQuest pe patru planuri principale. Primul este corectitudinea funcțională care verifică dacă tot ce s-a promis în Capitolul 2 se regăsește și în implementare. Al doilea este performanța modelului FL care examinează ce rezultate au reieșit din etapa de pre-antrenare și, ulterior, din cea a simulării FL. Al treilea este evaluarea confidențialității, robusteții și scalabilității, măsurând efectele mecanismelor de confidențialitate și capacitatea \textit{backend-ului} de a gestiona mai multe actualizări în același timp. Ultimul plan este reprezentat de analiza comparativă, poziționând soluția față de alternativele identificate în Capitolul 3.
 
 \section{Corectitudinea funcțională}
 
+Trecând la primul plan, am verificat corectitudinea funcțională printr-un demo care parcurge fluxurile principale ale aplicației, iar fiecare funcționalitate este corelată cu cerința corespunzătoare din \textbf{tabelul~\ref{tab:cerinte-functionale}}. Demo-ul verifică: afișarea obiectivelor din proximitate pe hartă (FR-1), generarea de rute personalizate prin combinarea scorului modelului MLP cu distanța (FR-2), activarea \textit{quest-urilor} la apropierea de un obiectiv și acordarea de puncte la completare (FR-3), trimiterea și vizualizarea recenziilor (FR-4), antrenarea locală FL fără transmiterea datelor brute către server (FR-5), mecanismul DP (FR-6) și fluxul de aprobare a conținutului propus de turiști (FR-7).
+
+Câteva capturi de ecran reprezentative sunt prezentate în \textbf{figura~\ref{fig:fr-demo}}, putându-se observa că toate cerințele funcționale au fost implementate. Obiectivele apar pe hartă în raza de 200 de metri față de poziția curentă. Rutele generate diferă în funcție de interesele utilizatorului setate în secțiunea de profil și de momentul de timp. \textit{Quest-urile} devin active sub 100 de metri față de obiectiv. Recenziile trimise sunt vizibile tuturor utilizatorilor, cu excepția celor \textit{flagged} de către sistemul de moderare. Profilul utilizatorului oferă vizibilitate directă asupra stării procesului FL local. Funcționarea în modul offline a fost confirmată prin accesul la obiectivele din \textit{cache} în absența unei conexiuni stabile. Nu în ultimul rând, fluxul de administrator permite aprobarea sau respingerea obiectivelor, poveștilor și \textit{quest-urilor} propuse.
+
 \section{Performanța modelului de învățare federată}
 
+Această secțiune analizează performanța componentei de ML în două etape. Prima examinează rezultatele etapei de pre-antrenare, comparând performanța modelului MLP înainte și după aplicarea tehnicii de \textit{fine-tuning}, iar a doua prezintă rezultatele simulării FL pe 600 de runde, urmărind evoluția funcției de pierdere și efectul \textit{staleness discount-ului} asupra convergenței.
+
 \subsection{Rezultatele etapei de pre-antrenare}
+
+Modelul MLP - de mărime 22 -> 32 -> 16 -> 1, cu 1.281 de parametri - a fost pre-antrenat pe 741.618 de înregistrări din cinci surse de date, iar antrenarea a rulat 60 de epoci fără \textit{overfitting} (MSE\textsubscript{train} = 0,0232; MSE\textsubscript{val} = 0,0233). Totuși, rata de scădere a funcției de pierdere a stagnat rapid din cauza descreșterii severe a ratei de învățare, conducând la un interval de predicție pentru scorurile de \textit{engagement} restrâns la [0,595; 0,850], cu $R^2 \approx 0{,}022$.
+
+În etapa de \textit{fine-tuning} am adăugat în setul de antrenare 16.000 de exemple sintetice cu \texttt{isOpen=0}, dar s-a apelat și la suprareprezentarea de trei ori a înregistrărilor cu eticheta $\leq$0,40, ceea ce a rezultat într-un interval de predicție crescut de la 0,255 la 0,792 (+211\%). MSE pe validare a crescut de la 0,0233 la 0,0269, însă această creștere este legată de faptul că setul de validare nu conține înregistrări cu etichete mici. Comparația completă este prezentată în \textbf{tabelul~\ref{tab:finetune-comparison}}.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\caption{Comparație metrici înainte și după \textit{fine-tuning}.}
+\label{tab:finetune-comparison}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Metrică} & \textbf{Înainte de \textit{fine-tuning}} & \textbf{După \textit{fine-tuning}} \\
+\hline
+MSE (validare)     & 0,0233 & 0,0269 \\
+\hline
+RMSE (validare)    & 0,153  & 0,164  \\
+\hline
+Predicție minimă   & 0,595  & 0,050  \\
+\hline
+Predicție maximă   & 0,850  & 0,841  \\
+\hline
+Interval predicții & 0,255  & 0,792  \\
+\hline
+Medie predicții    & 0,738  & 0,702  \\
+\hline
+\end{tabular}
+\end{table}
 
 \subsection{Rezultatele simulării procesului de învățare federată}
 
@@ -1106,6 +1140,25 @@ DELETE & \texttt{/comments/admin/\{id\}} & Ștergere recenzie & A \\
 \hline
 \end{longtable}
 }
+
+\begin{figure}[h]
+    \centering
+    \subfloat[Obiective pe hartă (FR-1)]{\includegraphics[width=0.3\linewidth]{pics/FR1.png}}
+    \hfill
+    \subfloat[Rută personalizată (FR-2)]{\includegraphics[width=0.3\linewidth]{pics/FR2.png}}
+    \hfill
+    \subfloat[Misiune activă și puncte (FR-3)]{\includegraphics[width=0.3\linewidth]{pics/FR3.png}}
+
+    \vspace{0.5em}
+
+    \subfloat[Recenzii (FR-4)]{\includegraphics[width=0.3\linewidth]{pics/FR4.png}}
+    \hfill
+    \subfloat[Secțiune profil (FR-5)]{\includegraphics[width=0.3\linewidth]{pics/FR5.png}}
+    \hfill
+    \subfloat[Panou administrator (FR-7)]{\includegraphics[width=0.3\linewidth]{pics/FR7.png}}
+    \caption{Verificarea cerințelor funcționale FR-1 până la FR-7.}
+    \label{fig:fr-demo}
+\end{figure}
 
 \chapter{Extrase de Cod} % Introduce o nouă anexă
 
