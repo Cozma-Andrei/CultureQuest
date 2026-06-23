@@ -417,18 +417,20 @@ restul fragmentelor rămân referințe `fișier:linii` sau merg în Anexe.
     (4.5) și categoria de potrivire afișată pe fișa obiectivului (4.4.1).
 - **7.2 Direcții de cercetare și lucrări viitoare** - 6 direcții, ca listă
   cu bullet-uri:
-  1. Impactul asupra bateriei al antrenamentului local (5 epoci SGD) - nu a
-     fost măsurat, limitare a simulării pe server; măsurabil pe device real
-     cu Battery Historian.
-  2. "Personal head" per utilizator (FedPer, Arivazhagan et al. 2019) - straturi
+  1. Înlocuirea lock-ului Redis cu o coadă de lucru (Redis Queue, Celery) pentru
+     agregarea FL - testul de scalabilitate arată degradare la 20 de cereri
+     simultane din cauza timpului lung de deținere a lock-ului (read-aggregate-write
+     pe CPU); o coadă elimină lock-ul din calea cererilor HTTP și permite
+     agregarea batch-urilor periodic, fără timeout.
+  2. Colectare de date FL de la utilizatori reali la scară mare.
+  3. "Personal head" per utilizator (FedPer, Arivazhagan et al. 2019) - straturi
      de personalizare locale care nu sunt niciodată trimise la server.
-  3. Agregare cu buffer (FedBuff, Nguyen et al. 2022) - cale de mijloc între
+  4. Agregare cu buffer (FedBuff, Nguyen et al. 2022) - cale de mijloc între
      FedAvg sincron și varianta complet asincronă; relevantă dacă baza de
      utilizatori crește suficient (la participare rară, bufferul riscă să nu
      se umple).
-  4. Postarea de poze pentru obiective - extensie a sistemului de
+  5. Postarea de poze pentru obiective - extensie a sistemului de
      recenzii/moderare (5.2.3).
-  5. Colectare de date FL de la utilizatori reali la scară mare.
   6. Integrarea popularității obiectivelor (număr de vizite agregat) ca semnal
      suplimentar în scorul de candidați din 4.5 - în prezent scorul combină
      doar FL și proximitate, fără a ține cont de cât de frecventat este un
@@ -500,7 +502,7 @@ ocupă mai mult de o pagină și ar întrerupe firul textului dacă ar fi inline
   din `pics/`)
   - `weight_drift.png`, `per_staleness_loss_delta.png`, `probe_scores.png`,
     `contextual_probes.png` - secundare față de cele 3 figuri principale din
-    6.2.2. X
+    6.2.2.
   - `dataset_overview.png`, `label_by_type.png`, `train_val_split.png` - cele
     neincluse inline în 5.3.
 - **Capturi de ecran suplimentare**
