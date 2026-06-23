@@ -904,7 +904,7 @@ Capitolul 6 evaluează CultureQuest pe patru planuri principale. Primul este cor
 
 Trecând la primul plan, am verificat corectitudinea funcțională printr-un demo care parcurge fluxurile principale ale aplicației, iar fiecare funcționalitate este corelată cu cerința corespunzătoare din \textbf{tabelul~\ref{tab:cerinte-functionale}}. Demo-ul verifică: afișarea obiectivelor din proximitate pe hartă (FR-1), generarea de rute personalizate prin combinarea scorului modelului MLP cu distanța (FR-2), activarea \textit{quest-urilor} la apropierea de un obiectiv și acordarea de puncte la completare (FR-3), trimiterea și vizualizarea recenziilor (FR-4), antrenarea locală FL fără transmiterea datelor brute către server (FR-5), mecanismul DP (FR-6) și fluxul de aprobare a conținutului propus de turiști (FR-7).
 
-Câteva capturi de ecran reprezentative sunt prezentate în \textbf{figura~\ref{fig:fr-demo}}, putându-se observa că toate cerințele funcționale au fost implementate: obiectivele apar pe hartă în raza de 200 de metri față de poziția curentă, rutele generate diferă în funcție de interesele utilizatorului setate în secțiunea de profil și de momentul de timp, iar \textit{quest-urile} devin active sub 100 de metri față de obiectiv. Recenziile trimise sunt vizibile tuturor utilizatorilor, cu excepția celor \textit{flagged} de către sistemul de moderare, iar profilul utilizatorului oferă vizibilitate directă asupra stării procesului FL local. Mai mult, funcționarea în modul offline a fost confirmată prin accesul la obiectivele din \textit{cache} în absența unei conexiuni stabile, iar fluxul de administrator permite aprobarea sau respingerea obiectivelor, poveștilor și \textit{quest-urilor} propuse.
+Câteva capturi de ecran reprezentative sunt prezentate în \textbf{figura~\ref{fig:fr-demo}}, putându-se observa că toate cerințele funcționale au fost implementate: obiectivele de pe hartă din raza de 1500 de metri față de poziția curentă apar în lista de locații din apropiere, rutele generate diferă în funcție de interesele utilizatorului setate în secțiunea de profil și de momentul de timp, iar \textit{quest-urile} devin active sub 100 de metri față de obiectiv. Recenziile trimise sunt vizibile tuturor utilizatorilor, cu excepția celor \textit{flagged} de către sistemul de moderare, iar profilul utilizatorului oferă vizibilitate directă asupra stării procesului FL local. Mai mult, funcționarea în modul offline a fost confirmată prin accesul la obiectivele din \textit{cache} în absența unei conexiuni stabile, iar fluxul de administrator permite aprobarea sau respingerea obiectivelor, poveștilor și \textit{quest-urilor} propuse.
 
 \section{Performanța modelului de învățare federată}
 
@@ -1018,11 +1018,30 @@ Evaluarea prezentată în acest capitol a trecut prin dimensiunile relevante pen
 
 \chapter{Concluzii}
 
-% TODO: paragraf de prezentare a capitolului
+Acest capitol se întoarce la cele trei obiective enunțate în primul capitol din perspectiva a ceea ce a fost conceput și implementat efectiv, schițându-se, în final, și direcțiile în care platforma poate fi extinsă.
 
 \section{Concluzii generale}
 
+Primul obiectiv a urmărit implementarea unei aplicații mobile care să îmbine explorarea culturală cu proximitatea față de obiectivele turistice, cu gamificarea vizitelor, și cu recomandarea personalizată a rutelor turistice. Demo-ul realizat pentru verificarea corectitudinii funcționale confirmă că toate cele șapte cerințe funcționale au fost implementate. Obiectivele apar în lista de locații din apropiere în raza de 1500 de metri față de poziția curentă a utilizatorului, rutele sunt generate personalizat, iar \textit{quest-urile} se activează la apropierea de un obiectiv. Recenziile și fluxul de moderare funcționează, iar antrenarea locală se desfășoară fără ca datele să fie transmise către server.
+
+Al doilea obiectiv a vizat personalizarea recomandărilor în ceea ce privește rutele turistice, fără a expune istoricul de interacțiuni al utilizatorului. Soluția menține pe dispozitiv un model MLP mic cu 1.281 de parametri, al cărui scor per obiectiv generează atât categoria de potrivire pentru utilizator, afișată pe fișa obiectivului (categoriile \textit{low}/\textit{medium}/\textit{high}), cât și ruta generată prin combinarea scorului cu proximitatea geografică. Latența de inferență de 38,86 µs per predicție confirmă că personalizarea poate rula continuu pe dispozitiv fără un impact perceptibil asupra UX (\textit{User Experience}).
+
+Al treilea și ultimul obiectiv a acoperit întregul flux FL, de la pre-antrenare la confidențialitate sporită pentru prevenirea atacurilor de inferență. Modelul global a fost pre-antrenat pe 741.618 de înregistrări, iar etapa de \textit{fine-tuning} a mărit intervalul de predicție cu 211\%, de la [0,595; 0,850] la [0,050; 0,841]. Se permite, astfel, distincția dintre obiectivele potrivite și cele nepotrivite pentru un anumit utilizator, în funcție de interese, zi și oră, și obiectivele din apropiere. Simularea de 600 de runde cu 10.000 de clienți sintetici a confirmat că agregarea asincronă cu discount de vechime reduce pierderea BCE cu 30,87\%, față de 27,18\% în varianta fără discount, iar mecanismul de confidențialitate (cu parametrii: $\sigma = 0{,}1$, L2 $\leq1$ pe client, $\tau = 1$ pe server) nu degradează semnificativ convergența modelului global.
+
 \section{Direcții de cercetare și lucrări viitoare}
+
+Dincolo de rezultatele obținute, implementarea curentă deschide și câteva direcții în care platforma poate fi extinsă sau îmbunătățită (direcții conturate de-a lungul procesului de proiectare și evaluare):
+
+\begin{itemize}
+  \item Înlocuirea \textit{lock-ului} Redis cu o coadă de lucru (Redis Queue sau Celery) pentru agregarea FL. Testul de scalabilitate a arătat că la 20 de cereri simultane, 8 actualizări sunt respinse din cauza timpului lung de deținere a \textit{lock-ului}. O coadă ar elimina \textit{lock-ul} din calea cererilor HTTP și ar permite procesarea actualizărilor periodic, fără risc de \textit{timeout}.
+  \item Colectarea de actualizări FL de la utilizatori reali, la scară mai mare, pentru a valida comportamentul sistemului în condiții de producție și a reduce dependența de clienții sintetici folosiți în simulare.
+  \item Personalizare suplimentară prin straturi locale per utilizator (FedPer \cite{arivazhagan2019fedper}), care nu sunt niciodată trimise la server, aducând un grad mai fin de adaptare individuală fără cost suplimentar de confidențialitate.
+  \item Agregare cu buffer (FedBuff \cite{nguyen2022fedbuff}), ca variantă de mijloc între FedAvg sincron și varianta complet asincronă. Este relevantă dacă baza de utilizatori crește suficient, deoarece la o participare rară bufferul riscă să nu se umple.
+  \item Postarea de fotografii pentru obiective, ca prelungire naturală a sistemului de recenzii și moderare deja existent.
+  \item Integrarea popularității obiectivelor (numărul agregat de vizite) ca semnal în plus la scorul candidaților (obiectivelor turistice) la generarea rutei.
+\end{itemize}
+
+Per ansamblu, CultureQuest demonstrează că personalizarea bazată pe FL și confidențialitatea datelor utilizatorului nu se exclud reciproc, chiar și în limitele unui proiect academic. Direcțiile enumerate mai sus nu reprezintă neapărat limitări ale soluției actuale, ci puncte de plecare firești spre un produs mai matur, capabil să deservească o bază reală de utilizatori.
 
 \clearpage
 \phantomsection
