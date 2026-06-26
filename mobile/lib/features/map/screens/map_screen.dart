@@ -18,11 +18,24 @@ import '../../../shared/models/landmark_model.dart';
 import '../../../shared/models/route_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../proximity/providers/proximity_provider.dart';
+import '../../proximity/services/proximity_service.dart';
 import '../../../shared/models/event_model.dart';
 import '../../../shared/models/comment_model.dart';
 import '../../../core/services/local_data_service.dart';
 import '../../../core/providers/visited_provider.dart';
 import '../../federated/providers/fl_provider.dart';
+
+/// Returns (visitOrder, routeLength) for FL encoding.
+/// Uses insertion-ordered visit history so the order is stable across multiple quests:
+/// X visited first → always 1, even after visiting Y and returning to X.
+(int, int) _routeVisitContext(RouteModel? route, List<String> visitedOrdered, String landmarkId) {
+  if (route == null) return (0, 0);
+  final routeIds = route.stops.map((s) => s.landmark.id).toSet();
+  final routeVisits = visitedOrdered.where((id) => routeIds.contains(id)).toList();
+  final existingIndex = routeVisits.indexOf(landmarkId);
+  if (existingIndex >= 0) return (existingIndex + 1, route.stops.length);
+  return (routeVisits.length + 1, route.stops.length);
+}
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -47,8 +60,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   int? _routeDurationSec;      // seconds from OSRM for route overview
   int? _routeDistanceM;        // metres from OSRM for route overview
   bool _headingUp = false;
+  bool _includeVisitedInOverview = false;
   StreamSubscription<CompassEvent>? _compassSub;
   double _lastCompassHeading = 0;
+  ProximityService? _proximityService;
   // Location picker state
   bool _pickingLocation = false;
   LatLng? _pickedLocation;
@@ -60,6 +75,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _sheetController.addListener(() => setState(() {}));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startProximityService());
     // Magnetometer compass - rotates map even when stationary
     _compassSub = FlutterCompass.events?.listen((event) {
       if (!mounted || !_headingUp) return;
@@ -77,14 +93,47 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   @override
   void dispose() {
     _compassSub?.cancel();
+    _proximityService?.stop();
     _tabController.dispose();
     _sheetController.dispose();
     super.dispose();
   }
 
+  Future<void> _startProximityService() async {
+    _proximityService = ProximityService();
+    await _proximityService!.start(
+      fetchNearbyLandmarks: (lat, lng) async {
+        final all = ref.read(mapProvider).allLandmarks;
+        return all
+            .where((l) {
+              final d = Geolocator.distanceBetween(lat, lng, l.location.lat, l.location.lng);
+              return d <= 1500;
+            })
+            .map<LandmarkPin>((l) => (
+                  id: l.id,
+                  lat: l.location.lat,
+                  lng: l.location.lng,
+                  radiusM: 100.0,
+                ))
+            .toList();
+      },
+      onEnter: (landmarkId) {
+        if (!mounted) return;
+        ref.read(proximityProvider.notifier).enterById(landmarkId);
+      },
+      onExit: (landmarkId) {
+        if (!mounted) return;
+        if (ref.read(proximityProvider).nearbyLandmark?.id == landmarkId) {
+          ref.read(proximityProvider.notifier).dismiss();
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final mapState = ref.watch(mapProvider);
+    final nearbyLandmarkId = ref.watch(proximityProvider).nearbyLandmark?.id;
     final theme = Theme.of(context);
 
     ref.listen<MapState>(mapProvider, (prev, next) {
@@ -119,12 +168,17 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       }
     });
 
-    ref.listen(proximityProvider, (prev, next) {
-      final landmark = next.nearbyLandmark;
-      if (landmark != null && prev?.nearbyLandmark?.id != landmark.id) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _showProximitySheet(landmark);
-        });
+    ref.listen(
+      mapProvider.select((s) => s.allLandmarks),
+      (prev, next) {
+        if (next.isNotEmpty) _proximityService?.refreshNow();
+      },
+    );
+
+    ref.listen(visitedProvider, (prev, next) {
+      final pr = ref.read(mapProvider).activeProgressRoute;
+      if (pr != null && prev != null && prev.length != next.length) {
+        _fetchRouteOverview(pr);
       }
     });
 
@@ -206,6 +260,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   _showCommunityReview();
                 },
               ),
+              if (authState.user != null)
+                ListTile(
+                  leading: const Icon(Icons.store_outlined),
+                  title: const Text('My Landmarks'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showMyLandmarks();
+                  },
+                ),
               if (authState.user?.isAdmin == true) ...[
                 ListTile(
                   leading: const Icon(Icons.add_road),
@@ -300,7 +363,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                       ? mapState.activeRoute!.stops.asMap().entries
                           .map((e) => _buildGeneratedStopMarker(e.value.landmark, e.key + 1))
                           .toList()
-                      : mapLandmarks.map((l) => _buildLandmarkMarker(l)).toList(),
+                      : mapLandmarks.map((l) => _buildLandmarkMarker(l, isNearby: l.id == nearbyLandmarkId)).toList(),
                 ),
               // Progress route stop markers
               if (progressRoute != null)
@@ -591,6 +654,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   setState(() => _headingUp = !_headingUp);
                   if (_headingUp) _applyHeadingNow(); else _mapController.rotate(0);
                 },
+                includeVisitedInOverview: _includeVisitedInOverview,
+                onToggleIncludeVisited: () {
+                  setState(() => _includeVisitedInOverview = !_includeVisitedInOverview);
+                  final pr = ref.read(mapProvider).activeProgressRoute;
+                  if (pr != null) _fetchRouteOverview(pr);
+                },
               ),
             ),
         ],
@@ -714,11 +783,20 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         ),
       );
 
-  Marker _buildLandmarkMarker(LandmarkModel l) {
+  Marker _buildLandmarkMarker(LandmarkModel l, {bool isNearby = false}) {
     final isNav = _navTarget?.id == l.id;
     final isSelected = _selectedLandmarkId == l.id;
-    final size = isNav ? 44.0 : isSelected ? 46.0 : 36.0;
+    final size = isNav ? 44.0 : isSelected ? 46.0 : isNearby ? 42.0 : 36.0;
     final color = isNav ? Colors.green.shade600 : _colorForType(l.type);
+    final borderColor = isNearby && !isNav ? Colors.amber.shade400 : Colors.white;
+    final double borderWidth = isSelected ? 3.5 : (isNav ? 3.0 : isNearby ? 3.0 : 2.0);
+    final shadow = isSelected
+        ? BoxShadow(color: color.withOpacity(0.6), blurRadius: 14, spreadRadius: 4)
+        : isNav
+            ? BoxShadow(color: Colors.green.withOpacity(0.45), blurRadius: 10, spreadRadius: 3)
+            : isNearby
+                ? BoxShadow(color: Colors.amber.withOpacity(0.6), blurRadius: 12, spreadRadius: 3)
+                : const BoxShadow(color: Colors.black26, blurRadius: 4);
     return Marker(
       point: LatLng(l.location.lat, l.location.lng),
       width: size,
@@ -729,19 +807,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
           decoration: BoxDecoration(
             color: color,
             shape: BoxShape.circle,
-            border: Border.all(
-              color: isSelected ? Colors.white : Colors.white,
-              width: isSelected ? 3.5 : (isNav ? 3 : 2),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isSelected
-                    ? color.withOpacity(0.6)
-                    : isNav ? Colors.green.withOpacity(0.45) : Colors.black26,
-                blurRadius: isSelected ? 14 : (isNav ? 10 : 4),
-                spreadRadius: isSelected ? 4 : (isNav ? 3 : 0),
-              ),
-            ],
+            border: Border.all(color: borderColor, width: borderWidth),
+            boxShadow: [shadow],
           ),
           child: Icon(_iconForType(l.type), color: Colors.white,
               size: isNav ? 22 : isSelected ? 24 : 18),
@@ -912,18 +979,25 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
   }
 
   Future<void> _fetchRouteOverview(RouteWithProgress route) async {
-    if (route.stops.isEmpty || _navMode == 'transit') return;
+    if (_navMode == 'transit') return;
     final pos = ref.read(mapProvider).position;
+    final visitedIds = ref.read(localDataProvider).getVisitedIds();
+    final remaining = _includeVisitedInOverview
+        ? route.stops.toList()
+        : route.stops.where((s) => !visitedIds.contains(s.landmark.id)).toList();
+    if (remaining.isEmpty) {
+      if (mounted) setState(() { _overviewPolyline = []; _routeDurationSec = 0; _routeDistanceM = 0; });
+      return;
+    }
     try {
-      final stopPoints = route.stops
+      final stopPoints = remaining
           .map((s) => '${s.landmark.location.lng},${s.landmark.location.lat}')
           .join(';');
-      // Prepend user's current location so the line starts from where they are
       final waypoints = pos != null
           ? '${pos.longitude},${pos.latitude};$stopPoints'
           : stopPoints;
       final res = await Dio().get(
-        _osrmUrl(_navMode, waypoints), // respects current walk/drive mode
+        _osrmUrl(_navMode, waypoints),
         queryParameters: {'overview': 'full', 'geometries': 'geojson'},
       );
       final osrmRoute = res.data['routes'][0];
@@ -940,12 +1014,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
         });
       }
     } catch (_) {
-      // Straight-line fallback from user position through all stops
       if (mounted) {
         setState(() {
           _overviewPolyline = [
             if (pos != null) LatLng(pos.latitude, pos.longitude),
-            ...route.stops.map((s) => LatLng(s.landmark.location.lat, s.landmark.location.lng)),
+            ...remaining.map((s) => LatLng(s.landmark.location.lat, s.landmark.location.lng)),
           ];
         });
       }
@@ -1112,6 +1185,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
     );
   }
 
+  void _showMyLandmarks() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _MyLandmarksSheet(),
+    );
+  }
+
   void _showPendingSubmissions() {
     showModalBottomSheet(
       context: context,
@@ -1246,6 +1328,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
 
   void _showGenerateRouteSheet() {
     double tiebreakerM = 200.0;
+    bool includeVisited = false;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1289,13 +1372,27 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                   textAlign: TextAlign.center,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Expanded(child: Text('Include already-visited landmarks', style: TextStyle(fontSize: 13))),
+                  Switch.adaptive(
+                    value: includeVisited,
+                    onChanged: (v) => setS(() => includeVisited = v),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    ref.read(mapProvider.notifier).generateRoute(flTiebreakerM: tiebreakerM);
+                    final visitedIds = ref.read(localDataProvider).getVisitedIds();
+                    ref.read(mapProvider.notifier).generateRoute(
+                      flTiebreakerM: tiebreakerM,
+                      excludeIds: includeVisited ? const [] : visitedIds.toList(),
+                    );
                   },
                   child: const Text('Generate'),
                 ),
@@ -2013,9 +2110,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
                               l.location.lat, l.location.lng,
                             ) <=
                             100.0;
+                    final activeRoute = ref.read(mapProvider).activeRoute;
+                    final isPartOfRoute = activeRoute?.stops.any((s) => s.landmark.id == l.id) ?? false;
+                    final (visitOrder, routeLen) = _routeVisitContext(activeRoute, ref.read(localDataProvider).getVisitedIdsOrdered(), l.id);
                     // Don't close sheet - quest route slides on top; sheet resurfaces on pop
                     await context.push('/quests/${l.id}',
-                        extra: {'name': l.name, 'type': l.type, 'categories': l.categories, 'isNearby': isNearby});
+                        extra: {'name': l.name, 'type': l.type, 'categories': l.categories, 'isNearby': isNearby, 'isPartOfRoute': isPartOfRoute, 'routeStopIndex': visitOrder, 'routeLength': routeLen});
                     // Refresh so visitedByMe updates in the sheet that's still open
                     if (mounted) await ref.read(mapProvider.notifier).fetchAllLandmarks();
                   },
@@ -2209,8 +2309,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
               Expanded(
                 child: FilledButton.icon(
                   onPressed: () async {
+                    final activeRoute = ref.read(mapProvider).activeRoute;
+                    final isPartOfRoute = activeRoute?.stops.any((s) => s.landmark.id == l.id) ?? false;
+                    final (visitOrder, routeLen) = _routeVisitContext(activeRoute, ref.read(localDataProvider).getVisitedIdsOrdered(), l.id);
                     await context.push('/quests/${l.id}',
-                        extra: {'name': l.name, 'type': l.type, 'isNearby': true});
+                        extra: {'name': l.name, 'type': l.type, 'isNearby': true, 'isPartOfRoute': isPartOfRoute, 'routeStopIndex': visitOrder, 'routeLength': routeLen});
                     if (mounted) await ref.read(mapProvider.notifier).fetchAllLandmarks();
                   },
                   icon: const Icon(Icons.task_alt_outlined, size: 18),
@@ -2288,6 +2391,8 @@ class _BottomPanel extends ConsumerStatefulWidget {
   final Future<void> Function(double lat, double lng, String mode) openInMaps;
   final bool headingUp;
   final VoidCallback onHeadingUpToggle;
+  final bool includeVisitedInOverview;
+  final VoidCallback onToggleIncludeVisited;
 
   const _BottomPanel({
     required this.scrollController,
@@ -2304,6 +2409,8 @@ class _BottomPanel extends ConsumerStatefulWidget {
     required this.openInMaps,
     required this.headingUp,
     required this.onHeadingUpToggle,
+    required this.includeVisitedInOverview,
+    required this.onToggleIncludeVisited,
   });
 
   @override
@@ -2345,6 +2452,13 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
     _searchDebounce = Timer(const Duration(milliseconds: 250), () {
       if (mounted) setState(() => _searchQuery = v.trim());
     });
+  }
+
+  bool _hasNearbyLandmarks(MapState s) {
+    final pos = s.position;
+    if (pos == null || s.allLandmarks.isEmpty) return false;
+    return s.allLandmarks.any((l) =>
+        Geolocator.distanceBetween(pos.latitude, pos.longitude, l.location.lat, l.location.lng) <= 10000);
   }
 
   @override
@@ -2392,6 +2506,21 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
                   distanceM: widget.routeDistanceM,
                   headingUp: widget.headingUp,
                   onHeadingUpToggle: widget.onHeadingUpToggle,
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                  child: Row(
+                    children: [
+                      const Text('Include visited stops in route line', style: TextStyle(fontSize: 13)),
+                      const Spacer(),
+                      Switch.adaptive(
+                        value: widget.includeVisitedInOverview,
+                        onChanged: (_) => widget.onToggleIncludeVisited(),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SliverToBoxAdapter(child: Divider(height: 1)),
@@ -2447,31 +2576,58 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
               const SliverToBoxAdapter(child: Divider(height: 16)),
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(20, 0, 20, 24 + bottomInset),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (ctx, i) {
-                      final stop = mapState.activeRoute!.stops[i];
-                      return _RouteStopTile(
-                        index: i + 1,
-                        stop: stop,
-                        visited: visitedIds.contains(stop.landmark.id),
-                        onDelete: () {
-                          if (mapState.activeRoute!.stops.length <= 2) {
-                            ScaffoldMessenger.of(context)
-                              ..clearSnackBars()
-                              ..showSnackBar(const SnackBar(
-                                content: Text('A route needs at least 2 stops'),
-                                behavior: SnackBarBehavior.floating,
-                              ));
-                            return;
-                          }
-                          ref.read(mapProvider.notifier).removeStopFromActiveRoute(stop.landmark.id);
-                        },
-                      );
+                sliver: Builder(builder: (ctx) {
+                  final stops = mapState.activeRoute!.stops;
+                  final anyVisited = stops.any((s) => visitedIds.contains(s.landmark.id));
+                  Widget buildTile(int i, {bool draggable = false}) {
+                    final stop = stops[i];
+                    return _RouteStopTile(
+                      key: ValueKey(stop.landmark.id),
+                      index: i + 1,
+                      stop: stop,
+                      visited: visitedIds.contains(stop.landmark.id),
+                      dragIndex: draggable ? i : null,
+                      onTap: () => widget.onLandmarkTap(stop.landmark),
+                      onDelete: () {
+                        if (stops.length <= 2) {
+                          ScaffoldMessenger.of(context)
+                            ..clearSnackBars()
+                            ..showSnackBar(const SnackBar(
+                              content: Text('A route needs at least 2 stops'),
+                              behavior: SnackBarBehavior.floating,
+                            ));
+                          return;
+                        }
+                        ref.read(mapProvider.notifier).removeStopFromActiveRoute(stop.landmark.id);
+                      },
+                    );
+                  }
+                  if (anyVisited) {
+                    return SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (ctx, i) => buildTile(i),
+                        childCount: stops.length,
+                      ),
+                    );
+                  }
+                  return SliverReorderableList(
+                    itemCount: stops.length,
+                    proxyDecorator: (child, index, animation) => Material(
+                      elevation: 4,
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      child: child,
+                    ),
+                    onReorder: (oldIndex, newIndex) {
+                      if (newIndex > oldIndex) newIndex -= 1;
+                      ref.read(mapProvider.notifier).reorderActiveRouteStops(oldIndex, newIndex);
                     },
-                    childCount: mapState.activeRoute!.stops.length,
-                  ),
-                ),
+                    itemBuilder: (ctx, i) => KeyedSubtree(
+                      key: ValueKey(stops[i].landmark.id),
+                      child: buildTile(i, draggable: true),
+                    ),
+                  );
+                }),
               ),
             ] else ...[
               SliverToBoxAdapter(
@@ -2608,8 +2764,13 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => context.push('/quests/${l.id}',
-                    extra: {'name': l.name, 'type': l.type, 'isNearby': false}),
+                onPressed: () {
+                  final activeRoute = ref.read(mapProvider).activeRoute;
+                  final isPartOfRoute = activeRoute?.stops.any((s) => s.landmark.id == l.id) ?? false;
+                  final (visitOrder, routeLen) = _routeVisitContext(activeRoute, ref.read(localDataProvider).getVisitedIdsOrdered(), l.id);
+                  context.push('/quests/${l.id}',
+                      extra: {'name': l.name, 'type': l.type, 'isNearby': false, 'isPartOfRoute': isPartOfRoute, 'routeStopIndex': visitOrder, 'routeLength': routeLen});
+                },
                 icon: const Icon(Icons.task_alt_outlined, size: 18),
                 label: const Text('View Quests'),
               ),
@@ -2665,7 +2826,7 @@ class _BottomPanelState extends ConsumerState<_BottomPanel> {
               ),
               const SizedBox(width: 4),
               FilledButton.icon(
-                onPressed: mapState.isGeneratingRoute || mapState.landmarks.isEmpty
+                onPressed: mapState.isGeneratingRoute || !_hasNearbyLandmarks(mapState)
                     ? null
                     : widget.onGenerateRoute,
                 icon: mapState.isGeneratingRoute
@@ -3114,16 +3275,37 @@ class _RouteStopTile extends StatelessWidget {
   final RouteStop stop;
   final bool visited;
   final VoidCallback? onDelete;
+  final VoidCallback? onTap;
+  final int? dragIndex;
 
-  const _RouteStopTile({required this.index, required this.stop, this.visited = false, this.onDelete});
+  const _RouteStopTile({
+    super.key,
+    required this.index,
+    required this.stop,
+    this.visited = false,
+    this.onDelete,
+    this.onTap,
+    this.dragIndex,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
+    final row = InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
+          if (dragIndex != null)
+            ReorderableDragStartListener(
+              index: dragIndex!,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(Icons.drag_handle, size: 18, color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ),
           Container(
             width: 28, height: 28,
             decoration: BoxDecoration(
@@ -3161,7 +3343,9 @@ class _RouteStopTile extends StatelessWidget {
             ),
         ],
       ),
+      ),
     );
+    return row;
   }
 }
 
@@ -5036,6 +5220,145 @@ class _StarRatingRowState extends State<_StarRatingRow> {
           ]),
         ],
       ],
+    );
+  }
+}
+
+class _MyLandmarksSheet extends ConsumerStatefulWidget {
+  const _MyLandmarksSheet();
+  @override
+  ConsumerState<_MyLandmarksSheet> createState() => _MyLandmarksSheetState();
+}
+
+class _MyLandmarksSheetState extends ConsumerState<_MyLandmarksSheet>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tab;
+  List<Map<String, dynamic>> _quests = [];
+  List<Map<String, dynamic>> _stories = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 2, vsync: this);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    List<Map<String, dynamic>> quests = [], stories = [];
+    try {
+      final r = await ref.read(apiServiceProvider).get('/quests/owner/pending');
+      quests = List<Map<String, dynamic>>.from(r.data as List);
+    } catch (_) {}
+    try {
+      final r = await ref.read(apiServiceProvider).get('/landmarks/owner/pending-stories');
+      stories = List<Map<String, dynamic>>.from(r.data as List);
+    } catch (_) {}
+    if (mounted) setState(() { _quests = quests; _stories = stories; _loading = false; });
+  }
+
+  Future<void> _approveQuest(String id) async {
+    await ref.read(apiServiceProvider).post('/quests/admin/$id/approve');
+    setState(() => _quests.removeWhere((q) => q['id'] == id));
+  }
+
+  Future<void> _rejectQuest(String id) async {
+    await ref.read(apiServiceProvider).post('/quests/admin/$id/reject');
+    setState(() => _quests.removeWhere((q) => q['id'] == id));
+  }
+
+  Future<void> _approveStory(String id) async {
+    await ref.read(apiServiceProvider).post('/landmarks/admin/stories/$id/approve');
+    ref.read(mapProvider.notifier).fetchAllLandmarks();
+    setState(() => _stories.removeWhere((s) => s['id'] == id));
+  }
+
+  Future<void> _rejectStory(String id) async {
+    await ref.read(apiServiceProvider).post('/landmarks/admin/stories/$id/reject');
+    setState(() => _stories.removeWhere((s) => s['id'] == id));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (_, scrollCtrl) => Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(children: [
+          const SizedBox(height: 8),
+          Container(width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 12),
+          Text('My Landmarks', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          TabBar(
+            controller: _tab,
+            tabs: [
+              Tab(text: 'Quests (${_quests.length})'),
+              Tab(text: 'Stories (${_stories.length})'),
+            ],
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : TabBarView(controller: _tab, children: [
+                    _buildList(_quests, isQuest: true, scrollCtrl: scrollCtrl),
+                    _buildList(_stories, isQuest: false, scrollCtrl: scrollCtrl),
+                  ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildList(List<Map<String, dynamic>> items, {required bool isQuest, required ScrollController scrollCtrl}) {
+    if (items.isEmpty) {
+      return const Center(child: Text('Nothing pending', style: TextStyle(color: Colors.grey)));
+    }
+    return ListView.separated(
+      controller: scrollCtrl,
+      padding: const EdgeInsets.all(16),
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const Divider(),
+      itemBuilder: (_, i) {
+        final item = items[i];
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (item['landmark_name'] != null)
+            Text(item['landmark_name'], style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          Text(item['title'] ?? item['text'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
+          if (item['description'] != null && item['description'].toString().isNotEmpty)
+            Text(item['description'], style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 8),
+          Row(children: [
+            FilledButton(
+              onPressed: () => isQuest ? _approveQuest(item['id']) : _approveStory(item['id']),
+              style: FilledButton.styleFrom(visualDensity: VisualDensity.compact,
+                  backgroundColor: Colors.green.shade600),
+              child: const Text('Approve'),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: () => isQuest ? _rejectQuest(item['id']) : _rejectStory(item['id']),
+              style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact,
+                  foregroundColor: Colors.red.shade600),
+              child: const Text('Reject'),
+            ),
+          ]),
+        ]);
+      },
     );
   }
 }

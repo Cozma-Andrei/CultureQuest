@@ -8,6 +8,7 @@ class RouteRequest(BaseModel):
     available_minutes: int
     max_landmarks: int = 5
     fl_tiebreaker_m: float = 200.0
+    exclude_ids: list[str] = []
 
 
 class RouteStop(BaseModel):

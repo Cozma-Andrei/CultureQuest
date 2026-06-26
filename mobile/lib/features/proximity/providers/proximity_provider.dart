@@ -44,6 +44,13 @@ class ProximityNotifier extends StateNotifier<ProximityState> {
     }
   }
 
+  void enterById(String landmarkId) {
+    final mapState = _ref.read(mapProvider);
+    final all = mapState.allLandmarks.isNotEmpty ? mapState.allLandmarks : mapState.landmarks;
+    final matches = all.where((l) => l.id == landmarkId);
+    if (matches.isNotEmpty) state = ProximityState(nearbyLandmark: matches.first);
+  }
+
   void dismiss() => state = const ProximityState();
 }
 

@@ -29,6 +29,9 @@ class LocalDataService {
     return raw != null ? Set<String>.from(raw) : {};
   }
 
+  List<String> getVisitedIdsOrdered() =>
+      _prefs.getStringList(_k(_visitedSuffix)) ?? [];
+
   bool isVisited(String landmarkId) => getVisitedIds().contains(landmarkId);
 
   Future<void> markVisited(String landmarkId) async {

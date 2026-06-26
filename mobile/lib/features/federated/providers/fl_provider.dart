@@ -169,15 +169,21 @@ class FLNotifier extends StateNotifier<FLState> with WidgetsBindingObserver {
     String landmarkId,
     String landmarkType,
     List<String> categories,
-    double label,
-  ) {
+    double label, {
+    bool isPartOfRoute = false,
+    int routeStopIndex = 0,
+    int routeLength = 0,
+  }) {
     final interests = _userInterests;
     final f = _client.buildFeatureVector(
       userInterests: interests,
       landmarkType: landmarkType,
       landmarkCategories: categories,
-      isOpen: true,  // can't determine from quest screen
+      isOpen: true,
       isWeekend: OpeningHoursParser.isWeekend(),
+      isPartOfRoute: isPartOfRoute,
+      routeStopIndex: routeStopIndex,
+      routeLength: routeLength,
     );
     _client.recordEngagement(landmarkId, f, label);
     _updateState();

@@ -13,7 +13,7 @@ Mobile platform for urban cultural exploration driven by proximity awareness and
 | Database | MongoDB |
 | Cache / FL state | Redis |
 | Routing | OSRM (via public API) |
-| Geofencing | geofence_service (Flutter) |
+| Geofencing | Manual implementation on geolocator position stream (Flutter) |
 | FL model | Custom MLP (22->32->16->1), implemented from scratch in Dart and Python |
 
 No TensorFlow, no Flower. The FL model runs entirely in Dart on-device.
@@ -135,9 +135,12 @@ Input (22) -> W1 (32×22) -> ReLU -> W2 (16×32) -> ReLU -> W3 (1×16) -> Sigmoi
 
 | Event | Label |
 |---|---|
-| Landmark sheet opened | 0.40 |
-| Navigation started | 0.65 |
-| Quest completed | 0.90 |
+| Landmark sheet opened | 0.3 |
+| Added to route / Quest attempted | 0.5 |
+| Navigation started | 0.6 |
+| Quest suggested | 0.80 |
+| Story submitted | 0.85 |
+| Quest completed | 0.9 |
 | Rating (1–5 stars) | stars / 5.0 (overrides all others) |
 
 ### Privacy

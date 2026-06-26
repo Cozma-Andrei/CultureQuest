@@ -360,6 +360,52 @@ class MapNotifier extends StateNotifier<MapState> {
     await _removeStopFromSavedRoute(ar.id, landmarkId);
   }
 
+  void reorderActiveRouteStops(int oldIndex, int newIndex) {
+    final ar = state.activeRoute;
+    if (ar == null) return;
+    final stops = List.of(ar.stops);
+    final moved = stops.removeAt(oldIndex);
+    stops.insert(newIndex, moved);
+    final dist = _legsDistanceM(stops.map((s) => s.landmark).toList());
+    final dwell = stops.fold<int>(0, (sum, s) => sum + s.estimatedDurationMinutes);
+    state = state.copyWith(activeRoute: RouteModel(
+      id: ar.id,
+      stops: stops,
+      totalDistanceM: dist,
+      totalDurationMinutes: dwell + _walkingMinutes(dist),
+    ));
+    _reorderSavedRoute(ar.id, stops.map((s) => s.landmark.id).toList());
+  }
+
+  Future<void> _reorderSavedRoute(String routeId, List<String> stopIds) async {
+    final mine = state.myRoutes.map((r) {
+      if (r.id != routeId || r.isGlobal) return r;
+      final ordered = stopIds
+          .map((id) => r.stops.where((s) => s.landmark.id == id).firstOrNull)
+          .whereType<RouteStopWithProgress>()
+          .toList();
+      if (ordered.length != r.stops.length) return r;
+      final dist = _legsDistanceM(ordered.map((s) => s.landmark).toList());
+      final dwell = ordered.fold<int>(0, (sum, s) => sum + s.dwellMinutes);
+      return RouteWithProgress(
+        id: r.id, name: r.name, stops: ordered,
+        totalDistanceM: dist,
+        totalDurationMinutes: dwell + _walkingMinutes(dist),
+        generatedAt: r.generatedAt,
+        visitedCount: ordered.where((s) => s.visited).length,
+        isGlobal: r.isGlobal,
+      );
+    }).toList();
+    state = state.copyWith(myRoutes: mine);
+    final updated = mine.firstWhere((r) => r.id == routeId, orElse: () => mine.first);
+    if (mine.any((r) => r.id == routeId)) {
+      await _local.updateRoute(_routeToJson(updated));
+    }
+    try {
+      await _api.patch('/routes/$routeId/reorder', data: {'stop_ids': stopIds});
+    } catch (_) {}
+  }
+
   /// Remove a stop from a saved personal route (My Routes tab).
   Future<void> removeStopFromProgressRoute(String routeId, String landmarkId) async {
     await _removeStopFromSavedRoute(routeId, landmarkId);
@@ -396,7 +442,7 @@ class MapNotifier extends StateNotifier<MapState> {
     );
   }
 
-  Future<void> generateRoute({int availableMinutes = 300, double flTiebreakerM = 200.0}) async {
+  Future<void> generateRoute({int availableMinutes = 300, double flTiebreakerM = 200.0, List<String> excludeIds = const []}) async {
     final pos = state.position;
     if (pos == null) return;
     state = state.copyWith(isGeneratingRoute: true, clearError: true, clearProgressRoute: true);
@@ -407,6 +453,7 @@ class MapNotifier extends StateNotifier<MapState> {
         'available_minutes': availableMinutes,
         'max_landmarks': 5,
         'fl_tiebreaker_m': flTiebreakerM,
+        'exclude_ids': excludeIds,
       });
       final route = RouteModel.fromJson(res.data);
       // Convert to RouteWithProgress, carrying over any stops already visited

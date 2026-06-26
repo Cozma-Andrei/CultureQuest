@@ -72,6 +72,19 @@ async def create_admin_route(
     )
 
 
+@router.patch("/{route_id}/reorder", response_model=RouteWithProgress)
+async def reorder_stops(
+    route_id: str,
+    payload: ReorderPayload,
+    user_id: str = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    result = await reorder_route_stops(db, route_id, user_id, payload)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+    return result
+
+
 @router.post("/generate", response_model=RouteResponse)
 async def generate_route(
     payload: RouteRequest,

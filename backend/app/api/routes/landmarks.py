@@ -6,7 +6,7 @@ from app.services.landmark_service import (
     seed_landmarks, record_visit, rate_landmark, submit_landmark,
     get_pending_landmarks, get_all_submissions, approve_landmark, reject_landmark,
     edit_landmark, delete_landmark,
-    submit_story, get_pending_stories, approve_story, reject_story,
+    submit_story, get_pending_stories, get_pending_stories_for_owner, approve_story, reject_story,
 )
 
 router = APIRouter()
@@ -158,15 +158,34 @@ async def add_story(landmark_id: str, payload: StorySubmit, user_id=Depends(get_
     return result
 
 
+@router.get("/owner/pending-stories", response_model=list[StoryResponse])
+async def pending_stories_owner(user_id: str = Depends(get_current_user), db=Depends(get_db)):
+    return await get_pending_stories_for_owner(db, user_id)
+
+
+async def _check_admin_or_story_landmark_owner(db, story_id: str, user_id: str):
+    user_doc = await db.users.find_one({"_id": __import__("bson").ObjectId(user_id)})
+    if user_doc and user_doc.get("is_admin", False):
+        return
+    story = await db.stories.find_one({"_id": __import__("bson").ObjectId(story_id)})
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+    lm = await db.landmarks.find_one({"_id": __import__("bson").ObjectId(story["landmark_id"])})
+    if not lm or lm.get("submitted_by") != user_id:
+        raise HTTPException(status_code=403, detail="Admin or landmark creator access required")
+
+
 @router.post("/admin/stories/{story_id}/approve", status_code=204)
-async def approve_story_ep(story_id: str, _=Depends(get_admin_user), db=Depends(get_db)):
+async def approve_story_ep(story_id: str, user_id: str = Depends(get_current_user), db=Depends(get_db)):
+    await _check_admin_or_story_landmark_owner(db, story_id, user_id)
     ok = await approve_story(db, story_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Story not found")
 
 
 @router.post("/admin/stories/{story_id}/reject", status_code=204)
-async def reject_story_ep(story_id: str, _=Depends(get_admin_user), db=Depends(get_db)):
+async def reject_story_ep(story_id: str, user_id: str = Depends(get_current_user), db=Depends(get_db)):
+    await _check_admin_or_story_landmark_owner(db, story_id, user_id)
     ok = await reject_story(db, story_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Story not found")

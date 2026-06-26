@@ -59,6 +59,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             landmarkType: extra['type'] as String? ?? '',
             landmarkCategories: (extra['categories'] as List?)?.cast<String>() ?? [],
             isNearby: extra['isNearby'] as bool? ?? false,
+            isPartOfRoute: extra['isPartOfRoute'] as bool? ?? false,
+            routeStopIndex: extra['routeStopIndex'] as int? ?? 0,
+            routeLength: extra['routeLength'] as int? ?? 0,
           );
         },
       ),

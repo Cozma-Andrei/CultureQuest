@@ -256,6 +256,30 @@ async def submit_quest(
     }
 
 
+async def get_pending_quests_for_owner(db: AsyncIOMotorDatabase, user_id: str) -> list[dict]:
+    owned = await db.landmarks.find({"submitted_by": user_id}, {"_id": 1, "name": 1}).to_list(None)
+    owned_ids = [str(lm["_id"]) for lm in owned]
+    if not owned_ids:
+        return []
+    docs = await db.quests.find({"status": "pending", "landmark_id": {"$in": owned_ids}}).to_list(None)
+    name_map = {str(lm["_id"]): lm.get("name") for lm in owned}
+    return [
+        {
+            "id": str(doc["_id"]),
+            "landmark_id": doc["landmark_id"],
+            "landmark_name": name_map.get(doc["landmark_id"]),
+            "type": doc["type"],
+            "title": doc["title"],
+            "description": doc["description"],
+            "points": doc["points"],
+            "options": doc.get("options", []),
+            "correct_option_index": doc.get("correct_option_index"),
+            "status": doc["status"],
+        }
+        for doc in docs
+    ]
+
+
 async def get_pending_quests(db: AsyncIOMotorDatabase) -> list[dict]:
     docs = await db.quests.find({"status": "pending"}).to_list(None)
     results = []

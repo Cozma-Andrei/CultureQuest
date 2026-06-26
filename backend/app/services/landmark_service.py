@@ -330,6 +330,26 @@ async def submit_story(db: AsyncIOMotorDatabase, landmark_id: str, user_id: str,
     )
 
 
+async def get_pending_stories_for_owner(db: AsyncIOMotorDatabase, user_id: str) -> list[StoryResponse]:
+    owned = await db.landmarks.find({"submitted_by": user_id}, {"_id": 1, "name": 1}).to_list(None)
+    owned_ids = [str(lm["_id"]) for lm in owned]
+    if not owned_ids:
+        return []
+    docs = await db.stories.find({"status": "pending", "landmark_id": {"$in": owned_ids}}).to_list(None)
+    name_map = {str(lm["_id"]): lm.get("name") for lm in owned}
+    return [
+        StoryResponse(
+            id=str(doc["_id"]),
+            landmark_id=doc["landmark_id"],
+            landmark_name=name_map.get(doc["landmark_id"]),
+            text=doc["text"],
+            status=doc["status"],
+            submitted_by=doc.get("submitted_by"),
+        )
+        for doc in docs
+    ]
+
+
 async def get_pending_stories(db: AsyncIOMotorDatabase) -> list[StoryResponse]:
     docs = await db.stories.find({"status": "pending"}).to_list(None)
     results = []

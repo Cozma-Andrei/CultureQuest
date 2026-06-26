@@ -76,6 +76,8 @@ async def generate_cultural_route(db: AsyncIOMotorDatabase, user_id: str, reques
     user_interests = [i.value for i in user.interests]
 
     nearby = await get_nearby_landmarks(db, request.start_location.lat, request.start_location.lng, 10000)
+    if request.exclude_ids:
+        nearby = [l for l in nearby if l.id not in set(request.exclude_ids)]
     if not nearby:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No landmarks found nearby. Try seeding sample data first.")
 
@@ -269,26 +271,28 @@ async def reorder_route_stops(
     doc = await db.routes.find_one({"_id": oid, "user_id": user_id})
     if not doc:
         return None
-    current_ids = set(doc.get("stop_ids", []))
-    # Keep only IDs that actually belong to this route, in the requested order
+    old_ids = doc.get("stop_ids", [])
+    old_dwell = doc.get("dwell_minutes", [])
+    dwell_map = {lid: (old_dwell[i] if i < len(old_dwell) else 25) for i, lid in enumerate(old_ids)}
+    current_ids = set(old_ids)
     new_ids = [sid for sid in payload.stop_ids if sid in current_ids]
-    await db.routes.update_one({"_id": oid}, {"$set": {"stop_ids": new_ids}})
-    # Return the updated route with progress
-    updated = await db.routes.find_one({"_id": oid})
+    new_dwell = [dwell_map.get(lid, 25) for lid in new_ids]
+    await db.routes.update_one({"_id": oid}, {"$set": {"stop_ids": new_ids, "dwell_minutes": new_dwell}})
     visited_ids: set[str] = set()
     async for v in db.visits.find({"user_id": user_id, "landmark_id": {"$in": new_ids}}):
         visited_ids.add(v["landmark_id"])
     stops: list[RouteStopWithProgress] = []
-    for lid in new_ids:
+    for i, lid in enumerate(new_ids):
         landmark = await get_landmark_by_id(db, lid)
         if landmark:
-            stops.append(RouteStopWithProgress(landmark=landmark, visited=lid in visited_ids))
+            stops.append(RouteStopWithProgress(landmark=landmark, visited=lid in visited_ids, dwell_minutes=new_dwell[i]))
     return RouteWithProgress(
         id=route_id,
-        name=updated.get("name"),
+        name=doc.get("name"),
         stops=stops,
-        total_distance_m=updated.get("total_distance_m", 0),
-        total_duration_minutes=updated.get("total_duration_minutes", 0),
-        generated_at=updated.get("generated_at", ""),
+        total_distance_m=doc.get("total_distance_m", 0),
+        total_duration_minutes=doc.get("total_duration_minutes", 0),
+        generated_at=doc.get("generated_at", ""),
         visited_count=sum(1 for s in stops if s.visited),
+        is_global=doc.get("is_global", False),
     )

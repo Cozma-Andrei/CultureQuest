@@ -17,12 +17,20 @@ class ProximityService {
   Position? _lastFetchPosition;
   List<LandmarkPin> _landmarks = [];
   final Set<String> _inside = {};
+  LandmarkFetcher? _fetcher;
+
+  Future<void> refreshNow() async {
+    final pos = _lastFetchPosition;
+    if (pos == null || _fetcher == null) return;
+    _landmarks = await _fetcher!(pos.latitude, pos.longitude);
+  }
 
   Future<void> start({
     required LandmarkFetcher fetchNearbyLandmarks,
     required void Function(String landmarkId) onEnter,
     void Function(String landmarkId)? onExit,
   }) async {
+    _fetcher = fetchNearbyLandmarks;
     final position = await Geolocator.getCurrentPosition();
     _landmarks = await fetchNearbyLandmarks(position.latitude, position.longitude);
     _lastFetchPosition = position;

@@ -11,6 +11,9 @@ class QuestScreen extends ConsumerStatefulWidget {
   final String landmarkType;
   final List<String> landmarkCategories;
   final bool isNearby;
+  final bool isPartOfRoute;
+  final int routeStopIndex;
+  final int routeLength;
 
   const QuestScreen({
     super.key,
@@ -19,6 +22,9 @@ class QuestScreen extends ConsumerStatefulWidget {
     required this.landmarkType,
     this.landmarkCategories = const [],
     required this.isNearby,
+    this.isPartOfRoute = false,
+    this.routeStopIndex = 0,
+    this.routeLength = 0,
   });
 
   @override
@@ -66,6 +72,9 @@ class _QuestScreenState extends ConsumerState<QuestScreen> {
       widget.landmarkType,
       widget.landmarkCategories,
       correct ? flLabelQuestCompleted : flLabelQuestAttempted,
+      isPartOfRoute: widget.isPartOfRoute,
+      routeStopIndex: widget.routeStopIndex,
+      routeLength: widget.routeLength,
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
