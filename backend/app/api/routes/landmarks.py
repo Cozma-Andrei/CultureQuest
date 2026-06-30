@@ -4,7 +4,7 @@ from app.models.landmark import LandmarkCreate, LandmarkResponse, RatingPayload,
 from app.services.landmark_service import (
     get_nearby_landmarks, get_all_landmarks, get_landmark_by_id, create_landmark,
     seed_landmarks, record_visit, rate_landmark, submit_landmark,
-    get_pending_landmarks, get_all_submissions, approve_landmark, reject_landmark,
+    get_pending_landmarks, get_all_submissions, get_own_submissions, approve_landmark, reject_landmark,
     edit_landmark, delete_landmark,
     submit_story, get_pending_stories, get_pending_stories_for_owner, approve_story, reject_story,
 )
@@ -156,6 +156,11 @@ async def add_story(landmark_id: str, payload: StorySubmit, user_id=Depends(get_
     if not result:
         raise HTTPException(status_code=404, detail="Landmark not found")
     return result
+
+
+@router.get("/owner/submissions", response_model=list[LandmarkResponse])
+async def own_submissions(user_id: str = Depends(get_current_user), db=Depends(get_db)):
+    return await get_own_submissions(db, user_id)
 
 
 @router.get("/owner/pending-stories", response_model=list[StoryResponse])

@@ -258,7 +258,7 @@ Probe scores după 600 runde: gastronomy→restaurant **0,715** ↑ · gastronom
 - Colectare interacțiuni FL de la utilizatori reali — validare în producție
 - Personalizare mai fină: straturi locale per utilizator (FedPer) — niciodată trimise la server
 - Agregare cu buffer (FedBuff) — variantă de mijloc dacă baza de utilizatori crește
-- Proximitate în background — notificări chiar cu app-ul închis (Region Monitoring / Geofence API)
+- Înlocuirea lock-ului Redis cu o coadă de lucru (Redis Queue / Celery) — elimină lock-ul din calea cererilor HTTP și permite procesarea periodică fără risc de timeout
 
 ---
 

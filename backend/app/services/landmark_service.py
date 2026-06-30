@@ -269,6 +269,12 @@ async def get_all_submissions(db: AsyncIOMotorDatabase) -> list[LandmarkResponse
     return [_doc_to_landmark(doc) for doc in docs]
 
 
+async def get_own_submissions(db: AsyncIOMotorDatabase, user_id: str) -> list[LandmarkResponse]:
+    """Landmarks submitted by the current user (any status)."""
+    docs = await db.landmarks.find({"submitted_by": user_id}).to_list(None)
+    return [_doc_to_landmark(doc) for doc in docs]
+
+
 async def edit_landmark(db: AsyncIOMotorDatabase, landmark_id: str, payload: LandmarkEdit) -> LandmarkResponse | None:
     try:
         oid = ObjectId(landmark_id)

@@ -1190,7 +1190,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with SingleTickerProvider
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _MyLandmarksSheet(),
+      builder: (_) => _MyLandmarksSheet(onOpenLandmark: _showLandmarkSheet),
     );
   }
 
@@ -5225,7 +5225,8 @@ class _StarRatingRowState extends State<_StarRatingRow> {
 }
 
 class _MyLandmarksSheet extends ConsumerStatefulWidget {
-  const _MyLandmarksSheet();
+  final void Function(LandmarkModel) onOpenLandmark;
+  const _MyLandmarksSheet({required this.onOpenLandmark});
   @override
   ConsumerState<_MyLandmarksSheet> createState() => _MyLandmarksSheetState();
 }
@@ -5235,12 +5236,14 @@ class _MyLandmarksSheetState extends ConsumerState<_MyLandmarksSheet>
   late final TabController _tab;
   List<Map<String, dynamic>> _quests = [];
   List<Map<String, dynamic>> _stories = [];
+  List<LandmarkModel> _visited = [];
+  List<LandmarkModel> _submitted = [];
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
+    _tab = TabController(length: 4, vsync: this);
     _load();
   }
 
@@ -5253,6 +5256,7 @@ class _MyLandmarksSheetState extends ConsumerState<_MyLandmarksSheet>
   Future<void> _load() async {
     setState(() => _loading = true);
     List<Map<String, dynamic>> quests = [], stories = [];
+    List<LandmarkModel> submitted = [];
     try {
       final r = await ref.read(apiServiceProvider).get('/quests/owner/pending');
       quests = List<Map<String, dynamic>>.from(r.data as List);
@@ -5261,7 +5265,22 @@ class _MyLandmarksSheetState extends ConsumerState<_MyLandmarksSheet>
       final r = await ref.read(apiServiceProvider).get('/landmarks/owner/pending-stories');
       stories = List<Map<String, dynamic>>.from(r.data as List);
     } catch (_) {}
-    if (mounted) setState(() { _quests = quests; _stories = stories; _loading = false; });
+    try {
+      final r = await ref.read(apiServiceProvider).get('/landmarks/owner/submissions');
+      submitted = (r.data as List).map((j) => LandmarkModel.fromJson(j as Map<String, dynamic>)).toList();
+    } catch (_) {}
+    final visitedIds = ref.read(visitedProvider);
+    final allLandmarks = ref.read(mapProvider).allLandmarks;
+    final visited = allLandmarks.where((l) => visitedIds.contains(l.id)).toList();
+    if (mounted) {
+      setState(() {
+        _quests = quests;
+        _stories = stories;
+        _submitted = submitted;
+        _visited = visited;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _approveQuest(String id) async {
@@ -5306,7 +5325,11 @@ class _MyLandmarksSheetState extends ConsumerState<_MyLandmarksSheet>
           const SizedBox(height: 8),
           TabBar(
             controller: _tab,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
+              Tab(text: 'Visited (${_visited.length})'),
+              Tab(text: 'Submitted (${_submitted.length})'),
               Tab(text: 'Quests (${_quests.length})'),
               Tab(text: 'Stories (${_stories.length})'),
             ],
@@ -5315,12 +5338,89 @@ class _MyLandmarksSheetState extends ConsumerState<_MyLandmarksSheet>
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : TabBarView(controller: _tab, children: [
+                    _buildVisitedList(scrollCtrl),
+                    _buildSubmittedList(scrollCtrl),
                     _buildList(_quests, isQuest: true, scrollCtrl: scrollCtrl),
                     _buildList(_stories, isQuest: false, scrollCtrl: scrollCtrl),
                   ]),
           ),
         ]),
       ),
+    );
+  }
+
+  Widget _buildVisitedList(ScrollController scrollCtrl) {
+    if (_visited.isEmpty) {
+      return const Center(child: Text('No visited landmarks yet.', style: TextStyle(color: Colors.grey)));
+    }
+    return ListView.separated(
+      controller: scrollCtrl,
+      padding: const EdgeInsets.all(16),
+      itemCount: _visited.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (_, i) {
+        final lm = _visited[i];
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(vertical: 4),
+          leading: const Icon(Icons.place_outlined),
+          title: Text(lm.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: Text(lm.type, style: const TextStyle(fontSize: 12)),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.pop(context);
+            widget.onOpenLandmark(lm);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSubmittedList(ScrollController scrollCtrl) {
+    if (_submitted.isEmpty) {
+      return const Center(child: Text('No submitted landmarks.', style: TextStyle(color: Colors.grey)));
+    }
+    return ListView.separated(
+      controller: scrollCtrl,
+      padding: const EdgeInsets.all(16),
+      itemCount: _submitted.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (_, i) {
+        final lm = _submitted[i];
+        final statusColor = lm.status == 'approved'
+            ? Colors.green.shade600
+            : lm.status == 'rejected'
+                ? Colors.red.shade600
+                : Colors.orange.shade700;
+        final statusLabel = lm.status == 'approved'
+            ? 'Approved'
+            : lm.status == 'rejected'
+                ? 'Rejected'
+                : 'Pending';
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(vertical: 4),
+          leading: const Icon(Icons.place_outlined),
+          title: Text(lm.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: Text(lm.type, style: const TextStyle(fontSize: 12)),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(statusLabel, style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.w600)),
+            ),
+            if (lm.status == 'approved') ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right),
+            ],
+          ]),
+          onTap: lm.status == 'approved' ? () {
+            Navigator.pop(context);
+            widget.onOpenLandmark(lm);
+          } : null,
+        );
+      },
     );
   }
 

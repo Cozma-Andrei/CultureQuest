@@ -2,6 +2,7 @@ import asyncio
 import json
 import uuid
 from contextlib import asynccontextmanager
+from redis.asyncio import Redis
 from app.federated.model import build_initial_weights, clipped_avg
 
 FL_WEIGHTS_KEY   = "fl:global_weights"
