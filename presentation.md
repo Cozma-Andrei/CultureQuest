@@ -1,10 +1,22 @@
 # CultureQuest — Structură prezentare
 
-> ~8 minute · 13 slide-uri principale + 8 slide-uri backup Q&A
+> ~8 minute · 13 slide-uri principale + 1 slide întrebări + 8 slide-uri backup Q&A + 1 bibliografie
+
+## Structură secțiuni (bara de navigare)
+
+| Secțiune | Slide-uri |
+|---|---|
+| Introducere | Motivație · State of the art |
+| Soluție propusă | Soluție propusă |
+| Arhitectura sistemului | Arhitectura sistemului |
+| Federated Learning | Antrenare locală on-device · Agregare asincronă, concurență și confidențialitate |
+| Personalizare și rute | Modelul de personalizare · Generarea rutelor personalizate · Pre-antrenarea modelului global |
+| Evaluare | Evaluare |
+| Concluzii | Limitări · Concluzii · Întrebări |
 
 ---
 
-## SLIDE 1 — Titlu
+## SLIDE 1 — Titlu *(fără secțiune)*
 
 **CultureQuest**
 *Personalizarea recomandărilor de rute culturale prin Federated Learning*
@@ -17,7 +29,9 @@
 
 ---
 
-## SLIDE 2 — De ce? (Motivație)
+---
+
+## SLIDE 2 — Motivație *(secțiunea Introducere)*
 
 > *Povestea începe de la un compromis pe care nicio aplicație actuală nu l-a rezolvat.*
 
@@ -36,7 +50,7 @@
 
 ---
 
-## SLIDE 3 — State of the art
+## SLIDE 3 — State of the art *(tot secțiunea Introducere)*
 
 **Aplicații de explorare urbană:**
 
@@ -57,7 +71,7 @@
 
 ---
 
-## SLIDE 4 — Soluție propusă
+## SLIDE 4 — Soluție propusă *(secțiune proprie)*
 
 **Screenshot principal:** hartă cu obiective + rută vizibilă pe ecran
 
@@ -73,7 +87,7 @@ Recomandarea bazată pe interese (nu pe popularitate) → obiective culturale ma
 
 ---
 
-## SLIDE 5 — Arhitectura sistemului
+## SLIDE 5 — Arhitectura sistemului *(secțiunea Arhitectura sistemului)*
 
 **Imagine:** `pics/arhitectura-generala.pdf`
 
@@ -95,7 +109,7 @@ Trei fluxuri principale:
 
 ---
 
-## SLIDE 6 — Federated Learning on-device: antrenare locală
+## SLIDE 6 — Antrenare locală on-device *(secțiunea Federated Learning)*
 
 **Principiul:** datele de interacțiune nu părăsesc niciodată dispozitivul
 
@@ -117,7 +131,7 @@ Dispozitiv: interacțiuni → buffer local → antrenare SGD → delta ponderi (
 
 ---
 
-## SLIDE 7 — Agregare asincronă, concurență și confidențialitate
+## SLIDE 7 — Agregare asincronă, concurență și confidențialitate *(tot secțiunea Federated Learning)*
 
 **FedAsync — discount de vechime (Xie et al. 2019):**
 - Fiecare actualizare e procesată individual când sosește, fără a aștepta o cohortă
@@ -136,7 +150,7 @@ Dispozitiv: interacțiuni → buffer local → antrenare SGD → delta ponderi (
 
 ---
 
-## SLIDE 8 — Modelul de personalizare
+## SLIDE 8 — Modelul de personalizare *(secțiunea Personalizare și rute)*
 
 **MLP 22 → 32 → 16 → 1** · 1 281 parametri · inferență ≈ 39 µs pe dispozitiv
 
@@ -156,7 +170,7 @@ Scorul MLP → categorie de potrivire afișată în popup:
 
 ---
 
-## SLIDE 9 — Generarea rutelor personalizate
+## SLIDE 9 — Generarea rutelor personalizate *(tot secțiunea Personalizare și rute)*
 
 **Screenshot:** `pics/route-generation.png`
 
@@ -171,7 +185,7 @@ Scorul MLP → categorie de potrivire afișată în popup:
 
 ---
 
-## SLIDE 10 — Pre-antrenarea modelului global
+## SLIDE 10 — Pre-antrenarea modelului global *(tot secțiunea Personalizare și rute)*
 
 **Problema cold-start:** utilizatorul nou descarcă modelul global — fără nicio rundă FL acumulată, modelul trebuie să ofere recomandări utile de la prima utilizare, bazate pe interesele din profil
 
@@ -188,7 +202,7 @@ Fără fine-tuning modelul prezice 0,70–0,75 indiferent de input — datele re
 
 ---
 
-## SLIDE 11 — Evaluare
+## SLIDE 11 — Evaluare *(secțiunea Evaluare)*
 
 **1. Corectitudine funcțională** — demo parcurge FR-1 → FR-7:
 harta cu obiective în 1500 m · rute diferite per utilizator · quest activat sub 100 m · recenzii moderate · FL local fără date brute pe server · funcționare offline din cache
@@ -218,7 +232,7 @@ Probe scores după 600 runde: gastronomy→restaurant **0,715** ↑ · gastronom
 
 ---
 
-## SLIDE 12 — Limitări
+## SLIDE 12 — Limitări *(secțiunea Concluzii)*
 
 - **Validare pe clienți sintetici** — comportamentul în producție rămâne neverificat pe date reale de la utilizatori
 - **Proximitate exclusiv în foreground** — stream-ul GPS Geolocator se oprește când app-ul e în background; geofencing nativ OS (Region Monitoring / Geofence API) ar rezolva
@@ -227,7 +241,7 @@ Probe scores după 600 runde: gastronomy→restaurant **0,715** ↑ · gastronom
 
 ---
 
-## SLIDE 13 — Concluzii
+## SLIDE 13 — Concluzii *(tot secțiunea Concluzii)*
 
 **Ce am construit:**
 - Aplicație Flutter end-to-end: hartă, quests, trasee, gamification, comunitate, moderare conținut
@@ -246,8 +260,12 @@ Probe scores după 600 runde: gastronomy→restaurant **0,715** ↑ · gastronom
 - Agregare cu buffer (FedBuff) — variantă de mijloc dacă baza de utilizatori crește
 - Proximitate în background — notificări chiar cu app-ul închis (Region Monitoring / Geofence API)
 
-**Keywords:**
-`Federated Learning` · `FedAsync` · `Differential Privacy` · `NbAFL` · `Route Generation` · `Privacy by Design` · `OSRM` · `MLP` · `Gamification`
+---
+
+## SLIDE 14 — Întrebări *(secțiunea Concluzii)*
+
+**Cuvinte cheie:**
+`Explorare Urbană` · `Generare de Rute` · `Gamificare` · `OSRM` · `Învățare Federată` · `FedAsync` · `MLP` · `Confidențialitate Diferențială` · `Confidențialitate prin Design`
 
 ---
 ---
@@ -256,10 +274,11 @@ Probe scores după 600 runde: gastronomy→restaurant **0,715** ↑ · gastronom
 # BACKUP — Slide-uri pentru Q&A
 
 *Nu se prezintă în flux normal — se afișează doar la întrebări din comisie*
+*Numerotare independentă: 1 of 8. Bara de sus: doar bullet-uri în dreapta.*
 
 ---
 
-## B1 — Taxonomia FL și pozitionarea CultureQuest
+## B1 — Taxonomia FL și poziționarea CultureQuest
 
 **Axa tip de FL** (Yang et al. 2019):
 - **HFL** (Orizontal): același spațiu de caracteristici, exemple diferite ← *CultureQuest*
@@ -309,7 +328,7 @@ Probe scores după 600 runde: gastronomy→restaurant **0,715** ↑ · gastronom
 
 ---
 
-## B4 — Algoritmul de generare a rutei (detalii)
+## B4 — Algoritmul de generare a rutei
 
 **Etapa 1 — Scoring inițial candidați (top 10):**
 - Scor FL (80%) + distanță față de start normalizată (20%)
@@ -394,3 +413,14 @@ cât timp există candidați și buget de timp disponibil:
 
 **Ce ar rezolva:**
 - Region Monitoring (iOS CoreLocation) / Geofence API (Android) — OS-ul monitorizează granițele și notifică app-ul chiar și când e închis, fără a ține GPS-ul activ în permanență
+
+---
+
+## Bibliografie *(fără numerotare, după backup-uri)*
+
+- McMahan et al. (2017) — *Communication-Efficient Learning of Deep Networks from Decentralized Data*, AISTATS
+- Xie et al. (2019) — *Asynchronous Federated Optimization*, OPT Workshop NeurIPS
+- Wei et al. (2020) — *Federated Learning with Differential Privacy: Algorithms and Performance Analysis (NbAFL)*, IEEE TIFS
+- Yang et al. (2019) — *Federated Machine Learning: Concept and Applications*, ACM TIST
+- Kairouz et al. (2021) — *Advances and Open Problems in Federated Learning*, Foundations and Trends in ML
+- Li et al. (2020) — *Federated Optimization in Heterogeneous Networks (FedProx)*, MLSys
