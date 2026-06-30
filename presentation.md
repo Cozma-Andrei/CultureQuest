@@ -57,7 +57,7 @@
 
 ---
 
-## SLIDE 4 — Ce am construit
+## SLIDE 4 — Soluție propusă
 
 **Screenshot principal:** hartă cu obiective + rută vizibilă pe ecran
 

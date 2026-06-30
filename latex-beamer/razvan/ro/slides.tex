@@ -12,6 +12,8 @@
 \usepackage{hyperref}			% folosiți \url{http://...}
 					% sau \href{http://...}{Nume Link}
 \usepackage{verbatim}
+\usepackage{appendixnumberbeamer}
+\usepackage{pgffor}
 
 \mode<presentation>
 { \usetheme{Berlin} }
@@ -29,13 +31,7 @@
   {%
     \begin{beamercolorbox}[colsep=1.5pt]{upper separation line foot}
     \end{beamercolorbox}
-    \begin{beamercolorbox}[ht=2.5ex,dp=1.125ex,%
-      leftskip=.3cm,rightskip=.3cm plus1fil]{author in head/foot}%
-      \leavevmode{\usebeamerfont{author in head/foot}\insertshortauthor}%
-      \hfill%
-      {\usebeamerfont{institute in head/foot}\usebeamercolor[fg]{institute in head/foot}\insertshortinstitute}%
-    \end{beamercolorbox}%
-    \begin{beamercolorbox}[ht=2.5ex,dp=1.125ex,%
+    \begin{beamercolorbox}[ht=3.2ex,dp=1.5ex,%
       leftskip=.3cm,rightskip=.3cm plus1fil]{title in head/foot}%
       {\usebeamerfont{title in head/foot}\insertshorttitle}%
       \hfill%
@@ -48,13 +44,49 @@
 
 \setbeamertemplate{navigation symbols}{}%remove navigation symbols
 
-\title[Super proiectul meu de licență]{Super proiectul meu de licență}
-\subtitle{Sesiunea de licență -- iulie 2010}
-\institute{Facultatea de Automatică și Calculatoare,\\
-	Universitatea POLITEHNICA București}
-\author[Ion Ionescu]{Ion Ionescu\\
-	Coordonator: Andrei Antonescu}
-\date{9 iulie 2010}
+\setbeamertemplate{headline}{%
+  \begin{beamercolorbox}[ht=5ex,dp=1.8ex]{subsection in head/foot}%
+    \raisebox{1.5ex}{\insertnavigation{\paperwidth}}%
+  \end{beamercolorbox}%
+}
+\setbeamercolor{title}{fg=black,bg=}
+\setbeamercolor{title in head/foot}{parent=palette secondary}
+\setbeamerfont{title}{series=\bfseries,size=\large}
+
+\setbeamertemplate{title page}{%
+  \vbox{}
+  \vfill
+  \begin{center}
+    % Logouri
+    \vskip-1.5em
+    \begin{minipage}{\textwidth}
+      \hspace{1.5cm}\includegraphics[scale=0.25]{img/upb-logo-resized.png}%
+      \hfill%
+      \includegraphics[scale=0.30,trim={14cm 11cm 2cm 5cm},clip=true]{img/cs-logo.pdf}
+    \end{minipage}
+    \vskip2.5em
+    % Titlu
+    {\usebeamerfont{title}\usebeamercolor[fg]{title}\inserttitle\par}%
+    \ifx\insertsubtitle\@empty\else
+      \vskip0.25em
+      {\usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle\par}%
+    \fi
+    \vskip1em
+    {\usebeamerfont{author}\insertauthor\par}
+    \vskip0.5em
+    {\usebeamerfont{date}\insertdate\par}
+  \end{center}
+  \vfill
+}
+
+\title[CultureQuest - Platformă mobilă de explorare urbană cu recomandări personalizate prin învățare federată]{CultureQuest - Platformă mobilă de explorare urbană cu recomandări personalizate prin învățare federată}
+\subtitle{}
+\institute{}
+\author[Andrei Cozma]{Andrei Cozma\\
+	Coordonatori științifici:\\
+  Prof. dr. ing. Ciprian-Mihai Dobre\\
+  Prof. dr. ing. Radu-Ioan Ciobanu}
+\date{1 iulie 2026}
 
 \begin{document}
 
@@ -66,72 +98,183 @@
 
 \frame{\titlepage}
 
-\frame{\tableofcontents}
+%\frame{\tableofcontents}
 
 % NB: Secțiunile nu sunt marcate vizual, ci doar apar în cuprins
-\section{Context}
+\section{Introducere}
 
-% Titlul unui frame se specifică fie în acolade, imediat după \begin{frame},
-% fie folosind \frametitle
-\begin{frame}{TODO}
-	\begin{itemize}		% Just like normal LaTeX
-		\item TODO
-	\end{itemize}
+\begin{frame}{Motivație}
+	% TODO
 \end{frame}
 
-\section{Arhitectură și design}
-
-\begin{frame}{TODO}
-	\begin{itemize}
-		\item Formulă simplă
-			\begin{beamerboxesrounded}[lower=block body,shadow=true]{}
-				\texttt{\#define MAX(a, b)   ((a) > (b) ? (a) : (b))}
-			\end{beamerboxesrounded}
-		\item TODO
-	\end{itemize}
+\begin{frame}{State of the art}
+	% TODO
 \end{frame}
 
-\section{Implementare}
+\section{Soluție propusă}
 
-\begin{frame}{TODO}
-	\begin{itemize}
-		\item TODO
-		\item TODO
-	\end{itemize}
+\begin{frame}{Soluție propusă}
+	% TODO
 \end{frame}
 
-%\begin{frame}{Porțiuni de cod}
-%	\input{code/sample}
-%\end{frame}
-	
-\section{Rezultate}
+\section{Arhitectura sistemului}
 
-\begin{frame}{TODO}
-	\begin{itemize}
-		\item TODO
-		\item TODO
-	\end{itemize}
+\begin{frame}{Arhitectura sistemului}
+	% TODO
 \end{frame}
 
-\section{\^{I}ntrebări}
+\section{Federated Learning}
+
+\begin{frame}{Antrenare locală on-device}
+	% TODO
+\end{frame}
+
+\begin{frame}{Agregare asincronă, concurență și confidențialitate}
+	% TODO
+\end{frame}
+
+\section{Personalizare și rute}
+
+\begin{frame}{Modelul de personalizare}
+	% TODO
+\end{frame}
+
+\begin{frame}{Generarea rutelor personalizate}
+	% TODO
+\end{frame}
+
+\begin{frame}{Pre-antrenarea modelului global}
+	% TODO
+\end{frame}
+
+\section{Evaluare}
+
+\begin{frame}{Evaluare}
+	% TODO
+\end{frame}
+
+\section{Concluzii}
+
+\begin{frame}{Limitări}
+	% TODO
+\end{frame}
+
+\begin{frame}{Concluzii}
+	% TODO
+\end{frame}
 
 \begin{frame}{Întrebări}
-  \begin{columns}
-    \begin{column}[t]{0.5\textwidth}
-      \begin{itemize}
-        \item cuvânt cheie 1
-        \item cuvânt cheie 2
-        \item cuvânt cheie 3
-        \item cuvânt cheie 4
-        \item cuvânt cheie 5
-      \end{itemize}
-    \end{column}
-    \begin{column}[c]{0.5\textwidth}
-      \begin{figure}
-        \includegraphics[scale=0.3]{img/question-mark}
-      \end{figure}
-    \end{column}
-  \end{columns}
+  % TODO
 \end{frame}
+
+\appendix
+
+\setbeamertemplate{headline}{%
+  \begin{beamercolorbox}[ht=5ex,dp=1.8ex]{subsection in head/foot}%
+    \hfill\raisebox{1.5ex}{%
+      \foreach \i in {1,...,\inserttotalframenumber}{%
+        \ifnum\i=\insertframenumber
+          \begin{pgfpicture}{0pt}{0pt}{0.1cm}{0.1cm}
+            \color{white}
+            \pgfpathcircle{\pgfpoint{0.05cm}{0.05cm}}{0.05cm}
+            \pgfusepath{fill,stroke}
+          \end{pgfpicture}\hspace{2pt}%
+        \else
+          \begin{pgfpicture}{0pt}{0pt}{0.1cm}{0.1cm}
+            \color{white}
+            \pgfpathcircle{\pgfpoint{0.05cm}{0.05cm}}{0.05cm}
+            \pgfusepath{stroke}
+          \end{pgfpicture}\hspace{2pt}%
+        \fi
+      }%
+    \hspace{0.3cm}}%
+  \end{beamercolorbox}%
+}
+
+\setbeamertemplate{footline}{%
+  \begin{beamercolorbox}[colsep=1.5pt]{upper separation line foot}
+  \end{beamercolorbox}
+  \begin{beamercolorbox}[ht=3.2ex,dp=1.5ex,leftskip=.3cm,rightskip=.3cm plus1fil]{title in head/foot}%
+    {\usebeamerfont{title in head/foot}\insertshorttitle}%
+    \hfill%
+    {\usebeamerfont{frame number}\usebeamercolor[fg]{frame number}\insertframenumber~\frameofframes~\inserttotalframenumber}
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[colsep=1.5pt]{lower separation line foot}
+  \end{beamercolorbox}
+}
+
+\section{Backup}
+
+\begin{frame}{Taxonomia FL și poziționarea CultureQuest}
+  % TODO
+\end{frame}
+
+\begin{frame}{De ce FedAsync și nu FedProx / SCAFFOLD / FedDyn?}
+  % TODO
+\end{frame}
+
+\begin{frame}{Differential Privacy în detaliu}
+  % TODO
+\end{frame}
+
+\begin{frame}{Algoritmul de generare a rutei}
+  % TODO
+\end{frame}
+
+\begin{frame}{Cold-start: ce vede un utilizator nou?}
+  % TODO
+\end{frame}
+
+\begin{frame}{Sursele de date pentru pre-antrenare}
+  % TODO
+\end{frame}
+
+\begin{frame}{Scalabilitate: testul de concurență FL}
+  % TODO
+\end{frame}
+
+\begin{frame}{Consum de baterie și proximitate în foreground}
+  % TODO
+\end{frame}
+
+{
+\setbeamertemplate{footline}{}
+\setbeamertemplate{headline}{}
+\setbeamertemplate{bibliography item}{}
+\begin{frame}[allowframebreaks,noframenumbering]{Bibliografie}
+  \footnotesize
+  \begin{thebibliography}{9}
+    \bibitem{mcmahan2017}
+      H.~B.~McMahan et al.,
+      \emph{Communication-Efficient Learning of Deep Networks from Decentralized Data},
+      AISTATS, 2017.
+
+    \bibitem{xie2019}
+      C.~Xie et al.,
+      \emph{Asynchronous Federated Optimization},
+      OPT Workshop NeurIPS, 2019.
+
+    \bibitem{wei2020}
+      K.~Wei et al.,
+      \emph{Federated Learning with Differential Privacy: Algorithms and Performance Analysis (NbAFL)},
+      IEEE TIFS, 2020.
+
+    \bibitem{yang2019}
+      Q.~Yang et al.,
+      \emph{Federated Machine Learning: Concept and Applications},
+      ACM TIST, 2019.
+
+    \bibitem{kairouz2021}
+      P.~Kairouz et al.,
+      \emph{Advances and Open Problems in Federated Learning},
+      Foundations and Trends in ML, 2021.
+
+    \bibitem{li2020fedprox}
+      T.~Li et al.,
+      \emph{Federated Optimization in Heterogeneous Networks (FedProx)},
+      MLSys, 2020.
+  \end{thebibliography}
+\end{frame}
+}
 
 \end{document}
