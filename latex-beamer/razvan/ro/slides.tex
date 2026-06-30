@@ -104,71 +104,247 @@
 \section{Introducere}
 
 \begin{frame}{Motivație}
-	% TODO
+  \textbf{Problema:}
+  \begin{itemize}
+    \item Recomandări personalizate $\rightarrow$ date stocate central
+    \item Utilizatorul alege: \textit{confidențialitate} sau \textit{personalizare}
+  \end{itemize}
+
+  \vskip0.8em
+  \textbf{Consecințe:}
+  \begin{itemize}
+    \item Locații GPS, preferințe $\rightarrow$ profil comportamental pe server
+    \item Fără personalizare reală $\rightarrow$ popularitate amplifică aglomerarea, patrimoniul minor rămâne invizibil
+  \end{itemize}
+
+  \vskip0.8em
+  \textbf{Propunere:} confidențialitate și personalizare \textit{nu se exclud:} \\
+  \hspace{1em}antrenare locală pe dispozitiv
 \end{frame}
 
 \begin{frame}{State of the art}
-	% TODO
+  \textbf{Aplicații de explorare urbană:}
+  \begin{itemize}
+    \item Google Maps, TripAdvisor: personalizare centralizată
+    \item izi.TRAVEL, GetYourGuide: rute fixe, fără personalizare
+    \item Niciuna: rute personalizate + privacy by design + gamificare
+  \end{itemize}
+
+  \vskip0.6em
+  \textbf{Federated Learning (FL) în recomandări:}
+  \begin{itemize}
+    \item FedAvg: standard de facto; cere clienți simultan disponibili
+    \item FedAsync: asincron cu discount de vechime $\rightarrow$ adoptat
+    \item DP (NbAFL): zgomot Gaussian $\rightarrow$ adoptat
+  \end{itemize}
+
+  \vskip0.6em
+  \textbf{Golul:} FL asincron cu DP pe turism cultural, neabordat
 \end{frame}
 
 \section{Soluție propusă}
 
 \begin{frame}{Soluție propusă}
-	% TODO
+  Patru componente integrate:
+  \begin{itemize}
+    \item Obiective culturale pe hartă
+    \item Quest-uri prin geofencing ($<$ 100 m)
+    \item Rute generate dinamic, personalizate prin FL
+    \item Comunitate: recenzii, povești, propuneri de obiective, moderare
+  \end{itemize}
+
+  \vskip0.8em
+  \textbf{Privacy by design:} interesele sunt învățate local din interacțiuni, fără ca datele să părăsească dispozitivul
 \end{frame}
 
 \section{Arhitectura sistemului}
 
 \begin{frame}{Arhitectura sistemului}
-	% TODO
-\end{frame}
+  \begin{columns}[T]
+    \begin{column}{0.42\textwidth}
+      \footnotesize
+      \begin{tabular}{ll}
+        \textbf{Strat} & \textbf{Tehnologie} \\
+        \hline
+        Mobil   & Flutter + Riverpod \\
+        Backend & FastAPI (Python) \\
+        Date    & MongoDB \\
+        FL      & Redis \\
+        Rutare  & OSRM \\
+      \end{tabular}
+    \end{column}
+    \begin{column}{0.55\textwidth}
+      \normalsize
+      \textbf{Trei fluxuri:}
+      \begin{itemize}
+        \item Hartă + rute: obiectivele din MongoDB evaluate prin modelul din Redis
+        \item Agregare FL: delta client $\rightarrow$ ponderi actualizate în Redis
+        \item Comunitar: recenzii, povești, quests prin moderare
+      \end{itemize}
+    \end{column}
+  \end{columns}
 
-\section{Federated Learning}
-
-\begin{frame}{Antrenare locală on-device}
-	% TODO
-\end{frame}
-
-\begin{frame}{Agregare asincronă, concurență și confidențialitate}
-	% TODO
+  \vskip0.8em
+  O singură bază de cod Dart $\rightarrow$ Android + iOS; cache local în SharedPreferences
 \end{frame}
 
 \section{Personalizare și rute}
 
 \begin{frame}{Modelul de personalizare}
-	% TODO
+  \textbf{MLP} $22 \rightarrow 32 \rightarrow 16 \rightarrow 1$; \quad 1\,281 parametri; inferență $\approx$ 39\,µs pe laptop
+
+  \vskip0.4em
+  \begin{center}
+  \scriptsize
+  \begin{tabular}{ll}
+    \textbf{Grup (dim.)} & \textbf{Conținut} \\
+    \hline
+    Interese {[}0–5{]}   & artă, arhit., istorie, gastron., natură, muzică \\
+    Tip {[}6–13{]}       & muzeu, monum., parc, galerie, restaur., piață, clădire, altele \\
+    Temporal {[}14–16{]} & isOpen, isWeekend, ora/24 \\
+    Spațial {[}17–21{]}  & rang dist., potrivire interese, în rută, poziție, lungime \\
+  \end{tabular}
+  \end{center}
+
+  \vskip0.4em
+  \normalsize
+  \textbf{Ieșire:} scor $\in [0, 1]$ $\rightarrow$ scăzut ($< 0{,}4$) · mediu · ridicat ($\geq 0{,}7$) \\
+  {\footnotesize Rulează pe \textbf{server} (evaluare candidați) și pe \textbf{dispozitiv} (scor popup)}
 \end{frame}
 
 \begin{frame}{Generarea rutelor personalizate}
-	% TODO
+  \textbf{Algoritmul (pe server):}
+  \begin{enumerate}
+    \item Candidați: obiective în \textbf{raza 10 km}
+    \item Scoring: \textbf{80\% MLP + 20\% proximitate} $\rightarrow$ top 10
+    \item Traseu \textbf{greedy}: $\min(\text{dist} - \lambda \cdot \text{match})$, $\lambda$ configurat de utilizator
+    \item Durata per oprire: scalată $\pm 25\%$ de scorul MLP
+    \item Traseu real: \textbf{OSRM} (walking / driving)
+  \end{enumerate}
 \end{frame}
 
 \begin{frame}{Pre-antrenarea modelului global}
-	% TODO
+  \textbf{Problema cold-start:} la prima utilizare, niciun dispozitiv nu a contribuit încă la modelul global
+
+  \vskip0.6em
+  \begin{center}
+  \scriptsize
+  \begin{tabular}{ll}
+    \hline
+    Pre-antrenare (741k înreg., Foursquare, Yelp)          & {[}0,595; 0,850{]}; blocat la medie \\
+    Fine-tuning (+16k sintetice + 3$\times$ scoruri $\leq 0{,}4$) & {[}0,050; 0,841{]}; \textbf{+211\%} \\
+    \hline
+  \end{tabular}
+  \end{center}
+
+  \vskip0.5em
+  \normalsize
+  Fără fine-tuning: predicție 0,70–0,75 indiferent de input \\
+  {\small $\rightarrow$ etichete concentrate spre valori mari (Yelp: 60\% recenzii 4–5 stele; Foursquare: fix 0,70) + \texttt{isOpen=0} absent}
+\end{frame}
+
+\section{Federated Learning}
+
+\begin{frame}{Antrenare locală}
+  \textbf{Etichete buffer:}
+  \begin{center}
+  \scriptsize
+  \begin{tabular}{ll}
+    \textbf{Eveniment} & \textbf{Etichetă} \\
+    \hline
+    Sheet obiectiv deschis & 0,3 \\
+    Adăugat la rută / Quest încercat & 0,5 \\
+    Navigație pornită      & 0,6 \\
+    Quest sugerat          & 0,80 \\
+    Poveste trimisă        & 0,85 \\
+    Quest completat        & 0,9 \\
+    Rating explicit (stele) & stele / 5 \\
+  \end{tabular}
+  \end{center}
+
+  \vskip0.6em
+  \textbf{Procedura (FedAvg client):}
+  \begin{itemize}
+    \item Declanșare automată după 15 interacțiuni în buffer
+    \item 5 epoci SGD (lr = 0,01), gradient clipping L2 = 1
+    \item Buffer persistat în SharedPreferences
+    \item Trimite doar delta ponderilor, nu interacțiunile brute
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Agregare asincronă, concurență și confidențialitate}
+  \textbf{FedAsync:} delta ponderată cu $\frac{1}{1+s}$; clienți „stale" contribuie mai puțin
+
+  \vskip0.6em
+  \textbf{Redis lock:} \texttt{SET NX PX} $\rightarrow$ un singur client în ciclul read–aggregate–write; TTL = 5 s
+
+  \vskip0.6em
+  \textbf{Differential Privacy (NbAFL):}
+  \begin{itemize}
+    \item \textbf{Client:} clamp $[-1, +1]$ + $\mathcal{N}(0,\,0{,}01)$ per coordonată
+    \item \textbf{Server:} clipping L2 $\leq 1$ pe delta primită
+  \end{itemize}
 \end{frame}
 
 \section{Evaluare}
 
 \begin{frame}{Evaluare}
-	% TODO
+  \textbf{1. Corectitudine funcțională:} demo: hartă, rute, quests, recenzii, FL local, offline (+ teste unitare model FL)
+
+  \vskip0.5em
+  \textbf{2. Performanța FL:} 10\,000 clienți sintetici, 600 runde, $\approx$23\,ms/rundă (antrenare + agregare):
+  \begin{center}
+  \scriptsize
+  \begin{tabular}{lll}
+    & \textbf{FedAsync} & \textbf{Fără discount} \\
+    \hline
+    BCE finală          & \textbf{0,480} & 0,506 \\
+    Reducere            & \textbf{$-$30,9\%} & $-$27,2\% \\
+    Pondere medie stale & \textbf{0,489} & 1,000 \\
+  \end{tabular}
+  \end{center}
+  \vskip0.5em
+  \textbf{3. Scalabilitate:} 0 erori la $\leq$10 cereri FL simultane; degradare la 20 (TTL lock)
+\end{frame}
+
+\begin{frame}{Scoruri pentru obiective după 600 runde}
+  \begin{center}
+    \includegraphics[width=\textwidth]{img/probe_scores.png}
+  \end{center}
 \end{frame}
 
 \section{Concluzii}
 
 \begin{frame}{Limitări}
-	% TODO
+  \begin{itemize}
+    \item \textbf{Validare pe clienți sintetici:} comportamentul în producție rămâne neverificat pe date reale
+    \item \textbf{Proximitate exclusiv în foreground:} GPS se oprește în background; soluție: geofencing nativ OS
+    \item \textbf{Scalabilitate Redis lock:} 8/20 cereri FL simultane respinse; soluție: coadă de lucru (Redis Queue)
+    \item \textbf{FedPer exclus:} straturi personalizate per utilizator necesită stocare locală permanentă
+  \end{itemize}
 \end{frame}
 
 \begin{frame}{Concluzii}
-	% TODO
+  \textbf{Ce am construit:} aplicație Flutter end-to-end cu flux FL complet (pre-antrenare $\rightarrow$ FedAsync + DP)
+
+  \vskip0.6em
+  \textbf{Ce am obținut:}
+  \begin{itemize}
+    \item Rute personalizate diferite per utilizator; quests prin geofencing
+    \item Comunitate activă: recenzii, povești, propuneri de obiective
+    \item Interese învățate local; datele nu părăsesc dispozitivul
+  \end{itemize}
+
+  \vskip0.6em
+  \textbf{Ce urmează:} validare pe utilizatori reali; FedPer; FedBuff (agregare cu buffer); fotografii obiective
 \end{frame}
 
 \begin{frame}{Întrebări}
   \vfill
   \centering
-  {\Large Mulțumesc! Întrebări?}\\[1.2em]
+  {\Large Mulțumesc pentru atenție! Întrebări?}\\[1.2em]
   \textbf{Cuvinte cheie:}\\[0.5em]
-  Explorare Urbană · Generare de Rute · Gamificare · OSRM \\[0.3em]
+  Explorare Urbană · Generare de Rute · OSRM \\[0.3em]
   Învățare Federată · FedAsync · MLP · Confidențialitate Diferențială · Confidențialitate prin Design
   \vfill
 \end{frame}
@@ -211,18 +387,6 @@
 
 \section{Backup}
 
-\begin{frame}{Taxonomia FL și poziționarea CultureQuest}
-  % TODO
-\end{frame}
-
-\begin{frame}{De ce FedAsync și nu FedProx / SCAFFOLD / FedDyn?}
-  % TODO
-\end{frame}
-
-\begin{frame}{Differential Privacy în detaliu}
-  % TODO
-\end{frame}
-
 \begin{frame}{Algoritmul de generare a rutei}
   % TODO
 \end{frame}
@@ -232,6 +396,18 @@
 \end{frame}
 
 \begin{frame}{Sursele de date pentru pre-antrenare}
+  % TODO
+\end{frame}
+
+\begin{frame}{Taxonomia FL și poziționarea CultureQuest}
+  % TODO
+\end{frame}
+
+\begin{frame}{De ce FedAsync și nu FedProx / SCAFFOLD / FedDyn?}
+  % TODO
+\end{frame}
+
+\begin{frame}{Differential Privacy în detaliu}
   % TODO
 \end{frame}
 

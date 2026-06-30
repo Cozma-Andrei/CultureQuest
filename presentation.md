@@ -9,8 +9,8 @@
 | Introducere | Motivație · State of the art |
 | Soluție propusă | Soluție propusă |
 | Arhitectura sistemului | Arhitectura sistemului |
-| Federated Learning | Antrenare locală on-device · Agregare asincronă, concurență și confidențialitate |
 | Personalizare și rute | Modelul de personalizare · Generarea rutelor personalizate · Pre-antrenarea modelului global |
+| Federated Learning | Antrenare locală · Agregare asincronă, concurență și confidențialitate |
 | Evaluare | Evaluare |
 | Concluzii | Limitări · Concluzii · Întrebări |
 
@@ -109,7 +109,59 @@ Trei fluxuri principale:
 
 ---
 
-## SLIDE 6 — Antrenare locală on-device *(secțiunea Federated Learning)*
+## SLIDE 6 — Modelul de personalizare *(secțiunea Personalizare și rute)*
+
+**MLP 22 → 32 → 16 → 1** · 1 281 parametri · inferență ≈ 39 µs pe dispozitiv
+
+Vectorul de 22 dimensiuni:
+
+| Grup | Dimensiuni | Ce codifică |
+|---|---|---|
+| Interese utilizator | [0–5] | one-hot: art, architecture, history, gastronomy, nature, music |
+| Tip obiectiv | [6–13] | one-hot: museum, monument, park, gallery, restaurant, square, building, other |
+| Context temporal | [14–16] | isOpen, isWeekend, ora/24 |
+| Context spațial/rută | [17–21] | distanță relativă, potrivire interese–obiectiv, poziție în rută |
+
+Scorul MLP → categorie de potrivire afișată în popup:
+**scăzut** (< 0,4) · **mediu** · **ridicat** (≥ 0,7)
+
+*Același model rulează atât pe server (scorare candidați pentru rută) cât și pe dispozitiv (scor popup în timp real)*
+
+---
+
+## SLIDE 7 — Generarea rutelor personalizate *(tot secțiunea Personalizare și rute)*
+
+**Screenshot:** `pics/route-generation.png`
+
+**Algoritmul (rulează pe server):**
+1. Candidați: toate obiectivele din **raza 10 km** față de poziție
+2. Scoring inițial: **80% scor MLP + 20% proximitate** (top 10 candidați); fallback pe potrivire categorii–interese dacă modelul FL nu e în Redis
+3. Construire traseu **greedy nearest-neighbour** cu tiebreaker configurat de utilizator (slider 0–1000 m): $\min(\text{dist} - \text{tiebreaker} \times \text{interest\_match})$ — un obiectiv mai relevant poate fi ales față de unul mai apropiat
+4. Durata fiecărei opriri: timp de bază per tip (15–70 min) scalat ±25% de scorul MLP
+5. Ruta reală calculată prin **OSRM** (walking sau driving)
+
+*Buget implicit: 300 minute · maxim 5 opriri · trasee diferite pentru utilizatori cu interese diferite, chiar din același punct de start*
+
+---
+
+## SLIDE 8 — Pre-antrenarea modelului global *(tot secțiunea Personalizare și rute)*
+
+**Problema cold-start:** utilizatorul nou descarcă modelul global — fără nicio rundă FL acumulată, modelul trebuie să ofere recomandări utile de la prima utilizare, bazate pe interesele din profil
+
+**Soluție:** model global pre-antrenat pe date publice, încărcat în Redis înainte de prima rundă FL reală
+
+| Etapă | Date | Interval predicții |
+|---|---|---|
+| Pre-antrenare | 741 618 înregistrări (Foursquare, Yelp, 3 seturi check-in) | [0,595 ; 0,850] — **blocat la medie** |
+| Fine-tuning | + 16 000 exemple sintetice (isOpen=0) + suprareprezentare 3× scoruri ≤ 0,4 | [0,050 ; 0,841] — **+211%** |
+
+Fără fine-tuning modelul prezice 0,70–0,75 indiferent de input — datele reale nu conțin niciun caz cu isOpen=0 (nimeni nu interacționează cu un loc închis), deci modelul nu învăța acea dimensiune
+
+**Imagine:** `pics/charts/finetune_results.png`
+
+---
+
+## SLIDE 9 — Antrenare locală *(secțiunea Federated Learning)*
 
 **Principiul:** datele de interacțiune nu părăsesc niciodată dispozitivul
 
@@ -131,7 +183,7 @@ Dispozitiv: interacțiuni → buffer local → antrenare SGD → delta ponderi (
 
 ---
 
-## SLIDE 7 — Agregare asincronă, concurență și confidențialitate *(tot secțiunea Federated Learning)*
+## SLIDE 10 — Agregare asincronă, concurență și confidențialitate *(tot secțiunea Federated Learning)*
 
 **FedAsync — discount de vechime (Xie et al. 2019):**
 - Fiecare actualizare e procesată individual când sosește, fără a aștepta o cohortă
@@ -147,58 +199,6 @@ Dispozitiv: interacțiuni → buffer local → antrenare SGD → delta ponderi (
 - **Pe client:** clipping delta coordonată cu coordonată la $[-1, +1]$ → sensibilitate mărginită → zgomot Gaussian $\mathcal{N}(0,\ 0{,}01)$ pe fiecare coordonată → serverul nu poate reconstitui interacțiunile (membership inference)
 - **Pe server:** clipping normă L2 ≤ 1 a deltei primite → protecție împotriva actualizărilor adversariale (poisoning)
 - $\sigma = 0{,}1$ ales ca echilibru utilitate–confidențialitate; confirmat de simulare: −30,9% BCE rămâne valabil cu DP activ
-
----
-
-## SLIDE 8 — Modelul de personalizare *(secțiunea Personalizare și rute)*
-
-**MLP 22 → 32 → 16 → 1** · 1 281 parametri · inferență ≈ 39 µs pe dispozitiv
-
-Vectorul de 22 dimensiuni:
-
-| Grup | Dimensiuni | Ce codifică |
-|---|---|---|
-| Interese utilizator | [0–5] | one-hot: art, architecture, history, gastronomy, nature, music |
-| Tip obiectiv | [6–13] | one-hot: museum, monument, park, gallery, restaurant, square, building, other |
-| Context temporal | [14–16] | isOpen, isWeekend, ora/24 |
-| Context spațial/rută | [17–21] | distanță relativă, potrivire interese–obiectiv, poziție în rută |
-
-Scorul MLP → categorie de potrivire afișată în popup:
-**scăzut** (< 0,4) · **mediu** · **ridicat** (≥ 0,7)
-
-*Același model rulează atât pe server (scorare candidați pentru rută) cât și pe dispozitiv (scor popup în timp real)*
-
----
-
-## SLIDE 9 — Generarea rutelor personalizate *(tot secțiunea Personalizare și rute)*
-
-**Screenshot:** `pics/route-generation.png`
-
-**Algoritmul (rulează pe server):**
-1. Candidați: toate obiectivele din **raza 10 km** față de poziție
-2. Scoring inițial: **80% scor MLP + 20% proximitate** (top 10 candidați); fallback pe potrivire categorii–interese dacă modelul FL nu e în Redis
-3. Construire traseu **greedy nearest-neighbour** cu tiebreaker configurat de utilizator (slider 0–1000 m): $\min(\text{dist} - \text{tiebreaker} \times \text{interest\_match})$ — un obiectiv mai relevant poate fi ales față de unul mai apropiat
-4. Durata fiecărei opriri: timp de bază per tip (15–70 min) scalat ±25% de scorul MLP
-5. Ruta reală calculată prin **OSRM** (walking sau driving)
-
-*Buget implicit: 300 minute · maxim 5 opriri · trasee diferite pentru utilizatori cu interese diferite, chiar din același punct de start*
-
----
-
-## SLIDE 10 — Pre-antrenarea modelului global *(tot secțiunea Personalizare și rute)*
-
-**Problema cold-start:** utilizatorul nou descarcă modelul global — fără nicio rundă FL acumulată, modelul trebuie să ofere recomandări utile de la prima utilizare, bazate pe interesele din profil
-
-**Soluție:** model global pre-antrenat pe date publice, încărcat în Redis înainte de prima rundă FL reală
-
-| Etapă | Date | Interval predicții |
-|---|---|---|
-| Pre-antrenare | 741 618 înregistrări (Foursquare, Yelp, 3 seturi check-in) | [0,595 ; 0,850] — **blocat la medie** |
-| Fine-tuning | + 16 000 exemple sintetice (isOpen=0) + suprareprezentare 3× scoruri ≤ 0,4 | [0,050 ; 0,841] — **+211%** |
-
-Fără fine-tuning modelul prezice 0,70–0,75 indiferent de input — datele reale nu conțin niciun caz cu isOpen=0 (nimeni nu interacționează cu un loc închis), deci modelul nu învăța acea dimensiune
-
-**Imagine:** `pics/charts/finetune_results.png`
 
 ---
 
@@ -278,57 +278,7 @@ Probe scores după 600 runde: gastronomy→restaurant **0,715** ↑ · gastronom
 
 ---
 
-## B1 — Taxonomia FL și poziționarea CultureQuest
-
-**Axa tip de FL** (Yang et al. 2019):
-- **HFL** (Orizontal): același spațiu de caracteristici, exemple diferite ← *CultureQuest*
-- VFL (Vertical): caracteristici diferite, exemple comune
-- FTL (Transfer): fără suprapunere semnificativă
-
-**Axa mod de desfășurare** (Kairouz et al. 2021):
-- **Cross-device**: număr mare de dispozitive, conexiuni intermitente, date puține per client ← *CultureQuest*
-- Cross-silo: organizații, conexiuni stabile, seturi mari
-
-**Consecința pentru design:**
-- Cross-device asincron → nu se poate aștepta o cohortă completă → FedAsync
-- Dispozitive cu conexiuni nesigure → actualizări cu staleness mare → discount $1/(1+s)$
-
----
-
-## B2 — De ce FedAsync și nu FedProx / SCAFFOLD / FedDyn?
-
-**Problema comună la FedProx, SCAFFOLD, FedDyn:**
-- Toate trei leagă actualizarea unui client de comportamentul *cohortei* din aceeași rundă (termen proximal / variabilă de control / regularizator dinamic)
-- Toate trei presupun runde **sincrone** cu ≥ K clienți
-
-**În CultureQuest:**
-- Agregarea e **asincronă**: câte o actualizare pe rând, pe măsură ce sosește
-- Nu există cohortă → nu există medie a grupului față de care să se calculeze termenul de corecție
-- Aplicat fără cohortă → tragere spre un punct de referință arbitrar; garanțiile de convergență din literatură **nu mai sunt valabile**
-
-**Soluția adoptată:** FedAsync — procesează fiecare actualizare individual, cu discount $1/(1+s)$ pentru a reduce influența celor cu model local vechi
-
----
-
-## B3 — Differential Privacy în detaliu
-
-**Ce se trimite la server:** nu delta curată, ci delta cu zgomot aplicat pe dispozitiv (NbAFL)
-
-**Pașii pe client:**
-1. Clipping per coordonată: $\delta$ limitat la $[-\tau, \tau]$ cu $\tau = 1$ — sensibilitate mărginită
-2. Suprapunere zgomot: $\tilde{w} = w_{\text{global}} + \text{clip}(\delta, \tau) + \mathcal{N}(0, (\sigma \cdot \tau)^2)$ cu $\sigma = 0{,}1$
-
-**Pe server (al doilea nivel):**
-- Clipping normă L2 a deltei: dacă $\|\delta\|_2 > 1$ → rescalare proporțională
-- Protecție împotriva actualizărilor adversariale (poisoning)
-
-**De ce clipping înainte de zgomot:** fără clipping, un delta arbitrar de mare (ex: 1000) ar face zgomotul de 0,1 invizibil — sensibilitatea trebuie mărginită ca zgomotul fix să aibă efect real
-
-**Protejează împotriva:** membership inference attacks (serverul nu poate reconstitui interacțiunile din delta zgomotoasă)
-
----
-
-## B4 — Algoritmul de generare a rutei
+## B1 — Algoritmul de generare a rutei
 
 **Etapa 1 — Scoring inițial candidați (top 10):**
 - Scor FL (80%) + distanță față de start normalizată (20%)
@@ -350,7 +300,7 @@ cât timp există candidați și buget de timp disponibil:
 
 ---
 
-## B5 — Cold-start: ce vede un utilizator nou?
+## B2 — Cold-start: ce vede un utilizator nou?
 
 **Fără runde FL acumulate**, scorul MLP vine din modelul global pre-antrenat + fine-tuned (descărcat din Redis la prima autentificare)
 
@@ -364,7 +314,7 @@ cât timp există candidați și buget de timp disponibil:
 
 ---
 
-## B6 — Sursele de date pentru pre-antrenare
+## B3 — Sursele de date pentru pre-antrenare
 
 **741 618 înregistrări din 5 surse:**
 - Foursquare TSMC2014 (NYC + Tokyo), TIST2015 (global), ubicomp2013 (NYC restaurante) — check-in-uri reale, label = 0,70 (+ bonus repetare)
@@ -382,6 +332,56 @@ cât timp există candidați și buget de timp disponibil:
 
 ---
 
+## B4 — Taxonomia FL și poziționarea CultureQuest
+
+**Axa tip de FL** (Yang et al. 2019):
+- **HFL** (Orizontal): același spațiu de caracteristici, exemple diferite ← *CultureQuest*
+- VFL (Vertical): caracteristici diferite, exemple comune
+- FTL (Transfer): fără suprapunere semnificativă
+
+**Axa mod de desfășurare** (Kairouz et al. 2021):
+- **Cross-device**: număr mare de dispozitive, conexiuni intermitente, date puține per client ← *CultureQuest*
+- Cross-silo: organizații, conexiuni stabile, seturi mari
+
+**Consecința pentru design:**
+- Cross-device asincron → nu se poate aștepta o cohortă completă → FedAsync
+- Dispozitive cu conexiuni nesigure → actualizări cu staleness mare → discount $1/(1+s)$
+
+---
+
+## B5 — De ce FedAsync și nu FedProx / SCAFFOLD / FedDyn?
+
+**Problema comună la FedProx, SCAFFOLD, FedDyn:**
+- Toate trei leagă actualizarea unui client de comportamentul *cohortei* din aceeași rundă (termen proximal / variabilă de control / regularizator dinamic)
+- Toate trei presupun runde **sincrone** cu ≥ K clienți
+
+**În CultureQuest:**
+- Agregarea e **asincronă**: câte o actualizare pe rând, pe măsură ce sosește
+- Nu există cohortă → nu există medie a grupului față de care să se calculeze termenul de corecție
+- Aplicat fără cohortă → tragere spre un punct de referință arbitrar; garanțiile de convergență din literatură **nu mai sunt valabile**
+
+**Soluția adoptată:** FedAsync — procesează fiecare actualizare individual, cu discount $1/(1+s)$ pentru a reduce influența celor cu model local vechi
+
+---
+
+## B6 — Differential Privacy în detaliu
+
+**Ce se trimite la server:** nu delta curată, ci delta cu zgomot aplicat pe dispozitiv (NbAFL)
+
+**Pașii pe client:**
+1. Clipping per coordonată: $\delta$ limitat la $[-\tau, \tau]$ cu $\tau = 1$ — sensibilitate mărginită
+2. Suprapunere zgomot: $\tilde{w} = w_{\text{global}} + \text{clip}(\delta, \tau) + \mathcal{N}(0, (\sigma \cdot \tau)^2)$ cu $\sigma = 0{,}1$
+
+**Pe server (al doilea nivel):**
+- Clipping normă L2 a deltei: dacă $\|\delta\|_2 > 1$ → rescalare proporțională
+- Protecție împotriva actualizărilor adversariale (poisoning)
+
+**De ce clipping înainte de zgomot:** fără clipping, un delta arbitrar de mare (ex: 1000) ar face zgomotul de 0,1 invizibil — sensibilitatea trebuie mărginită ca zgomotul fix să aibă efect real
+
+**Protejează împotriva:** membership inference attacks (serverul nu poate reconstitui interacțiunile din delta zgomotoasă)
+
+---
+
 ## B7 — Scalabilitate: testul de concurență FL (detalii)
 
 **Redis lock** (`SET NX PX`): serializează ciclul read–aggregate–write, câte un client la un moment dat
@@ -396,8 +396,6 @@ cât timp există candidați și buget de timp disponibil:
 **De ce apar erori la 20:** lock-ul TTL = 5 s; la 20 cereri, unele depășesc fereastra de 2,7 s de reîncercare (9 reîncercări × 0,3 s). Nu există corupere de date — lock-ul garantează că ciclul read–aggregate–write rămâne sincronizat chiar și la timeout
 
 **Soluție identificată:** coadă de lucru (Redis Queue / Celery) — actualizările se procesează asincron, fără concurență pe lock-ul de agregare
-
-**Buget implicit:** 300 minute (jumătate de zi turistică); cel mult 5 opriri
 
 ---
 
