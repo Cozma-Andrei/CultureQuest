@@ -114,7 +114,7 @@
   \textbf{Consecințe:}
   \begin{itemize}
     \item Locații GPS, preferințe $\rightarrow$ profil comportamental pe server
-    \item Fără personalizare reală $\rightarrow$ popularitate amplifică aglomerarea, patrimoniul minor rămâne invizibil
+    \item Fără personalizare reală $\rightarrow$ popularitate amplifică aglomerarea
   \end{itemize}
 
   \vskip0.8em
@@ -134,8 +134,8 @@
   \textbf{Federated Learning (FL) în recomandări:}
   \begin{itemize}
     \item FedAvg: standard de facto; cere clienți simultan disponibili
-    \item FedAsync: asincron cu discount de vechime $\rightarrow$ adoptat
-    \item DP (NbAFL): zgomot Gaussian $\rightarrow$ adoptat
+    \item FedAsync: asincron cu discount de vechime
+    \item DP (NbAFL): zgomot Gaussian
   \end{itemize}
 
   \vskip0.6em
@@ -340,13 +340,24 @@
 \end{frame}
 
 \begin{frame}{Întrebări}
-  \vfill
-  \centering
-  {\Large Mulțumesc pentru atenție! Întrebări?}\\[1.2em]
-  \textbf{Cuvinte cheie:}\\[0.5em]
-  Explorare Urbană · Generare de Rute · OSRM \\[0.3em]
-  Învățare Federată · FedAsync · MLP · Confidențialitate Diferențială · Confidențialitate prin Design
-  \vfill
+  \begin{columns}[c]
+    \begin{column}{0.45\textwidth}
+      {\Large Mulțumesc pentru atenție! Întrebări?}\\[1em]
+      \textbf{Cuvinte cheie:}\\[0.4em]
+      {\small
+      \begin{itemize}
+        \item Explorare Urbană
+        \item Generare de Rute · OSRM
+        \item Învățare Federată · FedAsync · MLP
+        \item Confidențialitate Diferențială/prin Design
+      \end{itemize}}
+    \end{column}
+    \begin{column}{0.56\textwidth}
+      \centering
+      \includegraphics[height=0.55\textheight]{img/route-generation.png}\hspace{2pt}
+      \includegraphics[height=0.55\textheight]{img/proximity-sheet.png}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 \appendix
@@ -388,35 +399,145 @@
 \section{Backup}
 
 \begin{frame}{Algoritmul de generare a rutei}
-  % TODO
+  \textbf{1. Filtrare candidați} (raza 10 km)\\
+  {\small scor inițial $= \text{FL} \times 0{,}8 + (1 - d_{\text{norm}}) \times 0{,}2$ $\rightarrow$ top $2n$ candidați}
+
+  \vskip0.5em
+  \textbf{2. Greedy nearest-neighbour}\\
+  {\small La fiecare pas: $\displaystyle \operatorname{argmin}_{l} \bigl[\operatorname{dist}(\text{crt}, l) - \lambda \cdot \operatorname{match}(l)\bigr]$}\\
+  {\small $\operatorname{match}(l)$ = fracție categorii obiectiv $\cap$ interese utilizator; $\lambda$ configurat de utilizator}\\
+  {\small Se oprește când bugetul de timp e depășit sau s-a atins $n_{\max}$ opriri}
+
+  \vskip0.5em
+  \textbf{3. Scalare timp vizită cu MLP}\\
+  {\small $t = t_{\text{baza}} \times (0{,}75 + 0{,}5 \times \text{FL\_score})$; $t_{\text{baza}}$ pe tip: muzeu 70 min, monument 20 min \ldots}
+
+  \vskip0.5em
+  \textbf{4. Traseu real via OSRM} (walking / driving)
 \end{frame}
 
 \begin{frame}{Cold-start: ce vede un utilizator nou?}
-  % TODO
+  \textbf{1. Onboarding} $\rightarrow$ utilizatorul selectează interesele (artă, arhitectură, \ldots)\\
+  {\small Intră direct în vectorul de caracteristici [0–5]; nicio interacțiune necesară}
+
+  \vskip0.6em
+  \textbf{2. Model global descărcat} (GET \texttt{/model/global})\\
+  {\small Model pre-antrenat pe Foursquare + Yelp; recomandările sunt utile de la prima sesiune}
+
+  \vskip0.6em
+  \textbf{3. Buffer de interacțiuni se umple}\\
+  {\small 1 intrare / obiectiv / rundă (deduplicat); după \textbf{15 interacțiuni} $\rightarrow$ rundă FL declanșată automat}
+
+  \vskip0.6em
+  \textbf{4. Prima contribuție FL}\\
+  {\small Antrenare locală pe dispozitiv $\rightarrow$ delta trimis la server $\rightarrow$ model actualizat; personalizarea se construiește progresiv}
 \end{frame}
 
 \begin{frame}{Sursele de date pentru pre-antrenare}
-  % TODO
+  \begin{center}
+  \scriptsize
+  \begin{tabular}{lll}
+    \textbf{Sursă} & \textbf{Tip} & \textbf{Etichetă} \\
+    \hline
+    Foursquare (3 seturi LBSN) & check-in & 0,70; 0,75 recom.; 0,90 repetate \\
+    Yelp                               & recenzii 1–5 stele & stele / 5 \\
+    Sintetice (\texttt{isOpen=0})      & generate artificial & 0,10 \\
+  \end{tabular}
+  \end{center}
+
+  \vskip0.5em
+  \small
+  \textbf{Total:} 741.618 înregistrări; MSE\textsubscript{val} = 0,023; predicții blocate în [0,595; 0,850]
+
+  \vskip0.4em
+  \textbf{Fine-tuning:} +16k sintetice \texttt{isOpen=0}; $3\times$ suprareprezentare etichete $\leq 0{,}4$\\
+  $\rightarrow$ interval lărgit la [0,050; 0,841] (+211\%)
 \end{frame}
 
 \begin{frame}{Taxonomia FL și poziționarea CultureQuest}
-  % TODO
+  \textbf{Tipul de partiție a datelor:}
+  \begin{itemize}
+    \item \textbf{HFL} (Orizontal): toți clienții antrenează același model pe același spațiu de 22 caracteristici; diferă doar interacțiunile locale
+    \item VFL și FTL: excluse; nu există suprapunere de caracteristici diferite între clienți
+  \end{itemize}
+
+  \vskip0.5em
+  \textbf{Tipul de desfășurare:}
+  \begin{itemize}
+    \item \textbf{Cross-Device}: mii de telefoane, conectate intermitent, cu volum mic de date locale
+    \item Cross-Silo: exclus; nu există organizații cu date partajate
+  \end{itemize}
+
+  \vskip0.5em
+  CultureQuest: \textbf{HFL Cross-Device asincron} cu DP (NbAFL)
 \end{frame}
 
 \begin{frame}{De ce FedAsync și nu FedProx / SCAFFOLD / FedDyn?}
-  % TODO
+  FedProx, SCAFFOLD, FedDyn presupun o \textbf{cohortă sincronă} de clienți per rundă.\\
+  {\small CultureQuest procesează un client pe rând $\rightarrow$ nu există cohortă $\rightarrow$ mecanismele de corecție nu au referință.}
+
+  \vskip0.6em
+  \begin{center}
+  \scriptsize
+  \begin{tabular}{lccc}
+    \textbf{Algoritm} & \textbf{Sincron} & \textbf{Mecanism} & \textbf{Compatibil} \\
+    \hline
+    FedAvg   & Da  & Medie ponderată              & Da (local) \\
+    FedAsync & Nu  & Discount staleness $1/(1+s)$ & \textbf{Da} \\
+    FedProx  & Da  & Termen proximal              & Nu \\
+    SCAFFOLD & Da  & Variabilă de control         & Nu \\
+    FedDyn   & Da  & Regularizator dinamic        & Nu \\
+  \end{tabular}
+  \end{center}
 \end{frame}
 
 \begin{frame}{Differential Privacy în detaliu}
-  % TODO
+  \textbf{Mecanismul DP} (NbAFL, pe client):
+  \begin{enumerate}
+    \item Clampare per coordonată: $\delta_i \in [-\tau, \tau]$, $\tau = 1$ $\rightarrow$ mărginește sensibilitatea
+    \item Zgomot Gaussian: $\tilde{w} = w_{\text{global}} + \mathrm{clip}(\delta,\tau) + \mathcal{N}(0,\,(\sigma\tau)^2)$, $\sigma = 0{,}1$
+  \end{enumerate}
+
+  \vskip0.5em
+  \textbf{Mecanisme corelate} (scopuri diferite):
+  \begin{itemize}
+    \item \textbf{Client, în SGD:} limitare L2 gradient $\|g\|_2 \leq 1$ $\rightarrow$ stabilitate antrenare, nu DP
+    \item \textbf{Server, la agregare:} limitare L2 deltă $\|\delta\|_2 \leq \tau$ $\rightarrow$ robustețe față de actualizări adversariale, nu DP
+  \end{itemize}
+
+  \vskip0.5em
+  {\small Zgomotul adăugat pe client $\rightarrow$ serverul primește ponderi din care delta reală nu mai poate fi reconstituită}
 \end{frame}
 
 \begin{frame}{Scalabilitate: testul de concurență FL}
-  % TODO
+  \begin{center}
+  \scriptsize
+  \begin{tabular}{ccccc}
+    \textbf{Cereri simultane} & \textbf{Succes} & \textbf{Erori} & \textbf{Lat. medie (ms)} & \textbf{Lat. p95 (ms)} \\
+    \hline
+    1  & 1  & 0 & 6,5     & 6,5    \\
+    5  & 5  & 0 & 622,6   & 923,5  \\
+    10 & 10 & 0 & 1.384,1 & 2.442,2 \\
+    20 & 12 & 8 & 2.064,9 & 3.076,1 \\
+  \end{tabular}
+  \end{center}
+
+  \vskip0.5em
+  \textbf{Concluzie:} lock Redis $\rightarrow$ 0 erori până la 10 cereri simultane\\
+  La 20: 8/20 cereri respinse (TTL lock expirat); fără corupere date\\
+  {\small Soluție: coadă (Redis Queue) $\rightarrow$ elimină lock-ul din calea HTTP}
 \end{frame}
 
 \begin{frame}{Consum de baterie și proximitate în foreground}
-  % TODO
+  \textbf{Curent:} geofencing manual (\texttt{geolocator}); GPS activ doar în foreground\\
+  {\small $\rightarrow$ quest-urile nu se activează când aplicația e în background}
+
+  \vskip0.8em
+  \textbf{Alternativă:} geofencing nativ OS
+  \begin{itemize}
+    \item iOS: \textit{Region Monitoring}; Android: \textit{Geofence API}
+    \item OS gestionează GPS; notifică doar la traversarea razei $\rightarrow$ consum redus
+  \end{itemize}
 \end{frame}
 
 {
@@ -455,6 +576,26 @@
       T.~Li et al.,
       \emph{Federated Optimization in Heterogeneous Networks (FedProx)},
       MLSys, 2020.
+
+    \bibitem{karimireddy2020}
+      S.~P.~Karimireddy et al.,
+      \emph{SCAFFOLD: Stochastic Controlled Averaging for Federated Learning},
+      ICML, 2020.
+
+    \bibitem{acar2021}
+      D.~A.~E.~Acar et al.,
+      \emph{Federated Learning Based on Dynamic Regularization (FedDyn)},
+      ICLR, 2021.
+
+    \bibitem{arivazhagan2019}
+      M.~G.~Arivazhagan et al.,
+      \emph{Federated Learning with Personalization Layers (FedPer)},
+      arXiv, 2019.
+
+    \bibitem{nguyen2022}
+      J.~Nguyen et al.,
+      \emph{Federated Learning with Buffered Asynchronous Aggregation (FedBuff)},
+      AISTATS, 2022.
   \end{thebibliography}
 \end{frame}
 }

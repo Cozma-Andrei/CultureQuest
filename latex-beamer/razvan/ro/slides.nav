@@ -76,10 +76,12 @@
 \headcommand {\beamer@framepages {23}{23}}
 \headcommand {\slideentry {8}{0}{9}{24/24}{}{1}}
 \headcommand {\beamer@framepages {24}{24}}
-\headcommand {\beamer@partpages {16}{24}}
-\headcommand {\beamer@subsectionpages {16}{24}}
-\headcommand {\beamer@sectionpages {16}{24}}
-\headcommand {\beamer@documentpages {24}}
+\headcommand {\slideentry {8}{0}{9}{24/25}{}{1}}
+\headcommand {\beamer@framepages {24}{25}}
+\headcommand {\beamer@partpages {16}{25}}
+\headcommand {\beamer@subsectionpages {16}{25}}
+\headcommand {\beamer@sectionpages {16}{25}}
+\headcommand {\beamer@documentpages {25}}
 \headcommand {\gdef \inserttotalframenumber {8}}
 \headcommand {\gdef \inserttotalframenumber {15}}
 \headcommand {\gdef \appendixtotalframenumber {8}}
